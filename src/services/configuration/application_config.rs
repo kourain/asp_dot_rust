@@ -59,4 +59,22 @@ impl Application {
             panic!("Configuration of type {} not found", std::any::type_name::<T>());
         }
     }
+    pub fn try_get_configuration<T>(&self) -> Option<&T>
+    where
+        T: 'static,
+    {
+        if let Some(config) = self._config.get(std::any::type_name::<T>()) {
+            if let Some(config) = config.downcast_ref::<T>() {
+                return Some(config);
+            } else {
+                LOGGER::error(format!(
+                    "Configuration found for type {}, but failed to downcast",
+                    std::any::type_name::<T>()
+                ));
+                return None;
+            }
+        } else {
+            return None;
+        }
+    }
 }

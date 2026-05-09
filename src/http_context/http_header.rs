@@ -47,6 +47,9 @@ impl HttpHeader {
     pub fn set_content_type(&mut self, content_type: &str) {
         self.add("Content-Type", content_type);
     }
+    pub fn origin(&self) -> Option<&String> {
+        self.get("Origin")
+    }
     pub fn to_string(&self) -> String {
         self.headers.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<String>>().join("\r\n")
     }

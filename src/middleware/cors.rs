@@ -12,7 +12,7 @@ impl Middleware for CorsMiddleware {
         self.configuration = application.get_configuration::<CorsConfiguration>().clone();
     }
     async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: crate::middleware::MiddlewareNext) {
-        let request_origin = { http_context.request.headers.get("Origin").map(|s| s) };
+        let request_origin = http_context.request.headers.origin();
 
         // server-to-server
         let Some(origin) = request_origin else {

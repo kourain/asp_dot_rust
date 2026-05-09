@@ -8,8 +8,9 @@ use asp_dot_rust::{
 #[tokio::test(flavor = "multi_thread", worker_threads = 32)]
 async fn test_application() {
     LOGGER::with_color_output(true);
-    LOGGER::with_level(asp_dot_rust::logging::LogLevel::None);
-    LOGGER::with_request_id(true);
+    LOGGER::with_level(asp_dot_rust::logging::LogLevel::Verbose);
+    LOGGER::with_chrono_time_format("%Y-%m-%d %H:%M:%S%.9f");
+    // LOGGER::with_request_id(true);
     let mut app_builder = ApplicationBuilder::new("TestApp");
     app_builder.with_ip("192.168.2.103");
     app_builder
@@ -25,6 +26,6 @@ async fn test_application() {
         });
     app_builder.add_controllers();
     let mut app = app_builder.build();
-    app.use_cors();//.use_rate_limit();
+    app.use_cors().use_rate_limit();
     let _ = app.run().await;
 }

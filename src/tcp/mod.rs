@@ -5,7 +5,7 @@ use crate::{
 use tokio::net::TcpStream;
 pub mod parser;
 
-pub(crate) async fn run_with_tcp_stream_async<F, Fut>(tcp_stream: TcpStream, f: F)
+pub(crate) async fn run_with_split_tcp_stream_async<F, Fut>(tcp_stream: TcpStream, f: F)
 where
     F: Fn(TcpReadStreamRef, TcpWriteStreamRef) -> Fut,
     Fut: std::future::Future<Output = std::io::Result<bool>>,

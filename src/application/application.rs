@@ -27,30 +27,12 @@ impl Application {
     pub fn new(name: &str) -> ApplicationBuilder {
         ApplicationBuilder::new(name)
     }
-
-    pub fn builder(name: &str) -> ApplicationBuilder {
-        ApplicationBuilder::new(name)
-    }
-
-    pub fn with_ip(mut self, ip: IpAddr) -> Self {
-        self.ip.insert(ip);
-        self
-    }
-
-    pub fn with_http_port(mut self, port: u16) -> Self {
-        self.http_port.insert(port);
-        self
-    }
-
-    pub fn with_https_port(mut self, port: u16) -> Self {
-        self.https_port.insert(port);
-        self
-    }
-
+    
     pub async fn run(mut self) -> std::io::Result<()> {
         // ensure defaults so the server keeps running even if user didn't set ip/ports
         self.add_middleware::<RequestTimeoutMiddleware>();
         self.add_middleware::<AutoRouteMiddleware>();
+
         if self.ip.is_empty() {
             self.ip.insert("127.0.0.1".parse::<std::net::IpAddr>().unwrap());
         }

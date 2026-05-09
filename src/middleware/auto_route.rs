@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{http_context::HttpContext, logging::LOGGER, middleware::Middleware};
+use crate::{http_context::HttpContext, middleware::Middleware};
 #[derive(Default)]
 pub(crate) struct AutoRouteMiddleware {
     routing_service: Arc<crate::services::routing::RoutingService>,

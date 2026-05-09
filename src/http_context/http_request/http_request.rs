@@ -1,4 +1,4 @@
-use std::{io, str::FromStr};
+use std::io;
 
 use crate::{
     configuration::GetClientIpConfiguration,
@@ -42,10 +42,10 @@ impl HttpRequest {
             request_stream: None,                                               // not used in this constructor
         }
     }
-    pub(crate) async fn from_raw(socket_client_ip: std::net::IpAddr, method: &String, app_config: ApplicationConfiguration, request_stream: RequestStream) -> io::Result<Self> {
+    pub(crate) async fn from_raw(socket_client_ip: std::net::IpAddr, method: http::Method, app_config: ApplicationConfiguration, request_stream: RequestStream) -> io::Result<Self> {
         let mut http_request = Self {
             body: Vec::new(),
-            method: http::Method::from_str(method).unwrap(),
+            method: method,
             path: String::new(),
             version: http::Version::HTTP_11,
             headers: HttpHeader::new(),
@@ -75,14 +75,6 @@ impl HttpRequest {
                 http_request.client_addr = ip
             }
         }
-        LOGGER::info(format!(
-            "{}: {} {} {}, keep_alive={}",
-            http_request.client_addr,
-            http_request.method,
-            http_request.path,
-            http_request.version.as_str(),
-            http_request.keep_alive,
-        ));
         Ok(http_request)
     }
 

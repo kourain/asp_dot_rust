@@ -5,7 +5,7 @@ use tokio::net::TcpListener;
 use crate::{
     Application,
     logging::LOGGER,
-    tcp::{parser::parse_tcp_stream_async, run_with_tcp_stream_async},
+    tcp::{parser::parse_tcp_stream_async, run_with_split_tcp_stream_async},
 };
 
 pub(crate) async fn run_http_server_async(app: Arc<Application>) -> std::io::Result<()> {
@@ -22,7 +22,7 @@ pub(crate) async fn run_http_server_async(app: Arc<Application>) -> std::io::Res
                         tcp_stream.set_nodelay(true)?;
                         let app = app.clone();
                         tokio::task::spawn(async move {
-                            run_with_tcp_stream_async(tcp_stream, move |read_half, write_half| {
+                            run_with_split_tcp_stream_async(tcp_stream, move |read_half, write_half| {
                                 let app = app.clone();
                                 async move { parse_tcp_stream_async(app.clone(), socket_addr, read_half, write_half).await }
                             })

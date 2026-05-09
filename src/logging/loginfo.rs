@@ -14,7 +14,7 @@ pub enum LogCommand {
     SetLogLevel(LogLevel),
     SetTimeFormat(String),
     SetEnable(bool),
-    SetUseUtcTime(bool),
+    SetUseTime(bool),
     SetUseColorOutput(bool),
     SetUseRequestId(bool),
     SetUseConnectionId(bool),

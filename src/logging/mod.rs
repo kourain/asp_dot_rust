@@ -39,7 +39,7 @@ fn initialize_logging(mut rx: LogReceiver) {
                 LogCommand::SetEnable(enable) => {
                     logger.enable = enable;
                 }
-                LogCommand::SetUseUtcTime(enable) => {
+                LogCommand::SetUseTime(enable) => {
                     logger.use_time = enable;
                 }
                 LogCommand::SetUseColorOutput(enable) => {
@@ -72,7 +72,7 @@ impl LOGGER {
     /// Log a message (non-blocking, sends through channel)
     pub fn log(level: LogLevel, message: impl Into<String>) {
         let log_info = LogInfo {
-            timestamp: None,
+            timestamp: Some(chrono::Utc::now()),
             level,
             message: message.into(),
         };
@@ -86,8 +86,13 @@ impl LOGGER {
     }
 
     /// set whether to use UTC time for timestamps
-    pub fn with_utc_time(true_or_false: bool) {
-        _ = get_sender().send(LogCommand::SetUseUtcTime(true_or_false));
+    pub fn with_time(true_or_false: bool) {
+        _ = get_sender().send(LogCommand::SetUseTime(true_or_false));
+    }
+
+    /// set whether to use UTC time for timestamps
+    pub fn with_chrono_time_format(format: impl Into<String>) {
+        _ = get_sender().send(LogCommand::SetTimeFormat(format.into()));
     }
 
     /// set whether to use colored output
