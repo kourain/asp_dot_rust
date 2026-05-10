@@ -9,7 +9,8 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     future::Future,
-    pin::Pin, str::FromStr,
+    pin::Pin,
+    str::FromStr,
 };
 
 type ControllerInvoke = for<'a> fn(&'a mut HttpContext, String) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
@@ -127,26 +128,27 @@ impl RoutingService {
         }
     }
     pub fn resolve(&self, full_path: &str) -> Option<ResolvedRoute> {
-        let path = full_path.split("?").next().unwrap_or("/");
-        let query_string = full_path.split("?").nth(1).unwrap_or("");
+        let query_pos = full_path.find('?').unwrap_or(full_path.len());
+        let path = &full_path[..query_pos];
+        let query_string = if query_pos < full_path.len() { &full_path[query_pos + 1..] } else { "" };
         let matched = self._router.at(path);
-        if matched.is_err() {
-            return None;
-        } else {
-            let matched = matched.unwrap();
-            let params = HashMap::from_iter(matched.params.iter().map(|(k, v)| (k.into(), v.into())));
-            return Some(ResolvedRoute {
-                path: path.into(),
-                query_string: query_string.into(),
-                router_info: matched.value.clone(),
-                path_params: params,
-                query_params: HashMap::from_iter(query_string.split('&').filter_map(|pair| {
-                    let mut parts = pair.split('=');
-                    let key = parts.next()?.into();
-                    let value = urlencoding::decode(parts.next()?).ok()?.into();
-                    Some((key, value))
-                })),
-            });
+        match matched {
+            Err(_) => None,
+            Ok(matched) => {
+                let params = HashMap::from_iter(matched.params.iter().map(|(k, v)| (k.into(), v.into())));
+                return Some(ResolvedRoute {
+                    path: path.into(),
+                    path_params: params,
+                    router_info: matched.value.clone(),
+                    query_string: query_string.into(),
+                    query_params: HashMap::from_iter(query_string.split('&').filter_map(|pair| {
+                        let mut parts = pair.split('=');
+                        let key = parts.next()?.into();
+                        let value = urlencoding::decode(parts.next()?).ok()?.into();
+                        Some((key, value))
+                    })),
+                });
+            }
         }
     }
     pub fn get_allowed_methods(&self, path: &str) -> HashSet<http::Method> {

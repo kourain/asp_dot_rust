@@ -31,17 +31,25 @@ impl ApplicationBuilder {
         }
     }
 
-    pub fn with_ip(&mut self, ip: impl Into<String>) -> &Self {
+    pub fn with_ip(&mut self, ip: impl Into<String>) -> &mut Self {
         self.ip.insert(ip.into().parse::<std::net::IpAddr>().expect("Invalid IP address format"));
         self
     }
 
-    pub fn with_http_port(&mut self, port: u16) -> &Self {
+    pub fn with_loopback_ip(&mut self) -> &mut Self {
+        self.ip.insert("127.0.0.1".parse().unwrap());
+        self
+    }
+    pub fn with_any_ip(&mut self) -> &mut Self {
+        self.ip.insert("0.0.0.0".parse().unwrap());
+        self
+    }
+    pub fn with_http_port(&mut self, port: u16) -> &mut Self {
         self.http_port.insert(port);
         self
     }
 
-    pub fn with_https_port(&mut self, port: u16) -> &Self {
+    pub fn with_https_port(&mut self, port: u16) -> &mut Self {
         self.https_port.insert(port);
         self
     }

@@ -1,12 +1,17 @@
 use std::sync::Arc;
 
 use crate::{
-    Application, extensions::Str, http_context::{
+    Application,
+    extensions::Str,
+    http_context::{
         RequestStream, ResponseStream,
         http_context::HttpContext,
         http_request::{HttpRequest, TcpReadStreamRef},
         http_response::{HttpResponse, TcpWriteStreamRef},
-    }, io::AsyncRead, logging::LOGGER, services::configuration::ApplicationConfiguration
+    },
+    io::AsyncRead,
+    logging::LOGGER,
+    services::configuration::ApplicationConfiguration,
 };
 /// Parses the TCP stream to extract HTTP request information and prepares the HTTP response. return bool : Connection == keep-alive
 pub(crate) async fn parse_tcp_stream_async(app: Arc<Application>, _socket_addr: std::net::SocketAddr, read_half: TcpReadStreamRef, write_half: TcpWriteStreamRef) -> std::io::Result<bool> {
@@ -31,11 +36,12 @@ pub(crate) async fn parse_tcp_stream_async(app: Arc<Application>, _socket_addr: 
     http_context.response.write_response_async().await;
     let duration = start_process_time.elapsed();
     LOGGER::info(format!(
-        "{}: {} {} {}, keep_alive={}, taken {:.9} ms",
+        "{}: {} {} {} {}, keep_alive={}, take {:.6} ms",
         http_context.request.client_addr,
-        http_context.request.method,
-        http_context.request.path,
         http_context.request.version.as_str(),
+        http_context.request.method,
+        http_context.response.status_code.as_u16(),
+        http_context.request.path,
         http_context.request.keep_alive,
         duration.as_secs_f64() * 1000.0
     ));

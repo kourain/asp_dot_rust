@@ -28,7 +28,7 @@ impl Logger {
             log_format: "[{level}] {timestamp} {connectionid} {requestid} {message}".to_string(),
             date_time_format: "%Y-%m-%d %H:%M:%S".to_string(),
             format_parts: Vec::new(),
-            use_time: false,
+            use_time: true,
             use_color_output: true,
             use_request_id: false,
             use_connection_id: false,
@@ -38,7 +38,7 @@ impl Logger {
     }
     /// write a log message
     pub async fn write_log(&mut self, log_info: &LogInfo) {
-        if self.should_log(log_info.level) {
+        if self.enable && self.should_log(log_info.level) {
             self.output_log_aysnc(log_info).await;
         }
     }
@@ -51,15 +51,11 @@ impl Logger {
         level >= self.level
     }
     /// get the current timestamp as a string
-    #[allow(dead_code)]
-    fn get_timestamp(&self) -> String {
-        use chrono::prelude::*;
+    fn get_timestamp(&self, log_info: &LogInfo) -> String {
         if self.use_time {
-            let now: DateTime<Utc> = Utc::now();
-            return now.format(&self.date_time_format).to_string();
+            return log_info.timestamp.unwrap_or(chrono::prelude::Utc::now()).format(&self.date_time_format).to_string();
         }
-        let now: DateTime<Local> = Local::now();
-        now.format(&self.date_time_format).to_string()
+        "".to_string()
     }
     pub fn set_log_format(&mut self, format: impl Into<String>) {
         self.log_format = format.into();
@@ -113,7 +109,7 @@ impl Logger {
         } else {
             log_info.level.as_str().to_string()
         };
-        let timestamp = log_info.timestamp.unwrap_or(chrono::prelude::Utc::now()).format(&self.date_time_format).to_string();
+        let timestamp = self.get_timestamp(log_info);
         let capacity = timestamp.len() + log_info.message.len() + level_str.len() + self.log_format.len() + 1;
 
         let mut output = String::with_capacity(capacity);
