@@ -1,7 +1,7 @@
 use crate::{
     controller::{ActionRoute, Routing, WithHttpContext},
     http_context::HttpContext,
-    services::ControllerCollect,
+    services::routing::ControllerCollect,
 };
 use matchit::Router;
 use std::{

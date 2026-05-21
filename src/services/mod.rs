@@ -1,8 +1,6 @@
 pub mod configuration;
+pub mod memory_cache;
 pub mod routing;
-
-pub use configuration::*;
-pub use routing::*;
 
 pub trait Service {
     fn name(&self) -> &'static str;

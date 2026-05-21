@@ -6,7 +6,7 @@ use crate::{
     http_context::{RequestStream, http_header::HttpHeader},
     io::AsyncRead,
     logging::LOGGER,
-    services::ApplicationConfiguration,
+    services::configuration::ApplicationConfiguration,
 };
 
 pub struct HttpRequest {

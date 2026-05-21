@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, net::IpAddr, sync::Arc};
 
 use crate::{
     Application, hosted_service::ApplicationHostedService, logging::LOGGER, middleware::app_middlewares::ApplicationMiddlewares, service_provider::application_scope::ServiceProvider,
-    services::ConfigurationService,
+    services::configuration::ConfigurationService,
 };
 
 
@@ -40,6 +40,7 @@ impl ApplicationBuilder {
         self.ip.insert("127.0.0.1".parse().unwrap());
         self
     }
+    /// Binds the application to all available network interfaces
     pub fn with_any_ip(&mut self) -> &mut Self {
         self.ip.insert("0.0.0.0".parse().unwrap());
         self
@@ -51,6 +52,7 @@ impl ApplicationBuilder {
 
     pub fn with_https_port(&mut self, port: u16) -> &mut Self {
         self.https_port.insert(port);
+        todo!("ADD SSL SUPPORT");
         self
     }
 
