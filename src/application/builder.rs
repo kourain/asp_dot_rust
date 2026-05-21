@@ -1,10 +1,13 @@
-use std::{collections::{HashMap, HashSet}, net::IpAddr, sync::Arc};
-
-use crate::{
-    Application, hosted_service::ApplicationHostedService, logging::LOGGER, middleware::app_middlewares::ApplicationMiddlewares, service_provider::application_scope::ServiceProvider,
-    services::configuration::ConfigurationService,
+use std::{
+    collections::{HashMap, HashSet},
+    net::IpAddr,
+    sync::Arc,
 };
 
+use crate::{
+    Application, hosted_service::ApplicationHostedService, logging::LOGGER, middleware::app_middlewares::ApplicationMiddlewares, services::configuration::ConfigurationService,
+    services::service_provider::application_scope::ServiceProvider,
+};
 
 pub struct ApplicationBuilder {
     pub name: String,
