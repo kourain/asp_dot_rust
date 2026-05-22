@@ -40,18 +40,16 @@ impl Application {
             self.http_port.insert(8080);
         }
         self._middlewares.build_pipeline();
-        let mut hosted_services_app = self._hosted_services;
-        self._hosted_services = Vec::new(); // clear hosted services from app since we're moving them to the async block
+        let mut hosted_services_app = std::mem::replace(&mut self._hosted_services, Vec::new()); // clear hosted services from app since we're moving them to the async block
         let app = Arc::new(self);
-        tokio::try_join!(
-            futures::future::try_join_all(hosted_services_app.iter().map(|bg_service| async move {
-                LOGGER::info(format!("Starting background service: {}", bg_service.0));
-                bg_service.1.invoke_async().await;
-                Ok(())
-            })),
-            run_http_server_async(app)
-        )?;
-
+        // let mut hosted_services_app = Vec::new();
+        while let Some((name, mut service)) = hosted_services_app.pop() {
+            tokio::spawn(async move {
+                LOGGER::info(format!("Starting background service: {}", name));
+                service.invoke_async().await
+            });
+        }
+        _ = run_http_server_async(app).await;
         Ok(())
     }
 }
