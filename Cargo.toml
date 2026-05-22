@@ -24,3 +24,4 @@ urlencoding = "2.1.3"
 http = "1.4.0"
 
 asp_dot_rust_macros = { path = "asp_dot_rust_macros" }
+dashmap = "6.2.1"
