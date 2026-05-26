@@ -1,4 +1,4 @@
-use crate::{configuration::RequestTimeoutConfiguration, http_context::HttpContext, logging::LOGGER, middleware::Middleware};
+use crate::{configuration::RequestTimeoutConfiguration, http_context::HttpContext, logging::LOGGER, middleware::MiddlewareNext};
 
 #[derive(Debug, Clone)]
 pub struct RequestTimeoutMiddleware {
@@ -11,9 +11,9 @@ impl Default for RequestTimeoutMiddleware {
         }
     }
 }
-#[async_trait::async_trait]
-impl Middleware for RequestTimeoutMiddleware {
-    fn with_application(&mut self, app: &crate::application::Application) {
+
+impl RequestTimeoutMiddleware {
+    pub(crate) fn with_application(&mut self, app: &crate::application::Application) {
         match app.try_get_configuration::<RequestTimeoutConfiguration>() {
             Some(config) => {
                 self.timeout_seconds = config.timeout_seconds;
@@ -24,10 +24,11 @@ impl Middleware for RequestTimeoutMiddleware {
             }
         };
     }
-    async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: crate::middleware::MiddlewareNext) {
+
+    pub(crate) async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: MiddlewareNext<'a>) {
         LOGGER::debug("RequestTimeoutMiddleware: Checking request timeout");
         let timeout = std::time::Duration::from_secs(self.timeout_seconds);
-        if let Err(_) = tokio::time::timeout(timeout, next(http_context)).await {
+        if let Err(_) = tokio::time::timeout(timeout, next.invoke(http_context)).await {
             LOGGER::warn("Request timed out");
             http_context.response.status_code = http::StatusCode::REQUEST_TIMEOUT;
             http_context
@@ -37,5 +38,14 @@ impl Middleware for RequestTimeoutMiddleware {
         } else {
             // Request completed within the timeout
         }
+    }
+}
+
+impl crate::Application {
+    pub fn use_request_timeout(&mut self) -> &mut Self {
+        let mut mw = RequestTimeoutMiddleware::default();
+        mw.with_application(self);
+        self._middlewares.add_kind(crate::middleware::MiddlewareKind::RequestTimeout(mw));
+        self
     }
 }

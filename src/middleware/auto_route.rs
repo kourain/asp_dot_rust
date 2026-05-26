@@ -1,16 +1,18 @@
 use std::sync::Arc;
 
-use crate::{http_context::HttpContext, middleware::Middleware};
+use crate::{http_context::HttpContext, middleware::MiddlewareNext};
+
 #[derive(Default)]
 pub(crate) struct AutoRouteMiddleware {
     routing_service: Arc<crate::services::routing::RoutingService>,
 }
-#[async_trait::async_trait]
-impl Middleware for AutoRouteMiddleware {
-    fn with_application(&mut self, app: &crate::Application) {
+
+impl AutoRouteMiddleware {
+    pub(crate) fn with_application(&mut self, app: &crate::Application) {
         self.routing_service = app.get_service::<crate::services::routing::RoutingService>();
     }
-    async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, _next: crate::middleware::MiddlewareNext) {
+
+    pub(crate) async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, _next: MiddlewareNext<'a>) {
         let (request_path, request_method) = { (&http_context.request.path, &http_context.request.method) };
         match self.routing_service.resolve(request_path) {
             Some(route_info) => {

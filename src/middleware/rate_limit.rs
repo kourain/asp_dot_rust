@@ -2,8 +2,9 @@ use crate::{
     Application, MutexAsync,
     configuration::RateLimitConfiguration,
     http_context::HttpContext,
-    middleware::{Middleware, MiddlewareNext},
+    middleware::MiddlewareNext,
 };
+
 #[derive(Default)]
 pub struct RateLimitMiddleware {
     ip_request_counts: MutexAsync<std::collections::HashMap<std::net::IpAddr, (usize, Vec<std::time::Instant>)>>,
@@ -12,15 +13,16 @@ pub struct RateLimitMiddleware {
     limit_seconds: u32,
     block_duration_seconds: u32,
 }
-#[async_trait::async_trait]
-impl Middleware for RateLimitMiddleware {
-    fn with_application(&mut self, app: &crate::application::Application) {
+
+impl RateLimitMiddleware {
+    pub(crate) fn with_application(&mut self, app: &crate::application::Application) {
         let config = app.get_configuration::<RateLimitConfiguration>();
         self.max_requests = config.max_requests;
         self.limit_seconds = config.limit_seconds;
         self.block_duration_seconds = config.block_duration_seconds;
     }
-    async fn invoke_async<'a>(&self, context: &'a mut HttpContext, next: MiddlewareNext) {
+
+    pub(crate) async fn invoke_async<'a>(&self, context: &'a mut HttpContext, next: MiddlewareNext<'a>) {
         let client_ip = context.request.client_addr;
         let now = std::time::Instant::now();
         let mut blocked_until = self.ip_blocked_until.lock().await;
@@ -56,14 +58,16 @@ impl Middleware for RateLimitMiddleware {
             return;
         }
 
-        next(context).await;
+        next.invoke(context).await;
     }
 }
 
 impl Application {
     /// Limit the number of requests from a single IP address within a specified time window.
     pub fn use_rate_limit(&mut self) -> &mut Self {
-        self.add_middleware::<RateLimitMiddleware>();
+        let mut mw = RateLimitMiddleware::default();
+        mw.with_application(self);
+        self._middlewares.add_kind(crate::middleware::MiddlewareKind::RateLimit(mw));
         self
     }
 }

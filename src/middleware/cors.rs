@@ -1,22 +1,24 @@
-use crate::{Application, configuration::CorsConfiguration, http_context::HttpContext, middleware::Middleware};
+use crate::{Application, configuration::CorsConfiguration, http_context::HttpContext, middleware::MiddlewareNext};
 use std::sync::Arc;
+
 #[derive(Debug, Clone, Default)]
 pub struct CorsMiddleware {
     routing_service: Arc<crate::services::routing::RoutingService>,
     configuration: CorsConfiguration,
 }
-#[async_trait::async_trait]
-impl Middleware for CorsMiddleware {
-    fn with_application(&mut self, application: &crate::application::Application) {
+
+impl CorsMiddleware {
+    pub(crate) fn with_application(&mut self, application: &crate::application::Application) {
         self.routing_service = application.get_service::<crate::services::routing::RoutingService>();
         self.configuration = application.get_configuration::<CorsConfiguration>().clone();
     }
-    async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: crate::middleware::MiddlewareNext) {
+
+    pub(crate) async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: MiddlewareNext<'a>) {
         let request_origin = http_context.request.headers.origin();
 
         // server-to-server
         let Some(origin) = request_origin else {
-            next(http_context).await;
+            next.invoke(http_context).await;
             return;
         };
 
@@ -62,12 +64,15 @@ impl Middleware for CorsMiddleware {
         }
 
         // normal request
-        next(http_context).await;
+        next.invoke(http_context).await;
     }
 }
+
 impl Application {
     pub fn use_cors(&mut self) -> &mut Self {
-        self.add_middleware::<CorsMiddleware>();
+        let mut mw = CorsMiddleware::default();
+        mw.with_application(self);
+        self._middlewares.add_kind(crate::middleware::MiddlewareKind::Cors(mw));
         self
     }
 }

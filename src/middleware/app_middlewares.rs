@@ -1,77 +1,80 @@
-use std::sync::Arc;
-
 use crate::{
     Application,
     http_context::HttpContext,
     logging::LOGGER,
-    middleware::{Middleware, MiddlewareNext},
+    middleware::{DynMiddleware, MiddlewareKind, MiddlewareNext},
 };
 
 pub(crate) struct ApplicationMiddlewares {
-    middlewares: Vec<Arc<dyn Middleware>>,
-    pipeline: Option<MiddlewareNext>,
+    middlewares: Vec<MiddlewareKind>,
 }
+
 impl ApplicationMiddlewares {
     pub fn new() -> Self {
         Self {
             middlewares: Vec::new(),
-            pipeline: None,
         }
     }
-    pub fn add<M>(&mut self, middleware: M)
+
+    /// Add a pre-built MiddlewareKind (for internal middleware)
+    pub fn add_kind(&mut self, kind: MiddlewareKind) {
+        self.middlewares.push(kind);
+    }
+
+    /// Add a dynamic middleware (for external/user-defined middleware)
+    pub fn add_dynamic<M>(&mut self, middleware: M)
     where
-        M: Middleware + 'static,
+        M: DynMiddleware + 'static,
     {
-        self.middlewares.push(Arc::new(middleware));
+        self.middlewares.push(MiddlewareKind::Dynamic(Box::new(middleware)));
     }
-    pub fn build_pipeline(&mut self) {
-        LOGGER::info(format!("Building middleware pipeline {} middlewares", self.middlewares.len()));
-        let no_op: MiddlewareNext = Arc::new(|_| Box::pin(async {}));
-        let mut next = no_op;
-        for middleware in self.middlewares.iter().rev() {
-            let middleware = middleware.clone();
-            let next_handler = next.clone();
-            LOGGER::trace(format!("Adding middleware to pipeline: {}", middleware.type_name()));
-            next = Arc::new(move |http_context: &mut HttpContext| {
-                let middleware = middleware.clone();
-                LOGGER::trace(format!("Nexting to middleware: {}", middleware.type_name()));
-                let next = next_handler.clone();
-                Box::pin(async move {
-                    LOGGER::debug(format!("Executing middleware: {}", middleware.type_name()));
-                    middleware.invoke_async(http_context, next).await;
-                })
-            });
+
+    /// Log the pipeline for debugging
+    pub fn log_pipeline(&self) {
+        LOGGER::info(format!(
+            "Middleware pipeline: {} middlewares",
+            self.middlewares.len()
+        ));
+        for mw in &self.middlewares {
+            LOGGER::trace(format!("  → {}", mw.type_name()));
         }
-        self.pipeline = Some(next);
     }
+
+    /// Execute the middleware pipeline. Zero-alloc dispatch for internal middleware.
     pub async fn execute(&self, http_context: &mut HttpContext) {
-        if let Some(root) = self.pipeline.as_ref() {
-            root(http_context).await;
-        }
+        let next = MiddlewareNext::new(&self.middlewares);
+        next.invoke(http_context).await;
     }
 }
 
 impl Application {
-    pub fn add_middleware<M>(&mut self) -> &mut Self
+    pub fn add_middleware_dynamic<M>(&mut self) -> &mut Self
     where
-        M: Middleware + Default + 'static,
+        M: DynMiddleware + Default + 'static,
     {
-        LOGGER::info(format!("Adding middleware: {}", std::any::type_name::<M>()));
+        LOGGER::info(format!(
+            "Adding dynamic middleware: {}",
+            std::any::type_name::<M>()
+        ));
         let mut middleware_instance = M::default();
         middleware_instance.with_application(self);
-        self._middlewares.add(middleware_instance);
+        self._middlewares.add_dynamic(middleware_instance);
         self
     }
-    pub fn add_middleware_instance<M>(&mut self, middleware: M) -> &mut Self
+
+    pub fn add_middleware_dynamic_instance<M>(&mut self, mut middleware: M) -> &mut Self
     where
-        M: Middleware + Default + 'static,
+        M: DynMiddleware + 'static,
     {
-        LOGGER::info(format!("Adding middleware instance: {}", std::any::type_name::<M>()));
-        let mut middleware_instance = middleware;
-        middleware_instance.with_application(self);
-        self._middlewares.add(middleware_instance);
+        LOGGER::info(format!(
+            "Adding dynamic middleware instance: {}",
+            std::any::type_name::<M>()
+        ));
+        middleware.with_application(self);
+        self._middlewares.add_dynamic(middleware);
         self
     }
+
     pub async fn call_middlewares_async(&self, http_context: &mut HttpContext) {
         self._middlewares.execute(http_context).await;
     }
