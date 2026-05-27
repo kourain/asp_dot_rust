@@ -1,4 +1,6 @@
-use crate::{configuration::RequestTimeoutConfiguration, http_context::HttpContext, logging::LOGGER, middleware::Middleware};
+use asp_dot_rust_macros::middleware;
+
+use crate::{configuration::RequestTimeoutConfiguration, logging::LOGGER};
 
 #[derive(Debug, Clone)]
 pub struct RequestTimeoutMiddleware {
@@ -11,8 +13,8 @@ impl Default for RequestTimeoutMiddleware {
         }
     }
 }
-#[async_trait::async_trait]
-impl Middleware for RequestTimeoutMiddleware {
+#[middleware]
+impl RequestTimeoutMiddleware {
     fn with_application(&mut self, app: &crate::application::Application) {
         match app.try_get_configuration::<RequestTimeoutConfiguration>() {
             Some(config) => {
@@ -26,8 +28,8 @@ impl Middleware for RequestTimeoutMiddleware {
     }
     async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: crate::middleware::MiddlewareNext) {
         LOGGER::debug("RequestTimeoutMiddleware: Checking request timeout");
-        let timeout = std::time::Duration::from_secs(self.timeout_seconds);
-        if let Err(_) = tokio::time::timeout(timeout, next(http_context)).await {
+        let timeout = std::time::Duration::from_secs(this.timeout_seconds);
+        if let Err(_) = tokio::time::timeout(timeout, next.invoke_async(http_context)).await {
             LOGGER::warn("Request timed out");
             http_context.response.status_code = http::StatusCode::REQUEST_TIMEOUT;
             http_context

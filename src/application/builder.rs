@@ -4,10 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{
-    Application, hosted_service::ApplicationHostedService, logging::LOGGER, middleware::app_middlewares::ApplicationMiddlewares, services::configuration::ConfigurationService,
-    services::service_provider::application_scope::ServiceProvider,
-};
+use crate::{Application, hosted_service::ApplicationHostedService, logging::LOGGER, middleware::pipeline::ApplicationMiddlewares, services::{configuration::ConfigurationService, service_provider::application_scope::ServiceProvider}};
 
 pub struct ApplicationBuilder {
     pub name: String,

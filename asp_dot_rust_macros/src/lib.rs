@@ -1,4 +1,5 @@
 mod controller;
+mod middleware;
 use proc_macro::TokenStream;
 #[proc_macro_attribute]
 pub fn controller_route(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -43,4 +44,16 @@ pub fn options(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "HEAD")
+}
+
+
+/// #[middleware]
+/// put it on the impl block of the Middleware trait
+/// auto Service wrapper + impl MiddlewareService
+///
+/// REQUIRE:
+///   async fn invoke_async(&self, ctx: &mut HttpContext, next: &impl MiddlewareService)
+#[proc_macro_attribute]
+pub fn middleware(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    middleware::middleware::middleware(_attr, item)
 }

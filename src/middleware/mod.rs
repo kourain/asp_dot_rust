@@ -1,43 +1,61 @@
 pub(crate) mod app_middlewares;
-pub(crate) mod authorize;
-pub(crate) mod auto_route;
-pub(crate) mod cors;
+pub(crate) mod middleware_service;
+pub(crate) mod pipeline;
 pub(crate) mod rate_limit;
 pub(crate) mod request_timeout;
 pub(crate) mod static_file;
-use crate::http_context::http_context::HttpContext;
-use async_trait::async_trait;
-use core::any::type_name;
-use core::{future::Future, pin::Pin};
+
+use crate::http_context::HttpContext;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
+
+// --- Core traits ---
+
+pub trait MiddlewareService: Send + Sync {
+    fn invoke_async<'a>(&'a self, ctx: &'a mut HttpContext) -> impl Future<Output = ()> + Send + 'a;
+}
+
+pub trait Middleware<S: MiddlewareService>: Send + Sync {
+    type Service: MiddlewareService;
+    fn wrap(self, inner: S) -> Self::Service;
+}
+
+pub trait WithApplication {
+    fn with_application(&mut self, _app: &crate::Application) {}
+}
+
+// --- BoxedService ---
+
 pub type MiddlewareFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 
-pub type MiddlewareNext = Arc<dyn for<'a> Fn(&'a mut HttpContext) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> + Send + Sync>;
-#[async_trait]
-pub trait Middleware: Send + Sync {
-    async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: MiddlewareNext);
-    fn with_application(&mut self, application: &crate::application::Application);
-    fn type_name(&self) -> &'static str {
-        type_name::<Self>()
+pub struct BoxedService(Arc<dyn for<'a> Fn(&'a mut HttpContext) -> MiddlewareFuture<'a> + Send + Sync>);
+
+impl BoxedService {
+    pub fn new<S>(svc: S) -> Self
+    where
+        S: MiddlewareService + Send + Sync + 'static,
+    {
+        Self(Arc::new(move |ctx| Box::pin(svc.invoke_async(ctx))))
+    }
+
+    pub fn new_fn<F, Fut>(f: F) -> Self
+    where
+        F: Fn(&mut HttpContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        Self(Arc::new(move |ctx| Box::pin(f(ctx))))
     }
 }
 
-#[macro_export]
-macro_rules! middleware {
-    ($vis:vis $name:ident, |$ctx:ident, $next:ident| $body:block) => {
-        #[derive(Default)]
-        $vis struct $name;
+impl MiddlewareService for BoxedService {
+    fn invoke_async<'a>(&'a self, ctx: &'a mut HttpContext) -> impl Future<Output = ()> + Send + 'a {
+        (self.0)(ctx)
+    }
+}
 
-        #[async_trait::async_trait]
-        impl $crate::middleware::Middleware for $name {
-            fn with_application(&mut self, _: &crate::application::Application) {
-                // Default implementation does nothing, but can be overridden if needed
-            }
-            async fn invoke_async<'a>(
-                &self,
-                $ctx: &'a mut $crate::http_context::HttpContext,
-                $next: $crate::middleware::MiddlewareNext,
-            ) $body
-        }
-    };
+impl Clone for BoxedService {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
 }

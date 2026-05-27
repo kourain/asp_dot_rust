@@ -1,15 +1,12 @@
 use std::{collections::HashSet, net::IpAddr, sync::Arc};
 
-use tokio::task::JoinSet;
-
 use crate::{
     ApplicationBuilder,
     hosted_service::ApplicationHostedService,
     http_listener::run_http_server_async,
     logging::LOGGER,
-    middleware::{app_middlewares::ApplicationMiddlewares, auto_route::AutoRouteMiddleware, request_timeout::RequestTimeoutMiddleware},
-    services::configuration::ApplicationConfiguration,
-    services::service_provider::application_scope::ApplicationServiceProvider,
+    middleware::pipeline::ApplicationMiddlewares,
+    services::{configuration::ApplicationConfiguration, service_provider::application_scope::ApplicationServiceProvider},
 };
 
 pub struct Application {
@@ -30,8 +27,8 @@ impl Application {
 
     pub async fn run(mut self) -> std::io::Result<()> {
         // ensure defaults so the server keeps running even if user didn't set ip/ports
-        self.add_middleware::<RequestTimeoutMiddleware>();
-        self.add_middleware::<AutoRouteMiddleware>();
+        // self.add_middleware::<RequestTimeoutMiddleware>();
+        // self.add_middleware::<AutoRouteMiddleware>();
 
         if self.ip.is_empty() {
             self.ip.insert("127.0.0.1".parse::<std::net::IpAddr>().unwrap());
