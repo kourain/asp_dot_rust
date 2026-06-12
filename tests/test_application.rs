@@ -5,10 +5,10 @@ use asp_dot_rust::{
     logging::LOGGER,
 };
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 32)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_application() {
     LOGGER::with_color_output(true);
-    LOGGER::with_level(asp_dot_rust::logging::LogLevel::Verbose);
+    LOGGER::with_level(asp_dot_rust::logging::LogLevel::None);
     // LOGGER::with_chrono_time_format("%Y-%m-%d %H:%M:%S%.9f");
     // LOGGER::with_request_id(true);
     let mut app_builder = ApplicationBuilder::new("TestApp");

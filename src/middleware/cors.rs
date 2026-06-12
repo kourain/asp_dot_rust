@@ -1,4 +1,4 @@
-use crate::{Application, configuration::CorsConfiguration, http_context::HttpContext, middleware::Middleware};
+use crate::{Application, configuration::CorsConfiguration, http_context::{HttpContext, http_header::AspDotRustHttpHeader}, middleware::Middleware};
 use std::sync::Arc;
 #[derive(Debug, Clone, Default)]
 pub struct CorsMiddleware {
@@ -12,7 +12,7 @@ impl Middleware for CorsMiddleware {
         self.configuration = application.get_configuration::<CorsConfiguration>().clone();
     }
     async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: crate::middleware::MiddlewareNext) {
-        let request_origin = http_context.request.headers.origin();
+        let request_origin = http_context.request.headers().origin();
 
         // server-to-server
         let Some(origin) = request_origin else {
@@ -54,7 +54,7 @@ impl Middleware for CorsMiddleware {
         http_context.response.headers.add("Vary", "Origin");
 
         // Preflight OPTIONS
-        let is_options = { http_context.request.method == http::Method::OPTIONS };
+        let is_options = { http_context.request.method() == http::Method::OPTIONS };
         if is_options {
             http_context.response.headers.add("Access-Control-Max-Age", &self.configuration.max_age.to_string());
             http_context.response.status_code = http::StatusCode::NO_CONTENT;

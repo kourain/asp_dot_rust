@@ -42,6 +42,27 @@ impl HttpRequest {
             request_stream: None,                                               // not used in this constructor
         }
     }
+    pub fn method(&self) -> &http::Method {
+        &self.method
+    }
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+    pub fn uri(&self) -> http::Uri {
+        http::Uri::try_from(self.path.as_str()).unwrap_or_else(|_| http::Uri::from_static("/"))
+    }
+    pub fn version(&self) -> http::Version {
+        self.version
+    }
+    pub fn headers(&self) -> &crate::http_context::http_header::HttpHeader {
+        &self.headers
+    }
+    pub fn headers_mut(&mut self) -> &mut crate::http_context::http_header::HttpHeader {
+        &mut self.headers
+    }
+    pub fn body_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.body
+    }
     pub(crate) async fn from_raw(socket_client_ip: std::net::IpAddr, method: http::Method, app_config: ApplicationConfiguration, request_stream: RequestStream) -> io::Result<Self> {
         let mut http_request = Self {
             body: Vec::new(),

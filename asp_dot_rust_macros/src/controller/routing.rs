@@ -65,7 +65,7 @@ fn push_match_route(routes: &mut Vec<proc_macro2::TokenStream>, method_name_lit:
                 let action_result = #invoke;
                 let body = action_result.get_body_async().await;
                 let content_type = action_result.content_type();
-                let status_code = action_result.get_status_code();
+                let status_code = action_result.status_code();
                 (body, content_type.to_string(), status_code)
             };
 
