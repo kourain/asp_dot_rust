@@ -7,8 +7,8 @@ pub trait ActionResult: Sync {
     }
     fn get_body_async<'a>(&'a self) -> impl Future<Output = Vec<u8>> + Send;
     fn set_headers(&self, _http_context: &mut HttpContextRef) {
-        let S = self.status_code();
-        if S.as_u16() == 200 {
+        let s = self.status_code();
+        if s.as_u16() == 200 {
             *_http_context.response.status_mut() = self.status_code();
         }
         _http_context.response.headers_mut().set_content_length(self.content_length());

@@ -3,7 +3,7 @@ use std::{collections::HashSet, net::IpAddr, sync::Arc};
 use crate::{
     ApplicationBuilder,
     hosted_service::ApplicationHostedService,
-    http_listener::{hyper_server, run_http_server_async},
+    http_listener::hyper_server,
     logging::LOGGER,
     middleware::{app_middlewares::ApplicationMiddlewares, auto_route::AutoRouteMiddleware, request_timeout::RequestTimeoutMiddleware},
     services::{configuration::ApplicationConfiguration, service_provider::application_scope::ApplicationServiceProvider},
