@@ -1,4 +1,4 @@
-use crate::{controller::ActionResult};
+use crate::controller::ActionResult;
 use core::future::Future;
 
 impl ActionResult for &str {
