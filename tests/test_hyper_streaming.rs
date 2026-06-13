@@ -9,7 +9,6 @@
 
 #[cfg(test)]
 mod hyper_streaming_tests {
-    use std::sync::Arc;
     use std::time::Duration;
     use tokio::time::sleep;
 
