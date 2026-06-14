@@ -80,6 +80,7 @@ fn push_match_route(routes: &mut Vec<proc_macro2::TokenStream>, method_name_lit:
 
 pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStream {
     let root_route = parse_macro_input!(args as LitStr);
+    let original_input = item.clone();
     let input_impl = parse_macro_input!(item as ItemImpl);
     let self_ty = input_impl.self_ty.as_ref();
     let controller_bootstrap_name = syn::Ident::new(&format!("__asp_register_{}", quote! {#self_ty}), input_impl.span());
@@ -120,9 +121,11 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
         }
     }
 
+    let input_impl_tokens = proc_macro2::TokenStream::from(original_input);
+
     let expanded = quote! {
         #[allow(dead_code)]
-        #input_impl
+        #input_impl_tokens
         /// impl by #[controller_route] macro
         #[async_trait::async_trait]
         impl ::asp_dot_rust::controller::Routing for #self_ty {

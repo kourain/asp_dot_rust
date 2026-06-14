@@ -12,9 +12,11 @@ mod controllers {
             temp: String,
             temp2: String,
             http_context: ::asp_dot_rust::controller::HttpContextRef,
-            controller_name: &'static str,
         }
         impl ::asp_dot_rust::controller::WithHttpContext for HomeController {
+            fn str_name() -> &'static str {
+                "HomeController".strip_suffix("Controller").unwrap_or("HomeController")
+            }
             fn new_with_http_context(
                 http_context: &mut ::asp_dot_rust::http_context::HttpContext,
             ) -> Self {
@@ -43,9 +45,6 @@ mod controllers {
                     http_context: ::asp_dot_rust::controller::HttpContextRef::new(
                         http_context,
                     ),
-                    controller_name: controller_type_name
-                        .strip_suffix("Controller")
-                        .unwrap_or(controller_type_name),
                 }
             }
         }
@@ -105,7 +104,7 @@ mod controllers {
                                     let action_result = __self.index().await;
                                     let body = action_result.get_body_async().await;
                                     let content_type = action_result.content_type();
-                                    let status_code = action_result.get_status_code();
+                                    let status_code = action_result.status_code();
                                     (body, content_type.to_string(), status_code)
                                 };
                                 __self.http_context.response.body = body;
@@ -123,7 +122,7 @@ mod controllers {
                                     let action_result = __self.update();
                                     let body = action_result.get_body_async().await;
                                     let content_type = action_result.content_type();
-                                    let status_code = action_result.get_status_code();
+                                    let status_code = action_result.status_code();
                                     (body, content_type.to_string(), status_code)
                                 };
                                 __self.http_context.response.body = body;
@@ -141,7 +140,7 @@ mod controllers {
                                     let action_result = __self.replace().await;
                                     let body = action_result.get_body_async().await;
                                     let content_type = action_result.content_type();
-                                    let status_code = action_result.get_status_code();
+                                    let status_code = action_result.status_code();
                                     (body, content_type.to_string(), status_code)
                                 };
                                 __self.http_context.response.body = body;
@@ -159,7 +158,7 @@ mod controllers {
                                     let action_result = __self.health().await;
                                     let body = action_result.get_body_async().await;
                                     let content_type = action_result.content_type();
-                                    let status_code = action_result.get_status_code();
+                                    let status_code = action_result.status_code();
                                     (body, content_type.to_string(), status_code)
                                 };
                                 __self.http_context.response.body = body;
@@ -281,30 +280,23 @@ fn test_application() {
     let body = async {
         LOGGER::with_color_output(true);
         LOGGER::with_level(asp_dot_rust::logging::LogLevel::None);
-        LOGGER::with_request_id(true);
         let mut app_builder = ApplicationBuilder::new("TestApp");
+        app_builder.with_any_ip().with_http_port(8080);
         app_builder
             .add_custom_configuration(|config: &mut CorsConfiguration| {
                 config.allowed_origins = ["*"].into();
                 config.allowed_methods = [http::Method::GET, http::Method::POST].into();
                 config.allowed_headers = ["Content-Type"].into();
             })
-            .add_custom_configuration(|cfg: &mut RateLimitConfiguration| {
-                cfg.max_requests = 50;
-                cfg.limit_seconds = 10;
+            .add_custom_configuration::<
+                RateLimitConfiguration,
+            >(|cfg| {
+                cfg.max_requests = 5000000000;
+                cfg.limit_seconds = 1;
                 cfg.block_duration_seconds = 60;
             });
         app_builder.add_controllers();
         let mut app = app_builder.build();
-        app.use_cors();
-        match "test" {
-            "abc" => {
-                LOGGER::info("This will not run".to_string());
-            }
-            _ => {
-                LOGGER::info("Running the application".to_string());
-            }
-        }
         let _ = app.run().await;
     };
     let mut body = body;

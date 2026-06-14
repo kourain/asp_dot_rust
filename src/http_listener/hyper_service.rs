@@ -12,8 +12,8 @@ use crate::{
 };
 use std::pin::Pin;
 
-/// Maximum size to buffer request body in memory (10MB)
-const MAX_BUFFER_SIZE: u64 = 10 * 1024 * 1024;
+/// Maximum size to buffer request body in memory (200MB)
+const MAX_BUFFER_SIZE: u64 = 200 * 1024 * 1024;
 
 /// Chunk size for streaming response body (64KB per chunk)
 const RESPONSE_CHUNK_SIZE: usize = 64 * 1024;
