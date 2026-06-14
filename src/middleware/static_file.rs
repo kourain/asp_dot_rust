@@ -5,9 +5,7 @@ middleware!(pub StaticFileMiddleware, |http_context, next| {
         http_context.get_app_config::<StaticFileConfiguration>()
     };
 
-    let request_path = {
-        http_context.request.path.clone()
-    };
+    let request_path = http_context.request.path().to_string();
     let static_file_path = format!("{}/{}", static_file_config.static_files_directory, request_path.trim_start_matches('/'));
 
     if std::path::Path::new(&static_file_path).exists() {
@@ -34,7 +32,7 @@ middleware!(pub StaticFileMiddleware, |http_context, next| {
         }
     }
 
-    next(http_context).await;   
+    next(http_context).await;
 });
 
 impl Application {

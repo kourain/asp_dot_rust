@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+
+use http::{HeaderMap, HeaderValue};
 #[derive(Debug)]
 pub struct HttpHeader {
     headers: HashMap<String, String>,
@@ -52,5 +54,34 @@ impl HttpHeader {
     }
     pub fn to_string(&self) -> String {
         self.headers.iter().map(|(k, v)| format!("{}: {}", k, v)).collect::<Vec<String>>().join("\r\n")
+    }
+}
+
+pub trait AspDotRustHttpHeader {
+    fn authorization(&self) -> Option<String>;
+    fn content_type(&self) -> Option<String>;
+    fn content_length(&self) -> Option<u64>;
+    fn set_content_length(&mut self, length: usize);
+    fn set_content_type(&mut self, content_type: &str);
+    fn origin(&self) -> Option<String>;
+}
+impl AspDotRustHttpHeader for HeaderMap<HeaderValue>{
+    fn authorization(&self) -> Option<String> {
+        self.get("Authorization").and_then(|value| value.to_str().ok()).map(|s| s.to_string())
+    }
+    fn content_type(&self) -> Option<String> {
+        self.get("Content-Type").and_then(|value| value.to_str().ok()).map(|s| s.to_string())
+    }
+    fn content_length(&self) -> Option<u64> {
+        self.get("Content-Length").and_then(|value| value.to_str().ok()).and_then(|s| s.parse::<u64>().ok())
+    }
+    fn set_content_length(&mut self, length: usize) {
+        self.insert("Content-Length", HeaderValue::from_str(&length.to_string()).unwrap());
+    }
+    fn set_content_type(&mut self, content_type: &str) {
+        self.insert("Content-Type", HeaderValue::from_str(content_type).unwrap());
+    }
+    fn origin(&self) -> Option<String> {
+        self.get("Origin").and_then(|value| value.to_str().ok()).map(|s| s.to_string())
     }
 }

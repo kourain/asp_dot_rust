@@ -21,10 +21,9 @@ impl ApplicationBuilder {
         self
     }
 
-    pub fn add_custom_configuration<T, F>(&mut self, cors_config: F) -> &mut Self
+    pub fn add_custom_configuration<T>(&mut self, cors_config: impl FnOnce(&mut T)) -> &mut Self
     where
         T: Default + Debug + Clone + Send + Sync + 'static,
-        F: FnOnce(&mut T),
     {
         let mut config = T::default();
 

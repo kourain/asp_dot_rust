@@ -9,7 +9,6 @@ pub mod io;
 pub mod logging;
 pub mod middleware;
 pub mod services;
-pub mod tcp;
 pub mod threading;
 pub mod utils;
 

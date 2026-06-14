@@ -22,6 +22,7 @@ pub struct HttpResponse {
     pub written_phase: WritenPhase,
     pub keep_alive: bool,
     output_stream: Option<ResponseStream>,
+    in_memory_output: Option<Vec<u8>>,
 }
 
 impl HttpResponse {
@@ -34,6 +35,19 @@ impl HttpResponse {
             written_phase: WritenPhase::NONE,
             keep_alive: false,
             output_stream: Some(output_stream),
+            in_memory_output: None,
+        })
+    }
+    pub(crate) async fn new_in_memory() -> std::io::Result<Self> {
+        Ok(Self {
+            status_code: http::StatusCode::OK,
+            headers: HttpHeader::new(),
+            body: Vec::new(),
+            version: http::Version::HTTP_11,
+            written_phase: WritenPhase::NONE,
+            keep_alive: false,
+            output_stream: None,
+            in_memory_output: Some(Vec::new()),
         })
     }
     pub async fn write_headers_async(&mut self) {
@@ -55,9 +69,13 @@ impl HttpResponse {
             self.status_code.canonical_reason().unwrap_or(""),
             self.headers.to_string()
         );
-        self.output_stream.as_mut().unwrap().write_async(response_string.as_bytes()).await.unwrap_or_else(|e| {
-            LOGGER::error(format!("Failed to write headers to TCP stream: {}", e));
-        });
+        if let Some(stream) = self.output_stream.as_mut() {
+            stream.write_async(response_string.as_bytes()).await.unwrap_or_else(|e| {
+                LOGGER::error(format!("Failed to write headers to TCP stream: {}", e));
+            });
+        } else if let Some(buf) = self.in_memory_output.as_mut() {
+            buf.extend_from_slice(response_string.as_bytes());
+        }
         self.written_phase = WritenPhase::HTTP_HEADERS;
     }
     pub async fn write_async<'a>(&mut self, data: impl Into<&'a [u8]>) -> &mut Self {
@@ -66,9 +84,13 @@ impl HttpResponse {
             self.headers.set_content_length(data.len());
         }
         self.write_headers_async().await;
-        self.output_stream.as_mut().unwrap().write_async(data).await.unwrap_or_else(|e| {
-            LOGGER::error(format!("Failed to write data to TCP stream: {}", e));
-        });
+        if let Some(stream) = self.output_stream.as_mut() {
+            stream.write_async(data).await.unwrap_or_else(|e| {
+                LOGGER::error(format!("Failed to write data to TCP stream: {}", e));
+            });
+        } else if let Some(buf) = self.in_memory_output.as_mut() {
+            buf.extend_from_slice(data);
+        }
         self
     }
     pub async fn write_body_async(&mut self) {
@@ -82,7 +104,13 @@ impl HttpResponse {
         self.written_phase = WritenPhase::END;
     }
     pub async fn get_total_written_size(&self) -> usize {
-        self.output_stream.as_ref().unwrap().written_size
+        if let Some(stream) = self.output_stream.as_ref() {
+            stream.written_size
+        } else if let Some(buf) = self.in_memory_output.as_ref() {
+            buf.len()
+        } else {
+            0
+        }
     }
     pub fn to_http_response(&self) -> http::Response<Vec<u8>> {
         let mut response_builder = http::Response::builder().status(self.status_code);
@@ -103,5 +131,17 @@ impl HttpResponse {
             LOGGER::error(format!("Failed to build http::Response: {}", e));
             http::Response::new(Vec::new())
         })
+    }
+    pub fn body_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.body
+    }
+    pub fn headers_mut(&mut self) -> &mut crate::http_context::http_header::HttpHeader {
+        &mut self.headers
+    }
+    pub fn headers(&self) -> &crate::http_context::http_header::HttpHeader {
+        &self.headers
+    }
+    pub fn status_mut(&mut self) -> &mut http::StatusCode {
+        &mut self.status_code
     }
 }

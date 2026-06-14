@@ -1,15 +1,12 @@
 use std::{collections::HashSet, net::IpAddr, sync::Arc};
 
-use tokio::task::JoinSet;
-
 use crate::{
     ApplicationBuilder,
     hosted_service::ApplicationHostedService,
-    http_listener::run_http_server_async,
+    http_listener::hyper_server,
     logging::LOGGER,
     middleware::{app_middlewares::ApplicationMiddlewares, auto_route::AutoRouteMiddleware, request_timeout::RequestTimeoutMiddleware},
-    services::configuration::ApplicationConfiguration,
-    services::service_provider::application_scope::ApplicationServiceProvider,
+    services::{configuration::ApplicationConfiguration, service_provider::application_scope::ApplicationServiceProvider},
 };
 
 pub struct Application {
@@ -49,7 +46,7 @@ impl Application {
                 service.invoke_async().await
             });
         }
-        _ = run_http_server_async(app).await;
+        _ = hyper_server(app).await;
         Ok(())
     }
 }
