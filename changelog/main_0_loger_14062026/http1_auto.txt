@@ -1,0 +1,90 @@
+
+PS E:\Code\rust\asp_dot_rust> oha -n 1000000 -c 500 http://127.0.0.1:8080 
+Summary:
+  Success rate: 100.00%
+  Total:        15.6921 sec
+  Slowest:      1.0395 sec
+  Fastest:      0.0001 sec
+  Average:      0.0078 sec
+  Requests/sec: 63726.3275
+
+  Total data:   45.78 MiB
+  Size/request: 48 B
+  Size/sec:     2.92 MiB
+
+Response time histogram:
+  0.000 sec [1]      |
+  0.104 sec [999713] |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.208 sec [0]      |
+  0.312 sec [0]      |
+  0.416 sec [0]      |
+  0.520 sec [131]    |
+  0.624 sec [34]     |
+  0.728 sec [0]      |
+  0.832 sec [0]      |
+  0.936 sec [0]      |
+  1.040 sec [121]    |
+
+Response time distribution:
+  10.00% in 0.0040 sec
+  25.00% in 0.0055 sec
+  50.00% in 0.0073 sec
+  75.00% in 0.0094 sec
+  90.00% in 0.0116 sec
+  95.00% in 0.0131 sec
+  99.00% in 0.0164 sec
+  99.90% in 0.0207 sec
+  99.99% in 1.0145 sec
+
+
+Details (average, fastest, slowest):
+  DNS+dialup:   0.4132 sec, 0.0019 sec, 1.0055 sec
+  DNS-lookup:   0.0000 sec, 0.0000 sec, 0.0001 sec
+
+Status code distribution:
+  [200] 1000000 responses
+PS E:\Code\rust\asp_dot_rust> oha -n 1000000 -c 1000 http://127.0.0.1:8080
+Summary:
+  Success rate: 100.00%
+  Total:        16.5312 sec
+  Slowest:      2.0388 sec
+  Fastest:      0.0001 sec
+  Average:      0.0165 sec
+  Requests/sec: 60491.7784
+
+  Total data:   45.78 MiB
+  Size/request: 48 B
+  Size/sec:     2.77 MiB
+
+Response time histogram:
+  0.000 sec [1]      |
+  0.204 sec [999389] |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.408 sec [0]      |
+  0.612 sec [204]    |
+  0.816 sec [0]      |
+  1.019 sec [16]     |
+  1.223 sec [235]    |
+  1.427 sec [0]      |
+  1.631 sec [132]    |
+  1.835 sec [0]      |
+  2.039 sec [23]     |
+
+Response time distribution:
+  10.00% in 0.0074 sec
+  25.00% in 0.0106 sec
+  50.00% in 0.0149 sec
+  75.00% in 0.0200 sec
+  90.00% in 0.0257 sec
+  95.00% in 0.0295 sec
+  99.00% in 0.0379 sec
+  99.90% in 0.0519 sec
+  99.99% in 1.5263 sec
+
+
+Details (average, fastest, slowest):
+  DNS+dialup:   0.6063 sec, 0.0006 sec, 2.0224 sec
+  DNS-lookup:   0.0000 sec, 0.0000 sec, 0.0001 sec
+
+Status code distribution:
+  [200] 1000000 responses
+PS E:\Code\rust\asp_dot_rust> 
