@@ -2,13 +2,10 @@ use std::sync::Arc;
 
 use tokio::net::TcpListener;
 
-use crate::{
-    Application,
-    logging::LOGGER,
-    tcp::{parser::parse_tcp_stream_async, run_with_split_tcp_stream_async},
-};
+use crate::{Application, logging::LOGGER};
 
-pub(crate) async fn run_http_server_async(app: Arc<Application>) -> std::io::Result<()> {
+
+pub(crate) async fn hyper_server(app: Arc<Application>) -> std::io::Result<()> {
     futures::future::try_join_all(app.ip.iter().zip(app.http_port.iter()).map(|(ip, port)| {
         let ip = ip.clone();
         let port = port.clone();
@@ -18,15 +15,12 @@ pub(crate) async fn run_http_server_async(app: Arc<Application>) -> std::io::Res
             LOGGER::info(format!("HTTP server listening on {}:{}", ip, port));
             loop {
                 match listener.accept().await {
-                    Ok((tcp_stream, socket_addr)) => {
-                        tcp_stream.set_nodelay(true)?;
+                    Ok((stream, _)) => {
                         let app = app.clone();
-                        tokio::task::spawn(async move {
-                            run_with_split_tcp_stream_async(tcp_stream, move |read_half, write_half| {
-                                let app = app.clone();
-                                async move { parse_tcp_stream_async(app.clone(), socket_addr, read_half, write_half).await }
-                            })
-                            .await;
+                        tokio::spawn(async move {
+                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, app).await {
+                                LOGGER::error(format!("Error occurred: {}", e));
+                            }
                         });
                     }
                     Err(error) => {
@@ -46,7 +40,7 @@ pub(crate) async fn run_http_server_async(app: Arc<Application>) -> std::io::Res
                 }
             }
         }
-    }))
+        }))
     .await?;
     Ok(())
 }

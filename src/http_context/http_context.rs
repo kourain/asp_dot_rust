@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::http_context::http_request::HttpRequest;
 use crate::http_context::http_response::HttpResponse;
 use crate::logging::LOGGER;
-use crate::service_provider::application_scope::ApplicationServiceProvider;
-use crate::service_provider::http_request_scope::HttpContextServiceProvider;
+use crate::services::service_provider::application_scope::ApplicationServiceProvider;
+use crate::services::service_provider::http_request_scope::HttpContextServiceProvider;
 use crate::services::configuration::ApplicationConfiguration;
 pub struct HttpContext {
     pub request: HttpRequest,

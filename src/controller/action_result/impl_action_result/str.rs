@@ -7,10 +7,8 @@ impl ActionResult for &str {
     }
     fn write_to_http_context_async<'a>(&'a self, http_context: &mut crate::controller::HttpContextRef) -> impl Future<Output = ()> + Send {
         async move {
-            http_context.response.status_code = self.get_status_code();
-            http_context.response.headers.set_content_length(self.content_length());
-            http_context.response.headers.set_content_type(self.content_type());
-            http_context.response.write_async(self.as_bytes()).await;
+            self.set_headers(http_context);
+            *http_context.response.body_mut() = self.as_bytes().to_vec();
         }
     }
     fn content_length(&self) -> usize {
