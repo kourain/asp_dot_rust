@@ -24,5 +24,5 @@ urlencoding = "2.1.3"
 http = "1.4.0"
 
 asp_dot_rust_macros = { path = "asp_dot_rust_macros" }
-socket2 = "0.6.3"
+socket2 = "0.6.4"
 tower = "0.5.3"
