@@ -1,12 +1,14 @@
+use dashmap::DashMap;
+
 use crate::{MutexAsync, services::Service};
 use std::{
     any::{Any, TypeId},
-    collections::{HashMap, VecDeque}
+    collections::VecDeque,
 };
 
 #[derive(Default)]
 pub struct AppQueueService {
-    _queue: MutexAsync<HashMap<(TypeId, TypeId), VecDeque<Box<dyn Any + Send + Sync>>>>,
+    _queue: DashMap<(TypeId, TypeId), MutexAsync<VecDeque<Box<dyn Any + Send + Sync>>>>,
 }
 impl Service for AppQueueService {
     fn name(&self) -> &'static str {
@@ -22,13 +24,12 @@ impl AppQueueService {
         let type_s = TypeId::of::<S>();
         let type_v = TypeId::of::<V>();
         let queue_key = (type_s, type_v);
-        let mut lock = self._queue.lock().await;
-        if !lock.contains_key(&queue_key) {
+        if !self._queue.contains_key(&queue_key) {
             let mut new = VecDeque::new();
             new.push_back(value);
-            lock.insert(queue_key, VecDeque::new());
+            self._queue.insert(queue_key, MutexAsync::new(VecDeque::new()));
         } else {
-            lock.get_mut(&queue_key).unwrap().push_back(Box::new(value));
+            self._queue.get(&queue_key).unwrap().lock().await.push_back(Box::new(value));
         }
     }
     pub async fn de_queue_async<S, V>(&mut self, count: usize) -> Vec<V>
@@ -41,21 +42,19 @@ impl AppQueueService {
         let queue_key = (type_s, type_v);
 
         let mut result: Vec<V> = Vec::new();
-        let mut lock = self._queue.lock().await;
-        if let Some(queue) = lock.get_mut(&queue_key) {
+        if let Some(queue) = self._queue.get(&queue_key) {
+            let mut queue_lock = queue.lock().await;
             while result.len() < count {
-                match queue.pop_front() {
-                    Some(value) => {
-                        match value.downcast::<V>() {
-                            Ok(boxed) => {
-                                let item: V = *boxed;
-                                result.push(item);
-                            }
-                            Err(_) => {
-                                panic!("Queue: cast failed {} {}", std::any::type_name::<S>(), std::any::type_name::<V>());
-                            }
+                match queue_lock.pop_front() {
+                    Some(value) => match value.downcast::<V>() {
+                        Ok(boxed) => {
+                            let item: V = *boxed;
+                            result.push(item);
                         }
-                    }
+                        Err(_) => {
+                            panic!("Queue: cast failed {} {}", std::any::type_name::<S>(), std::any::type_name::<V>());
+                        }
+                    },
                     None => break, // queue empty
                 }
             }

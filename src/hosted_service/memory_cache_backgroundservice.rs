@@ -11,7 +11,7 @@ impl BackGroundService for MemoryCacheBackgroundService {
     where
         Self: Sized,
     {
-        MemoryCacheBackgroundService { memcache: MemoryCacheService {} }
+        MemoryCacheBackgroundService { memcache: MemoryCacheService::default() }
     }
     async fn invoke_async(&mut self) {
         LOGGER::verbose("run memory cache release");
