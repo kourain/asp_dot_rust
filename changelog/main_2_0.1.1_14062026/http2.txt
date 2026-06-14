@@ -1,0 +1,49 @@
+
+PS E:\Code\rust\asp_dot_rust> oha -n 1000000 -c 500 -p 4 --http2 http://127.0.0.1:8080
+Summary:
+  Success rate: 100.00%
+  Total:        9910.1704 ms
+  Slowest:      103.2994 ms
+  Fastest:      0.2051 ms
+  Average:      19.0344 ms
+  Requests/sec: 100906.4385
+
+  Total data:   45.78 MiB
+  Size/request: 48 B
+  Size/sec:     4.62 MiB
+
+Response time histogram:
+    0.205 ms [1]      |
+   10.515 ms [210620] |■■■■■■■■■■■■■■■■
+   20.824 ms [419487] |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+   31.133 ms [246380] |■■■■■■■■■■■■■■■■■■
+   41.443 ms [91819]  |■■■■■■■
+   51.752 ms [25076]  |■
+   62.062 ms [5268]   |
+   72.371 ms [1128]   |
+   82.681 ms [205]    |
+   92.990 ms [10]     |
+  103.299 ms [5]      |
+
+Response time distribution:
+  10.00% in 7.5080 ms
+  25.00% in 11.4448 ms
+  50.00% in 17.3237 ms
+  75.00% in 24.8344 ms
+  90.00% in 32.8443 ms
+  95.00% in 38.1302 ms
+  99.00% in 49.0723 ms
+  99.90% in 63.5958 ms
+  99.99% in 76.2448 ms
+
+
+Details (average, fastest, slowest):
+  DNS+dialup:   336.3414 ms, 1.8586 ms, 1010.4414 ms
+  DNS-lookup:   0.0039 ms, 0.0008 ms, 0.0725 ms
+
+Status code distribution:
+  [200] 999999 responses
+
+Error distribution:
+  [1] error reading a body from connection
+PS E:\Code\rust\asp_dot_rust> 
