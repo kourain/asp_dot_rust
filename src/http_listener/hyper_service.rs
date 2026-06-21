@@ -43,25 +43,16 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>) -> s
     let app_clone = app.clone();
     let service = service_fn(move |req| {
         let app = app_clone.clone();
+        let start = std::time::Instant::now();
+        // Extract request metadata before consuming the body
+        let content_length: u64 = req.headers().content_length().unwrap_or(0); 
         async move {
-            let start = std::time::Instant::now();
-            // Extract request metadata before consuming the body
-            let content_length: u64 = req.headers().content_length().unwrap_or(0);
-
             LOGGER::info(format!("Hyper received {} {} {:?} (Content-Length: {})", req.method(), req.uri(), req.version(), content_length));
 
             let custom_req = HttpRequest::from_http(req);
 
             // Create an in-memory response to run through existing pipeline
-            let custom_resp = match HttpResponse::new_in_memory().await {
-                Ok(r) => r,
-                Err(e) => {
-                    LOGGER::error(format!("Error creating in-memory response: {}", e));
-                    let response_body = create_streaming_body(Vec::new());
-                    let resp = Response::builder().status(500).body(response_body).unwrap();
-                    return Ok::<_, hyper::Error>(resp);
-                }
-            };
+            let custom_resp = HttpResponse::new_in_memory();
 
             // Build HttpContext and run middlewares/handlers
             let mut http_context = HttpContext::new(custom_req, custom_resp, app._config.clone(), app.service.clone());
