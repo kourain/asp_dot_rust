@@ -1,3 +1,5 @@
+use http::header;
+
 use crate::{
     Application,
     configuration::CorsConfiguration,
@@ -38,26 +40,26 @@ impl Middleware for CorsMiddleware {
             let route_method = self.routing_service.get_allowed_methods(&http_context.request.path);
             let route_method = self.configuration.allowed_methods.intersection(&route_method).cloned().collect::<Vec<http::Method>>();
 
-            http_context.response.headers.insert_str("Access-Control-Allow-Origin", &allow_origin);
+            http_context.response.headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, allow_origin.parse().unwrap());
             http_context
                 .response
                 .headers
-                .insert_str("Access-Control-Allow-Methods", &route_method.iter().map(|m| m.as_str()).collect::<Vec<_>>().join(", "));
+                .insert(header::ACCESS_CONTROL_ALLOW_METHODS, route_method.iter().map(|m| m.as_str()).collect::<Vec<_>>().join(", ").parse().unwrap());
             http_context
                 .response
                 .headers
-                .insert_str("Access-Control-Allow-Headers", &self.configuration.allowed_headers.iter().cloned().collect::<Vec<_>>().join(", "));
+                .insert(header::ACCESS_CONTROL_ALLOW_HEADERS, self.configuration.allowed_headers.iter().cloned().collect::<Vec<_>>().join(", ").parse().unwrap());
             if !self.configuration.exposed_headers.is_empty() {
                 http_context
                     .response
                     .headers
-                    .insert_str("Access-Control-Expose-Headers", &self.configuration.exposed_headers.iter().cloned().collect::<Vec<_>>().join(", "));
+                    .insert(header::ACCESS_CONTROL_EXPOSE_HEADERS, self.configuration.exposed_headers.iter().cloned().collect::<Vec<_>>().join(", ").parse().unwrap());
             }
             if self.configuration.allow_credentials {
-                http_context.response.headers.insert_str("Access-Control-Allow-Credentials", "true");
+                http_context.response.headers.insert(header::ACCESS_CONTROL_ALLOW_CREDENTIALS, "true".parse().unwrap());
             }
             // vary header to indicate response varies based on Origin
-            http_context.response.headers.insert_str("Vary", "Origin");
+            http_context.response.headers.insert(header::VARY, "Origin".parse().unwrap());
 
             // Preflight OPTIONS
             let is_options = { http_context.request.method() == http::Method::OPTIONS };

@@ -1,4 +1,4 @@
-use http::{HeaderMap, HeaderValue};
+use http::{HeaderMap, HeaderValue, header::{AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, ORIGIN}};
 pub trait AspDotRustHttpHeader {
     /// get the Authorization header value, if present
     fn authorization(&self) -> Option<String>;
@@ -19,22 +19,22 @@ pub trait AspDotRustHttpHeader {
 }
 impl AspDotRustHttpHeader for HeaderMap<HeaderValue> {
     fn authorization(&self) -> Option<String> {
-        self.get("Authorization").and_then(|value| value.to_str().ok()).map(|s| s.to_string())
+        self.get(AUTHORIZATION).and_then(|value| value.to_str().ok()).map(|s| s.to_string())
     }
     fn content_type(&self) -> Option<String> {
-        self.get("Content-Type").and_then(|value| value.to_str().ok()).map(|s| s.to_string())
+        self.get(CONTENT_TYPE).and_then(|value| value.to_str().ok()).map(|s| s.to_string())
     }
     fn content_length(&self) -> Option<u64> {
-        self.get("Content-Length").and_then(|value| value.to_str().ok()).and_then(|s| s.parse::<u64>().ok())
+        self.get(CONTENT_LENGTH).and_then(|value| value.to_str().ok()).and_then(|s| s.parse::<u64>().ok())
     }
     fn set_content_length(&mut self, length: usize) {
-        self.insert("Content-Length", HeaderValue::from_str(&length.to_string()).unwrap());
+        self.insert(CONTENT_LENGTH, HeaderValue::from_str(&length.to_string()).unwrap());
     }
     fn set_content_type(&mut self, content_type: &str) {
-        self.insert("Content-Type", HeaderValue::from_str(content_type).unwrap());
+        self.insert(CONTENT_TYPE, HeaderValue::from_str(content_type).unwrap());
     }
     fn origin(&self) -> Option<String> {
-        self.get("Origin").and_then(|value| value.to_str().ok()).map(|s| s.to_string())
+        self.get(ORIGIN).and_then(|value| value.to_str().ok()).map(|s| s.to_string())
     }
     fn insert_str(&mut self, key: &'static str, value: &str) {
         self.insert(key, HeaderValue::from_str(value).unwrap());

@@ -1,22 +1,17 @@
-use hyper::{Response, body::{Bytes, Incoming}, service::service_fn};
-use http_body::Body as _;
 use http_body_util::channel::Channel;
+use hyper::{Response, body::Bytes, service::service_fn};
 use std::convert::Infallible;
 use std::sync::Arc;
 use tokio::net::TcpStream;
 
 use crate::{
     Application,
-    http_context::{HttpContext, http_request::HttpRequest, http_response::HttpResponse},
+    http_context::{AspDotRustHttpHeader, HttpContext, http_request::HttpRequest, http_response::HttpResponse},
     logging::LOGGER,
 };
-use std::pin::Pin;
-
 
 use hyper_util::rt::TokioIo;
 use hyper_util::server::conn::auto as auto_conn;
-/// Maximum size to buffer request body in memory (200MB)
-const MAX_BUFFER_SIZE: u64 = 200 * 1024 * 1024;
 
 /// Chunk size for streaming response body (64KB per chunk)
 const RESPONSE_CHUNK_SIZE: usize = 64 * 1024;
@@ -24,12 +19,12 @@ const RESPONSE_CHUNK_SIZE: usize = 64 * 1024;
 /// Create a streaming response body from a Vec<u8>, sending chunks progressively
 fn create_streaming_body(body_vec: Vec<u8>) -> Channel<Bytes, Infallible> {
     let (mut sender, body) = Channel::<Bytes, Infallible>::new(4);
-    
+
     if body_vec.is_empty() {
         drop(sender);
         return body;
     }
-    
+
     // Spawn task to send chunks progressively
     tokio::spawn(async move {
         for chunk in body_vec.chunks(RESPONSE_CHUNK_SIZE) {
@@ -40,7 +35,7 @@ fn create_streaming_body(body_vec: Vec<u8>) -> Channel<Bytes, Infallible> {
         }
         drop(sender); // Signal end of body
     });
-    
+
     body
 }
 
@@ -51,17 +46,9 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>) -> s
         async move {
             let start = std::time::Instant::now();
             // Extract request metadata before consuming the body
-            let method = req.method().clone();
-            let uri = req.uri().clone();
-            let version = req.version();
-            let headers_http = req.headers().clone();
-            let content_length: u64 = headers_http
-                .get(hyper::header::CONTENT_LENGTH)
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
+            let content_length: u64 = req.headers().content_length().unwrap_or(0);
 
-            LOGGER::info(format!("Hyper received {} {} {:?} (Content-Length: {})", method, uri, version, content_length));
+            LOGGER::info(format!("Hyper received {} {} {:?} (Content-Length: {})", req.method(), req.uri(), req.version(), content_length));
 
             let custom_req = HttpRequest::from_http(req);
 
@@ -83,17 +70,17 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>) -> s
             // Convert internal response to http::Response<Vec<u8>> and then to hyper::Response<Body>
             let http_response = http_context.response.move_to_http_response();
             let mut builder = Response::builder().status(http_response.status());
-            
+
             // Copy response headers
             for (k, v) in http_response.headers().iter() {
                 if let Ok(val) = v.to_str() {
                     builder = builder.header(k.as_str(), val);
                 }
             }
-            
+
             let body_vec = http_response.body().clone();
             let body_len = body_vec.len();
-            
+
             // Stream response body chunk-by-chunk (64KB per chunk)
             let response_body = create_streaming_body(body_vec);
             let response = builder.body(response_body).unwrap_or_else(|e| {
