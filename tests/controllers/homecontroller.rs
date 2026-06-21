@@ -15,7 +15,7 @@ impl HomeController {
     #[get("/")]
     pub async fn index(&mut self) -> impl ActionResult {
         LOGGER::info("Handling index action".to_string());
-        self.http_context.response.headers.add("Content-Type", "text/html");
+        self.http_context.response.headers.insert_str("Content-Type", "text/html");
         self.http_context.response.status_code = http::StatusCode::OK;
         "<html><body><h1>Hello, World!</h1></body></html>"
     }

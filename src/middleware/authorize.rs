@@ -1,5 +1,7 @@
 use crate::{
-    Application, http_context::HttpContext, middleware::{Middleware, MiddlewareNext}
+    Application,
+    http_context::{HttpContext, http_header::AspDotRustHttpHeader},
+    middleware::{Middleware, MiddlewareNext},
 };
 #[derive(Default)]
 pub(crate) struct AuthorizeMiddleware {
@@ -11,9 +13,7 @@ impl Middleware for AuthorizeMiddleware {
         // Default implementation does nothing, but can be overridden if needed
     }
     async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: MiddlewareNext) {
-        let auth_header: Option<String> = {
-            http_context.request.headers.authorization().map(|value: &String| value.to_string())
-        };
+        let auth_header: Option<String> = http_context.request.headers.authorization();
         if let Some(auth_header) = auth_header {
             let split_token: Vec<&str> = auth_header.trim().split(" ").collect::<Vec<&str>>();
             if let Some(schema) = split_token.get(0) {
