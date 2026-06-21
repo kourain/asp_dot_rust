@@ -15,9 +15,9 @@ async fn test_application() {
     app_builder.with_any_ip().with_http_port(8080);
     app_builder
         .add_custom_configuration(|config: &mut CorsConfiguration| {
-            config.allowed_origins = ["*"].into();
+            config.allowed_origins = ["*".into()].into();
             config.allowed_methods = [http::Method::GET, http::Method::POST].into();
-            config.allowed_headers = ["Content-Type"].into();
+            config.allowed_headers = ["Content-Type".into()].into();
         })
         .add_custom_configuration::<RateLimitConfiguration>(|cfg| {
             cfg.max_requests = 5000000000;
