@@ -22,8 +22,8 @@ pub struct HttpResponse {
 }
 
 impl HttpResponse {
-    pub(crate) async fn new_in_memory() -> std::io::Result<Self> {
-        Ok(Self {
+    pub(crate) fn new_in_memory() -> Self {
+        Self {
             status_code: http::StatusCode::OK,
             headers: HeaderMap::new(),
             body: Vec::new(),
@@ -31,7 +31,7 @@ impl HttpResponse {
             written_phase: WritenPhase::NONE,
             keep_alive: false,
             in_memory_output: Some(Vec::new()),
-        })
+        }
     }
     pub async fn write_headers_async(&mut self) {
         if self.written_phase >= WritenPhase::HTTP_HEADERS {
