@@ -1,4 +1,4 @@
-use crate::{Application, configuration::StaticFileConfiguration, middleware};
+use crate::{Application, configuration::StaticFileConfiguration, http_context::http_header::AspDotRustHttpHeader, middleware};
 
 middleware!(pub StaticFileMiddleware, |http_context, next| {
     let static_file_config = {
@@ -26,7 +26,7 @@ middleware!(pub StaticFileMiddleware, |http_context, next| {
                     "opus" => "audio/opus",
                     _ => "application/octet-stream",
                 };
-                http_context.response.headers.add("Content-Type", content_type);
+                http_context.response.headers.insert_str("Content-Type", content_type);
             }
             return; // Return early since we've handled the response
         }

@@ -1,4 +1,4 @@
-use crate::controller::HttpContextRef;
+use crate::{controller::HttpContextRef, http_context::http_header::AspDotRustHttpHeader};
 use core::future::Future;
 
 pub trait ActionResult: Sync {
@@ -11,8 +11,8 @@ pub trait ActionResult: Sync {
         if s.as_u16() == 200 {
             *_http_context.response.status_mut() = self.status_code();
         }
-        _http_context.response.headers_mut().set_content_length(self.content_length());
-        _http_context.response.headers_mut().set_content_type(self.content_type());
+        _http_context.response.headers.set_content_length(self.content_length());
+        _http_context.response.headers.set_content_type(self.content_type());
     }
     fn write_to_http_context_async<'a>(&'a self, http_context: &mut HttpContextRef) -> impl Future<Output = ()> + Send {
         async move {

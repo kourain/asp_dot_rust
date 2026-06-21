@@ -124,6 +124,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
     let input_impl_tokens = proc_macro2::TokenStream::from(original_input);
 
     let expanded = quote! {
+        use ::asp_dot_rust::http_context::AspDotRustHttpHeader;
         #[allow(dead_code)]
         #input_impl_tokens
         /// impl by #[controller_route] macro

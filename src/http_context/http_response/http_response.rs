@@ -1,9 +1,6 @@
-use crate::{
-    extensions::Str,
-    http_context::{ResponseStream, http_header::HttpHeader},
-    io::AsyncWrite,
-    logging::LOGGER,
-};
+use http::{HeaderMap, HeaderValue};
+
+use crate::{http_context::http_header::AspDotRustHttpHeader, logging::LOGGER};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
@@ -16,37 +13,23 @@ pub enum WritenPhase {
 }
 pub struct HttpResponse {
     pub status_code: http::StatusCode,
-    pub headers: HttpHeader,
+    pub headers: HeaderMap<HeaderValue>,
     pub body: Vec<u8>,
     pub version: http::Version,
     pub written_phase: WritenPhase,
     pub keep_alive: bool,
-    output_stream: Option<ResponseStream>,
     in_memory_output: Option<Vec<u8>>,
 }
 
 impl HttpResponse {
-    pub(crate) async fn new(output_stream: ResponseStream) -> std::io::Result<Self> {
-        Ok(Self {
-            status_code: http::StatusCode::OK,
-            headers: HttpHeader::new(),
-            body: Vec::new(),
-            version: http::Version::HTTP_11,
-            written_phase: WritenPhase::NONE,
-            keep_alive: false,
-            output_stream: Some(output_stream),
-            in_memory_output: None,
-        })
-    }
     pub(crate) async fn new_in_memory() -> std::io::Result<Self> {
         Ok(Self {
             status_code: http::StatusCode::OK,
-            headers: HttpHeader::new(),
+            headers: HeaderMap::new(),
             body: Vec::new(),
             version: http::Version::HTTP_11,
             written_phase: WritenPhase::NONE,
             keep_alive: false,
-            output_stream: None,
             in_memory_output: Some(Vec::new()),
         })
     }
@@ -55,26 +38,12 @@ impl HttpResponse {
             return;
         }
         if self.headers.content_length().is_none() {
-            self.headers.add("Content-Length", self.body.len().to_string().as_str());
+            self.headers.set_content_length(self.body.len());
         }
         if self.headers.get("Connection").is_none() {
             let connection = if self.keep_alive { "keep-alive" } else { "close" };
-            self.headers.add("Connection", connection);
-            self.headers.add("Keep-Alive", "timeout=30, max=1000");
-        }
-        let response_string = format!(
-            "{} {} {}\r\n{}\r\n\r\n",
-            self.version.as_str(),
-            self.status_code,
-            self.status_code.canonical_reason().unwrap_or(""),
-            self.headers.to_string()
-        );
-        if let Some(stream) = self.output_stream.as_mut() {
-            stream.write_async(response_string.as_bytes()).await.unwrap_or_else(|e| {
-                LOGGER::error(format!("Failed to write headers to TCP stream: {}", e));
-            });
-        } else if let Some(buf) = self.in_memory_output.as_mut() {
-            buf.extend_from_slice(response_string.as_bytes());
+            self.headers.insert("Connection", HeaderValue::from_str(connection).unwrap());
+            self.headers.insert("Keep-Alive", HeaderValue::from_str("timeout=30, max=1000").unwrap());
         }
         self.written_phase = WritenPhase::HTTP_HEADERS;
     }
@@ -84,11 +53,7 @@ impl HttpResponse {
             self.headers.set_content_length(data.len());
         }
         self.write_headers_async().await;
-        if let Some(stream) = self.output_stream.as_mut() {
-            stream.write_async(data).await.unwrap_or_else(|e| {
-                LOGGER::error(format!("Failed to write data to TCP stream: {}", e));
-            });
-        } else if let Some(buf) = self.in_memory_output.as_mut() {
+        if let Some(buf) = self.in_memory_output.as_mut() {
             buf.extend_from_slice(data);
         }
         self
@@ -103,28 +68,9 @@ impl HttpResponse {
         self.write_body_async().await;
         self.written_phase = WritenPhase::END;
     }
-    pub async fn get_total_written_size(&self) -> usize {
-        if let Some(stream) = self.output_stream.as_ref() {
-            stream.written_size
-        } else if let Some(buf) = self.in_memory_output.as_ref() {
-            buf.len()
-        } else {
-            0
-        }
-    }
-    pub fn to_http_response(&self) -> http::Response<Vec<u8>> {
-        let mut response_builder = http::Response::builder().status(self.status_code);
-        for (key, value) in self.headers.clone_hashmap() {
-            response_builder = response_builder.header(key, value);
-        }
-        response_builder.body(self.body.clone()).unwrap_or_else(|e| {
-            LOGGER::error(format!("Failed to build http::Response: {}", e));
-            http::Response::new(Vec::new())
-        })
-    }
     pub fn move_to_http_response(self) -> http::Response<Vec<u8>> {
         let mut response_builder = http::Response::builder().status(self.status_code);
-        for (key, value) in self.headers.unpack_hashmap() {
+        for (key, value) in self.headers() {
             response_builder = response_builder.header(key, value);
         }
         response_builder.body(self.body).unwrap_or_else(|e| {
@@ -135,10 +81,10 @@ impl HttpResponse {
     pub fn body_mut(&mut self) -> &mut Vec<u8> {
         &mut self.body
     }
-    pub fn headers_mut(&mut self) -> &mut crate::http_context::http_header::HttpHeader {
+    pub fn headers_mut(&mut self) -> &mut HeaderMap<http::HeaderValue> {
         &mut self.headers
     }
-    pub fn headers(&self) -> &crate::http_context::http_header::HttpHeader {
+    pub fn headers(&self) -> &HeaderMap<http::HeaderValue> {
         &self.headers
     }
     pub fn status_mut(&mut self) -> &mut http::StatusCode {
