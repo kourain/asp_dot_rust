@@ -8,6 +8,7 @@ pub use loginfo::{LogCommand, LogInfo};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::broadcast;
+use tokio::sync::broadcast::error::RecvError;
 
 type LogSender = broadcast::Sender<LogCommand>;
 pub type LogReceiver = broadcast::Receiver<LogCommand>;
@@ -20,36 +21,55 @@ fn initialize_logging(mut rx: LogReceiver) {
         return; // Already initialized
     }
     // Spawn background logging task
+    // #![cfg(feature = "tokio-runtime")]
     tokio::spawn(async move {
         let mut logger = Logger::new();
-        while let Ok(command) = rx.recv().await {
-            match command {
-                LogCommand::Log(log_info) => {
-                    logger.write_log(&log_info).await;
+        loop {
+            if !logger.enable {
+                rx.recv().await.ok(); // Wait for a command to enable logging
+                break;
+            }
+            match rx.recv().await {
+                Ok(command) => match command {
+                    LogCommand::Log(log_info) => {
+                        logger.write_log(&log_info).await;
+                    }
+                    LogCommand::SetLogFormat(format) => {
+                        logger.set_log_format(format);
+                    }
+                    LogCommand::SetTimeFormat(format) => {
+                        logger.set_date_time_format(format);
+                    }
+                    LogCommand::SetLogLevel(level) => {
+                        logger.level = level;
+                    }
+                    LogCommand::SetEnable(enable) => {
+                        logger.enable = enable;
+                    }
+                    LogCommand::SetUseTime(enable) => {
+                        logger.use_time = enable;
+                    }
+                    LogCommand::SetUseColorOutput(enable) => {
+                        logger.use_color_output = enable;
+                    }
+                    LogCommand::SetUseRequestId(enable) => {
+                        logger.use_request_id = enable;
+                    }
+                    LogCommand::SetUseConnectionId(enable) => {
+                        logger.use_connection_id = enable;
+                    }
+                },
+                Err(RecvError::Lagged(missed)) => {
+                    let log = LogInfo {
+                        timestamp: None,
+                        level: LogLevel::Error,
+                        message: format!("LOGGER Missed {} log messages due to lag", missed),
+                    };
+                    logger.write_log(&log).await;
+                    continue;
                 }
-                LogCommand::SetLogFormat(format) => {
-                    logger.set_log_format(format);
-                }
-                LogCommand::SetTimeFormat(format) => {
-                    logger.set_date_time_format(format);
-                }
-                LogCommand::SetLogLevel(level) => {
-                    logger.level = level;
-                }
-                LogCommand::SetEnable(enable) => {
-                    logger.enable = enable;
-                }
-                LogCommand::SetUseTime(enable) => {
-                    logger.use_time = enable;
-                }
-                LogCommand::SetUseColorOutput(enable) => {
-                    logger.use_color_output = enable;
-                }
-                LogCommand::SetUseRequestId(enable) => {
-                    logger.use_request_id = enable;
-                }
-                LogCommand::SetUseConnectionId(enable) => {
-                    logger.use_connection_id = enable;
+                Err(RecvError::Closed) => {
+                    break;
                 }
             }
         }
