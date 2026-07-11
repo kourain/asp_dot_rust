@@ -1,6 +1,6 @@
 [package]
 name = "asp_dot_rust"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ["kourain <maiquyen16503@gmail.com>"]
 license = "MIT AND GPL-3.0"

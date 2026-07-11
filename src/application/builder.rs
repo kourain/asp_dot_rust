@@ -46,6 +46,7 @@ impl ApplicationBuilder {
     /// Binds the application to all available network interfaces
     pub fn with_any_ip(&mut self) -> &mut Self {
         self.ip.insert("0.0.0.0".parse().unwrap());
+        self.ip.insert("::".parse().unwrap());
         self
     }
     pub fn with_http_port(&mut self, port: u16) -> &mut Self {
