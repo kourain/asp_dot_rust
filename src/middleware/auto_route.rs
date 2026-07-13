@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use crate::{dependcy_injection::InjectableService, http_context::HttpContext, middleware::Middleware};
+use crate::{dependcy_injection::DependcyInjectableService, http_context::HttpContext, middleware::Middleware};
 #[derive(Default)]
 pub(crate) struct AutoRouteMiddleware {
     routing_service: Arc<crate::services::routing::RoutingService>,
 }
-impl InjectableService for AutoRouteMiddleware {
+impl DependcyInjectableService for AutoRouteMiddleware {
     fn inject_service(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
         let routing_service = service_scope.get_service::<crate::services::routing::RoutingService>();
         AutoRouteMiddleware { routing_service }
@@ -20,7 +20,7 @@ impl Middleware for AutoRouteMiddleware {
                 let controller = route_info.router_info.get(&request_method);
                 match controller {
                     Some(controller) => {
-                        _ = (controller.invoke)(http_context, controller.action_name.into()).await;
+                        _ = (controller.invoke_async)(http_context, controller.action_name.into()).await;
                     }
                     None => {
                         http_context.response.status_code = http::StatusCode::METHOD_NOT_ALLOWED;

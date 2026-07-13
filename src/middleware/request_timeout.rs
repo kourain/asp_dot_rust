@@ -1,29 +1,25 @@
-use crate::{configuration::RequestTimeoutConfiguration, http_context::HttpContext, logging::LOGGER, middleware::Middleware};
+use crate::{
+    configuration::RequestTimeoutConfiguration, dependcy_injection::DependcyInjectableService, http_context::HttpContext, logging::LOGGER, middleware::Middleware,
+    services::configuration::ConfigurationService,
+};
 
 #[derive(Debug, Clone)]
 pub struct RequestTimeoutMiddleware {
     timeout_seconds: u64,
 }
-impl Default for RequestTimeoutMiddleware {
-    fn default() -> Self {
-        Self {
-            timeout_seconds: 30, // default to 30 seconds
+impl DependcyInjectableService for RequestTimeoutMiddleware {
+    fn inject_service(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+        let config = service_scope
+            .get_service::<ConfigurationService>()
+            .get::<RequestTimeoutConfiguration>()
+            .unwrap_or(RequestTimeoutConfiguration { timeout_seconds: 30 });
+        RequestTimeoutMiddleware {
+            timeout_seconds: config.timeout_seconds,
         }
     }
 }
 #[async_trait::async_trait]
 impl Middleware for RequestTimeoutMiddleware {
-    fn with_application(&mut self, app: &crate::application::Application) {
-        match app.try_get_configuration::<RequestTimeoutConfiguration>() {
-            Some(config) => {
-                self.timeout_seconds = config.timeout_seconds;
-                LOGGER::info(format!("RequestTimeoutMiddleware configured with timeout_seconds: {}", self.timeout_seconds));
-            }
-            None => {
-                LOGGER::warn(format!("RequestTimeoutConfiguration not found, using default timeout_seconds: {}", self.timeout_seconds));
-            }
-        };
-    }
     async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: crate::middleware::MiddlewareNext) {
         LOGGER::debug("RequestTimeoutMiddleware: Checking request timeout");
         let timeout = std::time::Duration::from_secs(self.timeout_seconds);

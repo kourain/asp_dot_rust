@@ -1,6 +1,6 @@
 use dashmap::DashMap;
 
-use crate::{MutexAsync, dependcy_injection::InjectableService};
+use crate::{MutexAsync, dependcy_injection::DependcyInjectableService};
 use std::{
     any::{Any, TypeId},
     collections::VecDeque,
@@ -10,7 +10,7 @@ use std::{
 pub struct AppQueueService {
     _queue: DashMap<(TypeId, TypeId), MutexAsync<VecDeque<Box<dyn Any + Send + Sync>>>>,
 }
-impl InjectableService for AppQueueService {
+impl DependcyInjectableService for AppQueueService {
     fn inject_service(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
         AppQueueService::default()
     }

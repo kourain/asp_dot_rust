@@ -1,4 +1,4 @@
-use crate::dependcy_injection::InjectableService;
+use crate::dependcy_injection::DependcyInjectableService;
 
 struct CacheItem {
     value: Box<dyn std::any::Any + Send + Sync>,
@@ -101,7 +101,7 @@ impl MemoryCacheService {
         }
     }
 }
-impl InjectableService for MemoryCacheService {
+impl DependcyInjectableService for MemoryCacheService {
     fn inject_service(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
     where
         Self: Sized,

@@ -1,6 +1,6 @@
 use crate::{
     Application,
-    dependcy_injection::InjectableService,
+    dependcy_injection::DependcyInjectableService,
     http_context::HttpContext,
     http_context::{HttpContext, http_header::AspDotRustHttpHeader},
     middleware::{Middleware, MiddlewareNext},
@@ -9,7 +9,7 @@ use crate::{
 pub(crate) struct AuthorizeMiddleware {
     schema: String,
 }
-impl InjectableService for AuthorizeMiddleware {
+impl DependcyInjectableService for AuthorizeMiddleware {
     fn inject_service(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
         AuthorizeMiddleware::default()
     }

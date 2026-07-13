@@ -1,14 +1,25 @@
 use asp_dot_rust::{
     api_controller,
-    controller::{ActionResult, get, post, put, route},
+    controller::{ActionResult, WithHttpContext, get, post, put, route},
     controller_route,
     logging::LOGGER,
 };
 
-api_controller!(pub HomeController {
+api_controller!( pub HomeController {
     temp: String,
-    temp2: String,
 });
+
+impl WithHttpContext for HomeController {
+    fn str_name() -> &'static str {
+        "HomeController"
+    }
+    fn new(http_context: asp_dot_rust::controller::HttpContextRef) -> Self {
+        Self {
+            http_context: http_context,
+            temp: "Temporary data".to_string(),
+        }
+    }
+}
 
 #[controller_route("")]
 impl HomeController {

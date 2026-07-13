@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use crate::dependcy_injection::InjectableService;
+use crate::dependcy_injection::DependcyInjectableService;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ServiceType {
     Singleton,
@@ -37,7 +37,7 @@ impl ServiceProviderScope {
     }
     pub fn get_service<T>(&self) -> Arc<T>
     where
-        T: InjectableService + Sized + Send + Sync + 'static,
+        T: DependcyInjectableService + Sized + Send + Sync + 'static,
     {
         let type_id = TypeId::of::<T>();
         match self._inner_map.get(&type_id) {
@@ -67,7 +67,7 @@ impl ServiceProviderScope {
     }
     pub fn add_instance_type<T>(&mut self, service: Arc<T>, service_type: ServiceType)
     where
-        T: InjectableService + Send + Sync + 'static,
+        T: DependcyInjectableService + Send + Sync + 'static,
     {
         let type_id = TypeId::of::<T>();
         let instance: Arc<OnceLock<Arc<dyn Any + Send + Sync>>> = Arc::new(OnceLock::new());
@@ -76,7 +76,7 @@ impl ServiceProviderScope {
     }
     pub fn add_singleton<T>(&mut self)
     where
-        T: InjectableService + Send + Sync + 'static,
+        T: DependcyInjectableService + Send + Sync + 'static,
     {
         let type_id = TypeId::of::<T>();
         self._inner_map.insert(
@@ -89,7 +89,7 @@ impl ServiceProviderScope {
     }
     pub fn add_scope<T>(&mut self)
     where
-        T: InjectableService + Send + Sync + 'static,
+        T: DependcyInjectableService + Send + Sync + 'static,
     {
         let type_id = TypeId::of::<T>();
         self._inner_map.insert(
@@ -102,7 +102,7 @@ impl ServiceProviderScope {
     }
     pub fn add_transient<T>(&mut self)
     where
-        T: InjectableService + Send + Sync + 'static,
+        T: DependcyInjectableService + Send + Sync + 'static,
     {
         let type_id = TypeId::of::<T>();
         self._inner_map.insert(
@@ -115,5 +115,12 @@ impl ServiceProviderScope {
     }
     pub fn create_scope(&self) -> ServiceProviderScope {
         ServiceProviderScope { _inner_map: self._inner_map.clone() }
+    }
+    pub fn contains_service<T>(&self) -> bool
+    where
+        T: 'static,
+    {
+        let type_id = TypeId::of::<T>();
+        self._inner_map.contains_key(&type_id)
     }
 }

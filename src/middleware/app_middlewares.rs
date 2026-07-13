@@ -54,7 +54,7 @@ impl ApplicationMiddlewares {
 impl Application {
     pub fn add_middleware<M>(&mut self) -> &mut Self
     where
-        M: Middleware + Default + 'static,
+        M: Middleware + 'static,
     {
         LOGGER::info(format!("Adding middleware: {}", std::any::type_name::<M>()));
         let middleware_instance = M::inject_service(&self.service_provider);
@@ -63,7 +63,7 @@ impl Application {
     }
     pub fn add_middleware_instance<M>(&mut self, middleware: M) -> &mut Self
     where
-        M: Middleware + Default + 'static,
+        M: Middleware + 'static,
     {
         LOGGER::info(format!("Adding middleware instance: {}", std::any::type_name::<M>()));
         let middleware_instance = middleware;

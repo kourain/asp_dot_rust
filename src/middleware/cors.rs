@@ -3,7 +3,7 @@ use http::header;
 use crate::{
     Application,
     configuration::CorsConfiguration,
-    dependcy_injection::InjectableService,
+    dependcy_injection::DependcyInjectableService,
     http_context::{HttpContext, http_header::AspDotRustHttpHeader},
     middleware::Middleware,
     services::configuration::ConfigurationService,
@@ -14,7 +14,7 @@ pub struct CorsMiddleware {
     routing_service: Arc<crate::services::routing::RoutingService>,
     configuration: CorsConfiguration,
 }
-impl InjectableService for CorsMiddleware {
+impl DependcyInjectableService for CorsMiddleware {
     fn inject_service(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
         let routing_service = service_scope.get_service::<crate::services::routing::RoutingService>();
         let configuration = service_scope.get_service::<ConfigurationService>();

@@ -1,10 +1,13 @@
-use std::{any::{Any, TypeId}, collections::HashMap};
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+};
 
-use crate::dependcy_injection::InjectableService;
-pub(crate) struct ConfigurationService {
+use crate::dependcy_injection::DependcyInjectableService;
+pub struct ConfigurationService {
     _inner: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
 }
-impl InjectableService for ConfigurationService {
+impl DependcyInjectableService for ConfigurationService {
     fn inject_service(_service_provider: &crate::services::service_provider::ServiceProviderScope) -> Self {
         Self::new()
     }
