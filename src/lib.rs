@@ -1,6 +1,7 @@
 mod application;
 pub mod configuration;
 pub mod controller;
+pub mod dependcy_injection;
 pub mod extensions;
 pub mod hosted_service;
 pub mod http_context;

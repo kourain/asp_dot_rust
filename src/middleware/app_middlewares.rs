@@ -57,8 +57,7 @@ impl Application {
         M: Middleware + Default + 'static,
     {
         LOGGER::info(format!("Adding middleware: {}", std::any::type_name::<M>()));
-        let mut middleware_instance = M::default();
-        middleware_instance.with_application(self);
+        let middleware_instance = M::inject_service(&self.service_provider);
         self._middlewares.add(middleware_instance);
         self
     }
@@ -67,8 +66,7 @@ impl Application {
         M: Middleware + Default + 'static,
     {
         LOGGER::info(format!("Adding middleware instance: {}", std::any::type_name::<M>()));
-        let mut middleware_instance = middleware;
-        middleware_instance.with_application(self);
+        let middleware_instance = middleware;
         self._middlewares.add(middleware_instance);
         self
     }

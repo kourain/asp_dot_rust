@@ -1,13 +1,11 @@
 mod application_hosted_service;
 mod memory_cache_backgroundservice;
 
-pub use memory_cache_backgroundservice::MemoryCacheBackgroundService;
+use crate::dependcy_injection::InjectableService;
 pub use application_hosted_service::ApplicationHostedService;
+pub use memory_cache_backgroundservice::MemoryCacheBackgroundService;
 
 #[async_trait::async_trait]
-pub trait BackGroundService: Send + Sync {
-    fn with_service_provider() -> Self
-    where
-        Self: Sized;
+pub trait BackGroundService: InjectableService + Send + Sync {
     async fn invoke_async(&mut self);
 }

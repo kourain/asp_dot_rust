@@ -1,7 +1,10 @@
+use crate::dependcy_injection::InjectableService;
+
 struct CacheItem {
     value: Box<dyn std::any::Any + Send + Sync>,
     expiration: Option<std::time::Instant>,
 }
+
 #[derive(Default)]
 pub struct MemoryCacheService {
     _inner: dashmap::DashMap<std::any::TypeId, dashmap::DashMap<String, CacheItem>>,
@@ -46,7 +49,7 @@ impl MemoryCacheService {
             type_map.clear();
         }
     }
-    pub fn get_or_update<T: 'static + Send + Sync, F: FnOnce() -> T,>(&self, key: &str, value_factory: F, exp_seconds: Option<u64>) -> T
+    pub fn get_or_update<T: 'static + Send + Sync, F: FnOnce() -> T>(&self, key: &str, value_factory: F, exp_seconds: Option<u64>) -> T
     where
         T: Clone,
     {
@@ -96,5 +99,13 @@ impl MemoryCacheService {
                 type_map.remove(&key);
             }
         }
+    }
+}
+impl InjectableService for MemoryCacheService {
+    fn inject_service(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
+    where
+        Self: Sized,
+    {
+        MemoryCacheService::default()
     }
 }

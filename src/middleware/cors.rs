@@ -3,8 +3,10 @@ use http::header;
 use crate::{
     Application,
     configuration::CorsConfiguration,
+    dependcy_injection::InjectableService,
     http_context::{HttpContext, http_header::AspDotRustHttpHeader},
     middleware::Middleware,
+    services::configuration::ConfigurationService,
 };
 use std::sync::Arc;
 #[derive(Debug, Clone, Default)]
@@ -12,12 +14,18 @@ pub struct CorsMiddleware {
     routing_service: Arc<crate::services::routing::RoutingService>,
     configuration: CorsConfiguration,
 }
+impl InjectableService for CorsMiddleware {
+    fn inject_service(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+        let routing_service = service_scope.get_service::<crate::services::routing::RoutingService>();
+        let configuration = service_scope.get_service::<ConfigurationService>();
+        CorsMiddleware {
+            routing_service,
+            configuration: configuration.get::<CorsConfiguration>().unwrap_or_default(),
+        }
+    }
+}
 #[async_trait::async_trait]
 impl Middleware for CorsMiddleware {
-    fn with_application(&mut self, application: &crate::application::Application) {
-        self.routing_service = application.get_service::<crate::services::routing::RoutingService>();
-        self.configuration = application.get_configuration::<CorsConfiguration>().clone();
-    }
     async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: crate::middleware::MiddlewareNext) {
         {
             let request_origin = http_context.request.headers().origin();
@@ -41,19 +49,19 @@ impl Middleware for CorsMiddleware {
             let route_method = self.configuration.allowed_methods.intersection(&route_method).cloned().collect::<Vec<http::Method>>();
 
             http_context.response.headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, allow_origin.parse().unwrap());
-            http_context
-                .response
-                .headers
-                .insert(header::ACCESS_CONTROL_ALLOW_METHODS, route_method.iter().map(|m| m.as_str()).collect::<Vec<_>>().join(", ").parse().unwrap());
-            http_context
-                .response
-                .headers
-                .insert(header::ACCESS_CONTROL_ALLOW_HEADERS, self.configuration.allowed_headers.iter().cloned().collect::<Vec<_>>().join(", ").parse().unwrap());
+            http_context.response.headers.insert(
+                header::ACCESS_CONTROL_ALLOW_METHODS,
+                route_method.iter().map(|m| m.as_str()).collect::<Vec<_>>().join(", ").parse().unwrap(),
+            );
+            http_context.response.headers.insert(
+                header::ACCESS_CONTROL_ALLOW_HEADERS,
+                self.configuration.allowed_headers.iter().cloned().collect::<Vec<_>>().join(", ").parse().unwrap(),
+            );
             if !self.configuration.exposed_headers.is_empty() {
-                http_context
-                    .response
-                    .headers
-                    .insert(header::ACCESS_CONTROL_EXPOSE_HEADERS, self.configuration.exposed_headers.iter().cloned().collect::<Vec<_>>().join(", ").parse().unwrap());
+                http_context.response.headers.insert(
+                    header::ACCESS_CONTROL_EXPOSE_HEADERS,
+                    self.configuration.exposed_headers.iter().cloned().collect::<Vec<_>>().join(", ").parse().unwrap(),
+                );
             }
             if self.configuration.allow_credentials {
                 http_context.response.headers.insert(header::ACCESS_CONTROL_ALLOW_CREDENTIALS, "true".parse().unwrap());

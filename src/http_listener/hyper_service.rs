@@ -55,7 +55,7 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>) -> s
             let custom_resp = HttpResponse::new_in_memory();
 
             // Build HttpContext and run middlewares/handlers
-            let mut http_context = HttpContext::new(custom_req, custom_resp, app._config.clone(), app.service.clone());
+            let mut http_context = HttpContext::new(custom_req, custom_resp, app.service_provider.create_scope());
             app.call_middlewares_async(&mut http_context).await;
 
             // Convert internal response to http::Response<Vec<u8>> and then to hyper::Response<Body>

@@ -1,5 +1,7 @@
 use crate::{
     Application,
+    dependcy_injection::InjectableService,
+    http_context::HttpContext,
     http_context::{HttpContext, http_header::AspDotRustHttpHeader},
     middleware::{Middleware, MiddlewareNext},
 };
@@ -7,11 +9,13 @@ use crate::{
 pub(crate) struct AuthorizeMiddleware {
     schema: String,
 }
+impl InjectableService for AuthorizeMiddleware {
+    fn inject_service(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+        AuthorizeMiddleware::default()
+    }
+}
 #[async_trait::async_trait]
 impl Middleware for AuthorizeMiddleware {
-    fn with_application(&mut self, _: &crate::application::Application) {
-        // Default implementation does nothing, but can be overridden if needed
-    }
     async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: MiddlewareNext) {
         let auth_header: Option<String> = http_context.request.headers.authorization();
         if let Some(auth_header) = auth_header {

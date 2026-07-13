@@ -1,4 +1,34 @@
-use std::{any::Any, sync::Arc};
+use std::{any::{Any, TypeId}, collections::HashMap};
 
-pub(crate) type ConfigurationService = std::collections::HashMap<String, Box<dyn Any + Send + Sync>>;
-pub type ApplicationConfiguration = Arc<ConfigurationService>;
+use crate::dependcy_injection::InjectableService;
+pub(crate) struct ConfigurationService {
+    _inner: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+}
+impl InjectableService for ConfigurationService {
+    fn inject_service(_service_provider: &crate::services::service_provider::ServiceProviderScope) -> Self {
+        Self::new()
+    }
+}
+impl ConfigurationService {
+    pub fn new() -> Self {
+        Self { _inner: HashMap::new() }
+    }
+    pub fn constains<T: 'static + Send + Sync>(&self) -> bool {
+        self._inner.contains_key(&TypeId::of::<T>())
+    }
+    pub fn insert<T: 'static + Send + Sync>(&mut self, config: T)
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        self._inner.insert(TypeId::of::<T>(), Box::new(config));
+    }
+    pub fn get<T: 'static + Send + Sync>(&self) -> Option<T>
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        match self._inner.get(&TypeId::of::<T>()) {
+            Some(config) => config.downcast_ref::<T>().cloned(),
+            None => None,
+        }
+    }
+}

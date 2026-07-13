@@ -1,8 +1,8 @@
-use crate::{Application, configuration::StaticFileConfiguration, http_context::http_header::AspDotRustHttpHeader, middleware};
+use crate::{Application, configuration::StaticFileConfiguration, http_context::http_header::AspDotRustHttpHeader, middleware, services::configuration::ConfigurationService};
 
 middleware!(pub StaticFileMiddleware, |http_context, next| {
     let static_file_config = {
-        http_context.get_app_config::<StaticFileConfiguration>()
+        http_context.service_provider.get_service::<ConfigurationService>().get::<StaticFileConfiguration>()
     };
 
     let request_path = http_context.request.path().to_string();

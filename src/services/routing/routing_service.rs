@@ -1,5 +1,6 @@
 use crate::{
     controller::{ActionRoute, Routing, WithHttpContext},
+    dependcy_injection::InjectableService,
     http_context::HttpContext,
     services::routing::ControllerCollect,
 };
@@ -30,7 +31,7 @@ pub struct ResolvedRoute {
     pub path_params: HashMap<String, String>,
     pub query_params: HashMap<String, String>,
 }
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct RoutingService {
     // _route: Router<TypeId>,
     _router: Router<HashMap<http::Method, ControllerInfo>>, // key: "route", value: HashMap<http_method, resolved controller action info>
@@ -44,12 +45,12 @@ impl Debug for RoutingService {
             .finish()
     }
 }
-impl Default for RoutingService {
-    fn default() -> Self {
-        Self {
-            _router: Router::new(),
-            _registered_controllers: HashSet::new(),
-        }
+impl InjectableService for RoutingService {
+    fn inject_service(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
+    where
+        Self: Sized,
+    {
+        RoutingService::default()
     }
 }
 impl RoutingService {
