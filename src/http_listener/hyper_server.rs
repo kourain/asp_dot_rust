@@ -4,7 +4,6 @@ use tokio::net::TcpListener;
 
 use crate::{Application, logging::LOGGER};
 
-
 pub(crate) async fn hyper_server(app: Arc<Application>) -> std::io::Result<()> {
     futures::future::try_join_all(app.ip.iter().zip(app.http_port.iter()).map(|(ip, port)| {
         let ip = ip.clone();
@@ -13,12 +12,14 @@ pub(crate) async fn hyper_server(app: Arc<Application>) -> std::io::Result<()> {
         async move {
             let listener = TcpListener::bind((ip, port)).await?;
             LOGGER::info(format!("HTTP server listening on {}:{}", ip, port));
+            let routing_service = app.service_provider.get_service::<crate::services::routing::RoutingService>();
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {
                         let app = app.clone();
+                        let routing_service = routing_service.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, app).await {
+                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, app, &routing_service).await {
                                 LOGGER::error(format!("Error occurred: {}", e));
                             }
                         });
@@ -40,7 +41,7 @@ pub(crate) async fn hyper_server(app: Arc<Application>) -> std::io::Result<()> {
                 }
             }
         }
-        }))
+    }))
     .await?;
     Ok(())
 }

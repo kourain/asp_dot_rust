@@ -17,17 +17,23 @@ pub fn controller_route(args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::controller_route(args, item)
 }
 
-/// registers a function as a route handler for the specified HTTP method(s)
+/// registers a function as a route handler for the specified HTTP method(s) <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[route(["GET", "POST"], "/health")]
+/// ```
+/// this ignore case you can use any case for the HTTP methods, such as "get", "POST", "Put", etc.
+/// ```no_run
+/// #[route(["get", "post"], "/health")]
 /// ```
 #[proc_macro_attribute]
 pub fn route(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "")
 }
 
-/// registers a function as a GET route handler
+/// registers a function as a GET route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[get("/health")]
@@ -37,7 +43,8 @@ pub fn get(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "GET")
 }
 
-/// registers a function as a POST route handler
+/// registers a function as a POST route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[post("/health")]
@@ -47,7 +54,8 @@ pub fn post(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "POST")
 }
     
-/// registers a function as a PUT route handler
+/// registers a function as a PUT route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[put("/health")]
@@ -57,7 +65,8 @@ pub fn put(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "PUT")
 }
 
-/// registers a function as a DELETE route handler
+/// registers a function as a DELETE route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[delete("/health")]
@@ -67,7 +76,8 @@ pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "DELETE")
 }
 
-/// registers a function as a PATCH route handler
+/// registers a function as a PATCH route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[patch("/health")]
@@ -77,7 +87,8 @@ pub fn patch(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "PATCH")
 }
 
-/// registers a function as an OPTIONS route handler
+/// registers a function as an OPTIONS route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[options("/health")]
@@ -87,7 +98,8 @@ pub fn options(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "OPTIONS")
 }
 
-/// registers a function as a HEAD route handler
+/// registers a function as a HEAD route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[head("/health")]

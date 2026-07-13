@@ -1,8 +1,8 @@
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
-use crate::{ApplicationBuilder, controller::ActionRoute, logging::LOGGER, services::routing::RoutingService};
+use crate::{ApplicationBuilder, controller::ActionRoute, logging::LOGGER, services::{routing::RoutingService, service_provider::service_provider_scope::ServiceType}};
 
-pub static CONTROLLER_REGISTRY: LazyLock<Mutex<RoutingService>> = LazyLock::new(|| Mutex::new(RoutingService::default()));
+pub(crate) static CONTROLLER_REGISTRY: LazyLock<Mutex<RoutingService>> = LazyLock::new(|| Mutex::new(RoutingService::default()));
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct ControllerCollect {
     pub(crate) type_id: std::any::TypeId,
@@ -35,9 +35,9 @@ impl ApplicationBuilder {
     pub fn add_controllers(&mut self) -> &mut Self {
         LOGGER::info("Registering controllers...");
         bootstrap_registered_controllers();
-        let routing_snapshot = CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry").clone();
+        let routing_snapshot: RoutingService = std::mem::replace(&mut *CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry"), RoutingService::default());
         LOGGER::debug(format!("{:#?}", routing_snapshot));
-        self.service_provider.add_singleton::<RoutingService>(routing_snapshot);
+        self.service_provider.add_instance(Arc::new(routing_snapshot), ServiceType::Singleton);
         self
     }
 }

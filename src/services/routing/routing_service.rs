@@ -1,7 +1,5 @@
 use crate::{
-    controller::{ActionRoute, Routing, WithHttpContext},
-    http_context::HttpContext,
-    services::routing::ControllerCollect,
+    controller::{ActionRoute, Routing, WithHttpContext}, dependcy_injection::DependcyInjectableService, http_context::HttpContext, services::routing::ControllerCollect, utils::ShareMutPtr,
 };
 use matchit::Router;
 use std::{
@@ -20,7 +18,7 @@ pub struct ControllerInfo {
     pub controller_name: &'static str,
     pub controller_type_name: &'static str,
     pub action_name: &'static str,
-    pub(crate) invoke: ControllerInvoke,
+    pub(crate) invoke_async: ControllerInvoke,
 }
 #[derive(Debug)]
 pub struct ResolvedRoute {
@@ -30,7 +28,7 @@ pub struct ResolvedRoute {
     pub path_params: HashMap<String, String>,
     pub query_params: HashMap<String, String>,
 }
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct RoutingService {
     // _route: Router<TypeId>,
     _router: Router<HashMap<http::Method, ControllerInfo>>, // key: "route", value: HashMap<http_method, resolved controller action info>
@@ -44,12 +42,12 @@ impl Debug for RoutingService {
             .finish()
     }
 }
-impl Default for RoutingService {
-    fn default() -> Self {
-        Self {
-            _router: Router::new(),
-            _registered_controllers: HashSet::new(),
-        }
+impl DependcyInjectableService for RoutingService {
+    fn inject_service(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
+    where
+        Self: Sized,
+    {
+        RoutingService::default()
     }
 }
 impl RoutingService {
@@ -100,9 +98,10 @@ impl RoutingService {
             controller_name: T::str_name(),
             controller_type_name: std::any::type_name::<T>(),
             action_name: action_name,
-            invoke: |http_context, action_name| {
+            invoke_async: |http_context, action_name| {
                 Box::pin(async move {
-                    let mut controller = T::new_with_http_context(http_context);
+                    let http_context_ref = ShareMutPtr::new(http_context);
+                    let mut controller = T::new(http_context_ref);
                     controller.routing(action_name).await;
                 })
             },
@@ -112,14 +111,14 @@ impl RoutingService {
             Ok(_) => {
                 for method in methods {
                     // Route already exists, update it
-                    self._router.at_mut(&lower_route).unwrap().value.insert(http::Method::from_str(method).unwrap(), route_info.clone());
+                    self._router.at_mut(&lower_route).unwrap().value.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
                 }
             }
             Err(_) => {
                 // Route doesn't exist, insert it
                 let mut method_map = HashMap::new();
                 for method in methods {
-                    method_map.insert(http::Method::from_str(method).unwrap(), route_info.clone());
+                    method_map.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
                 }
                 self._router.insert(&lower_route, method_map).unwrap_or_else(|e| {
                     panic!("Controller {} failed to insert route: {}, error: {:?}", std::any::type_name::<T>(), lower_route, e);

@@ -4,7 +4,7 @@ use crate::{
     Application,
     http_context::HttpContext,
     logging::LOGGER,
-    middleware::{Middleware, MiddlewareNext},
+    middleware::{Middleware, MiddlewareNext, auto_route},
 };
 
 pub(crate) struct ApplicationMiddlewares {
@@ -26,8 +26,7 @@ impl ApplicationMiddlewares {
     }
     pub fn build_pipeline(&mut self) {
         LOGGER::info(format!("Building middleware pipeline {} middlewares", self.middlewares.len()));
-        let no_op: MiddlewareNext = Arc::new(|_| Box::pin(async {}));
-        let mut next = no_op;
+        let mut next: MiddlewareNext = Arc::new(|http_ctx| auto_route::invoke_async(http_ctx));
         for middleware in self.middlewares.iter().rev() {
             let middleware = middleware.clone();
             let next_handler = next.clone();
@@ -54,21 +53,19 @@ impl ApplicationMiddlewares {
 impl Application {
     pub fn add_middleware<M>(&mut self) -> &mut Self
     where
-        M: Middleware + Default + 'static,
+        M: Middleware + 'static,
     {
         LOGGER::info(format!("Adding middleware: {}", std::any::type_name::<M>()));
-        let mut middleware_instance = M::default();
-        middleware_instance.with_application(self);
+        let middleware_instance = M::inject_service(&self.service_provider);
         self._middlewares.add(middleware_instance);
         self
     }
     pub fn add_middleware_instance<M>(&mut self, middleware: M) -> &mut Self
     where
-        M: Middleware + Default + 'static,
+        M: Middleware + 'static,
     {
         LOGGER::info(format!("Adding middleware instance: {}", std::any::type_name::<M>()));
-        let mut middleware_instance = middleware;
-        middleware_instance.with_application(self);
+        let middleware_instance = middleware;
         self._middlewares.add(middleware_instance);
         self
     }

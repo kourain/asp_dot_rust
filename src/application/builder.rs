@@ -1,12 +1,15 @@
-use std::{
-    collections::{HashMap, HashSet},
-    net::IpAddr,
-    sync::Arc,
-};
+use std::{collections::HashSet, net::IpAddr, sync::Arc};
 
 use crate::{
-    Application, hosted_service::ApplicationHostedService, logging::LOGGER, middleware::app_middlewares::ApplicationMiddlewares, services::configuration::ConfigurationService,
-    services::service_provider::application_scope::ServiceProvider,
+    Application,
+    hosted_service::ApplicationHostedService,
+    logging::LOGGER,
+    middleware::app_middlewares::ApplicationMiddlewares,
+    services::{
+        configuration::ConfigurationService,
+        service_provider::service_provider_scope::{ServiceProviderScope, ServiceType},
+    },
+    utils::build_info,
 };
 
 pub struct ApplicationBuilder {
@@ -14,22 +17,22 @@ pub struct ApplicationBuilder {
     pub ip: HashSet<IpAddr>,
     pub http_port: HashSet<u16>,
     pub https_port: HashSet<u16>,
-    pub service_provider: ServiceProvider,
-    pub(crate) config: ConfigurationService,
+    pub configuration: ConfigurationService,
+    pub service_provider: ServiceProviderScope,
     pub(crate) hosted_services: ApplicationHostedService,
 }
 
 impl ApplicationBuilder {
     pub fn new(name: &str) -> Self {
-        LOGGER::verbose(format!("build at: {}", env!("BUILD_TIME")));
+        LOGGER::verbose(format!("build at: {}", build_info::get_build_time_utc()));
         LOGGER::info(format!("Initializing application builder: {}", name));
         Self {
             name: name.to_string(),
             ip: HashSet::new(),
             http_port: HashSet::new(),
             https_port: HashSet::new(),
-            service_provider: ServiceProvider::new(),
-            config: HashMap::new(),
+            configuration: ConfigurationService::new(),
+            service_provider: ServiceProviderScope::new(),
             hosted_services: Vec::new(),
         }
     }
@@ -61,13 +64,14 @@ impl ApplicationBuilder {
     }
 
     pub fn build(self) -> Application {
+        let mut service = self.service_provider;
+        service.add_instance::<ConfigurationService>(Arc::new(self.configuration), ServiceType::Singleton);
         Application {
             name: self.name,
             ip: self.ip,
             http_port: self.http_port,
             https_port: self.https_port,
-            service: Arc::new(self.service_provider),
-            _config: Arc::new(self.config),
+            service_provider: service,
             _middlewares: ApplicationMiddlewares::new(),
             _hosted_services: Vec::new(),
             runner_id: uuid::Uuid::now_v7(),

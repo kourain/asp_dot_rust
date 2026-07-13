@@ -39,13 +39,14 @@ fn create_streaming_body(body_vec: Vec<u8>) -> Channel<Bytes, Infallible> {
     body
 }
 
-pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>) -> std::io::Result<()> {
+pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: &Arc<crate::services::routing::RoutingService>) -> std::io::Result<()> {
     let app_clone = app.clone();
     let service = service_fn(move |req| {
         let app = app_clone.clone();
         let start = std::time::Instant::now();
         // Extract request metadata before consuming the body
-        let content_length: u64 = req.headers().content_length().unwrap_or(0); 
+        let content_length: u64 = req.headers().content_length().unwrap_or(0);
+        let routing_service = routing_service.clone();
         async move {
             LOGGER::info(format!("Hyper received {} {} {:?} (Content-Length: {})", req.method(), req.uri(), req.version(), content_length));
 
@@ -55,7 +56,8 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>) -> s
             let custom_resp = HttpResponse::new_in_memory();
 
             // Build HttpContext and run middlewares/handlers
-            let mut http_context = HttpContext::new(custom_req, custom_resp, app._config.clone(), app.service.clone());
+            let mut http_context = HttpContext::new(custom_req, custom_resp, app.service_provider.create_scope());
+            http_context.routing_info = routing_service.resolve(&http_context.request.path);
             app.call_middlewares_async(&mut http_context).await;
 
             // Convert internal response to http::Response<Vec<u8>> and then to hyper::Response<Body>
