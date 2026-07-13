@@ -111,14 +111,14 @@ impl RoutingService {
             Ok(_) => {
                 for method in methods {
                     // Route already exists, update it
-                    self._router.at_mut(&lower_route).unwrap().value.insert(http::Method::from_str(method).unwrap(), route_info.clone());
+                    self._router.at_mut(&lower_route).unwrap().value.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
                 }
             }
             Err(_) => {
                 // Route doesn't exist, insert it
                 let mut method_map = HashMap::new();
                 for method in methods {
-                    method_map.insert(http::Method::from_str(method).unwrap(), route_info.clone());
+                    method_map.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
                 }
                 self._router.insert(&lower_route, method_map).unwrap_or_else(|e| {
                     panic!("Controller {} failed to insert route: {}, error: {:?}", std::any::type_name::<T>(), lower_route, e);

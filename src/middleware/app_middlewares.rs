@@ -4,7 +4,7 @@ use crate::{
     Application,
     http_context::HttpContext,
     logging::LOGGER,
-    middleware::{Middleware, MiddlewareNext},
+    middleware::{Middleware, MiddlewareNext, auto_route},
 };
 
 pub(crate) struct ApplicationMiddlewares {
@@ -26,8 +26,7 @@ impl ApplicationMiddlewares {
     }
     pub fn build_pipeline(&mut self) {
         LOGGER::info(format!("Building middleware pipeline {} middlewares", self.middlewares.len()));
-        let no_op: MiddlewareNext = Arc::new(|_| Box::pin(async {}));
-        let mut next = no_op;
+        let mut next: MiddlewareNext = Arc::new(|http_ctx| auto_route::invoke_async(http_ctx));
         for middleware in self.middlewares.iter().rev() {
             let middleware = middleware.clone();
             let next_handler = next.clone();

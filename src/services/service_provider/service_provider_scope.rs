@@ -1,5 +1,6 @@
 use std::{
     any::{Any, TypeId},
+    collections::HashMap,
     sync::{Arc, OnceLock},
 };
 
@@ -29,11 +30,11 @@ impl Clone for ServiceInstance {
     }
 }
 pub struct ServiceProviderScope {
-    _inner_map: dashmap::DashMap<TypeId, ServiceInstance>,
+    _inner_map: HashMap<TypeId, ServiceInstance>,
 }
 impl ServiceProviderScope {
     pub(crate) fn new() -> Self {
-        Self { _inner_map: dashmap::DashMap::new() }
+        Self { _inner_map: HashMap::new() }
     }
     pub fn get_service<T>(&self) -> Arc<T>
     where
@@ -42,15 +43,7 @@ impl ServiceProviderScope {
         let type_id = TypeId::of::<T>();
         match self._inner_map.get(&type_id) {
             Some(instance) => match instance.service_type {
-                ServiceType::Singleton => {
-                    return instance
-                        .instance
-                        .get_or_init(|| Arc::new(T::inject_service(self)))
-                        .clone()
-                        .downcast::<T>()
-                        .expect("Type mismatch when downcasting service");
-                }
-                ServiceType::Scope => {
+                ServiceType::Singleton | ServiceType::Scope => {
                     return instance
                         .instance
                         .get_or_init(|| Arc::new(T::inject_service(self)))
@@ -65,7 +58,7 @@ impl ServiceProviderScope {
             }
         }
     }
-    pub fn add_instance_type<T>(&mut self, service: Arc<T>, service_type: ServiceType)
+    pub fn add_instance<T>(&mut self, service: Arc<T>, service_type: ServiceType)
     where
         T: DependcyInjectableService + Send + Sync + 'static,
     {

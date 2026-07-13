@@ -1,23 +1,11 @@
-use std::sync::Arc;
+use crate::http_context::HttpContext;
+use std::pin::Pin;
 
-use crate::{dependcy_injection::DependcyInjectableService, http_context::HttpContext, middleware::Middleware};
-#[derive(Default)]
-pub(crate) struct AutoRouteMiddleware {
-    routing_service: Arc<crate::services::routing::RoutingService>,
-}
-impl DependcyInjectableService for AutoRouteMiddleware {
-    fn inject_service(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
-        let routing_service = service_scope.get_service::<crate::services::routing::RoutingService>();
-        AutoRouteMiddleware { routing_service }
-    }
-}
-#[async_trait::async_trait]
-impl Middleware for AutoRouteMiddleware {
-    async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, _next: crate::middleware::MiddlewareNext) {
-        let (request_path, request_method) = { (&http_context.request.path, &http_context.request.method) };
-        match self.routing_service.resolve(request_path) {
+pub fn invoke_async<'a>(http_context: &'a mut HttpContext) -> Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+    Box::pin(async {
+        match &http_context.routing_info {
             Some(route_info) => {
-                let controller = route_info.router_info.get(&request_method);
+                let controller = route_info.router_info.get(&http_context.request.method);
                 match controller {
                     Some(controller) => {
                         _ = (controller.invoke_async)(http_context, controller.action_name.into()).await;
@@ -35,5 +23,5 @@ impl Middleware for AutoRouteMiddleware {
                 return;
             }
         }
-    }
+    })
 }

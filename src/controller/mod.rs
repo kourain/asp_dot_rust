@@ -6,5 +6,5 @@ pub(crate) mod routing;
 
 pub use action_result::ActionResult;
 pub use asp_dot_rust_macros::{delete, get, head, options, patch, post, put, route};
-pub use controller::{HttpContextRef, WithHttpContext};
+pub use controller::{HttpContextRef, StructName, WithHttpContext};
 pub use routing::*;

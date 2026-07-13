@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{ApplicationBuilder, dependcy_injection::DependcyInjectableService, logging::LOGGER};
 
 impl ApplicationBuilder {
@@ -22,5 +24,12 @@ impl ApplicationBuilder {
     {
         LOGGER::info(format!("Register Transient Service: {}", std::any::type_name::<T>()));
         self.service_provider.add_transient::<T>();
+    }
+    pub fn add_instance<T>(&mut self, instance: T, service_type: crate::services::service_provider::service_provider_scope::ServiceType)
+    where
+        T: DependcyInjectableService + Send + Sync + 'static,
+    {
+        LOGGER::info(format!("Register Instance Service: {}", std::any::type_name::<T>()));
+        self.service_provider.add_instance::<T>(Arc::new(instance), service_type);
     }
 }

@@ -9,6 +9,7 @@ use crate::{
         configuration::ConfigurationService,
         service_provider::service_provider_scope::{ServiceProviderScope, ServiceType},
     },
+    utils::build_info,
 };
 
 pub struct ApplicationBuilder {
@@ -23,7 +24,7 @@ pub struct ApplicationBuilder {
 
 impl ApplicationBuilder {
     pub fn new(name: &str) -> Self {
-        LOGGER::verbose(format!("build at: {}", env!("BUILD_TIME")));
+        LOGGER::verbose(format!("build at: {}", build_info::get_build_time_utc()));
         LOGGER::info(format!("Initializing application builder: {}", name));
         Self {
             name: name.to_string(),
@@ -64,7 +65,7 @@ impl ApplicationBuilder {
 
     pub fn build(self) -> Application {
         let mut service = self.service_provider;
-        service.add_instance_type::<ConfigurationService>(Arc::new(self.configuration), ServiceType::Singleton);
+        service.add_instance::<ConfigurationService>(Arc::new(self.configuration), ServiceType::Singleton);
         Application {
             name: self.name,
             ip: self.ip,

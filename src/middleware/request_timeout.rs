@@ -1,6 +1,5 @@
 use crate::{
-    configuration::RequestTimeoutConfiguration, dependcy_injection::DependcyInjectableService, http_context::HttpContext, logging::LOGGER, middleware::Middleware,
-    services::configuration::ConfigurationService,
+    Application, configuration::RequestTimeoutConfiguration, dependcy_injection::DependcyInjectableService, http_context::HttpContext, logging::LOGGER, middleware::Middleware, services::configuration::ConfigurationService,
 };
 
 #[derive(Debug, Clone)]
@@ -33,5 +32,11 @@ impl Middleware for RequestTimeoutMiddleware {
         } else {
             // Request completed within the timeout
         }
+    }
+}
+impl Application {
+    pub fn use_request_timeout(&mut self) -> &mut Self {
+        self.add_middleware::<RequestTimeoutMiddleware>();
+        self
     }
 }

@@ -5,14 +5,11 @@ use asp_dot_rust::{
     logging::LOGGER,
 };
 
-api_controller!( pub HomeController {
+api_controller!(pub HomeController {
     temp: String,
 });
 
 impl WithHttpContext for HomeController {
-    fn str_name() -> &'static str {
-        "HomeController"
-    }
     fn new(http_context: asp_dot_rust::controller::HttpContextRef) -> Self {
         Self {
             http_context: http_context,
@@ -41,7 +38,7 @@ impl HomeController {
         self.temp.clone()
     }
 
-    #[route(["GET", "POST"], "/health")]
+    #[route(["get", "post"], "/health")]
     pub async fn health(&self) -> impl ActionResult {
         "ok".to_string()
     }

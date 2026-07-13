@@ -5,7 +5,7 @@ use crate::{
     hosted_service::ApplicationHostedService,
     http_listener::hyper_server,
     logging::LOGGER,
-    middleware::{app_middlewares::ApplicationMiddlewares, auto_route::AutoRouteMiddleware, request_timeout::RequestTimeoutMiddleware},
+    middleware::{app_middlewares::ApplicationMiddlewares},
     services::service_provider::service_provider_scope::ServiceProviderScope,
 };
 
@@ -26,9 +26,6 @@ impl Application {
 
     pub async fn run(mut self) -> std::io::Result<()> {
         // ensure defaults so the server keeps running even if user didn't set ip/ports
-        self.add_middleware::<RequestTimeoutMiddleware>();
-        self.add_middleware::<AutoRouteMiddleware>();
-
         if self.ip.is_empty() {
             self.ip.insert("127.0.0.1".parse::<std::net::IpAddr>().unwrap());
         }

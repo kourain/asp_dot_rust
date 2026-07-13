@@ -2,7 +2,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 
 use crate::{ApplicationBuilder, controller::ActionRoute, logging::LOGGER, services::{routing::RoutingService, service_provider::service_provider_scope::ServiceType}};
 
-pub static CONTROLLER_REGISTRY: LazyLock<Mutex<RoutingService>> = LazyLock::new(|| Mutex::new(RoutingService::default()));
+pub(crate) static CONTROLLER_REGISTRY: LazyLock<Mutex<RoutingService>> = LazyLock::new(|| Mutex::new(RoutingService::default()));
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct ControllerCollect {
     pub(crate) type_id: std::any::TypeId,
@@ -37,7 +37,7 @@ impl ApplicationBuilder {
         bootstrap_registered_controllers();
         let routing_snapshot: RoutingService = std::mem::replace(&mut *CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry"), RoutingService::default());
         LOGGER::debug(format!("{:#?}", routing_snapshot));
-        self.service_provider.add_instance_type(Arc::new(routing_snapshot), ServiceType::Singleton);
+        self.service_provider.add_instance(Arc::new(routing_snapshot), ServiceType::Singleton);
         self
     }
 }

@@ -24,7 +24,7 @@ async fn test_application() {
             cfg.block_duration_seconds = 60;
         });
     app_builder.add_controllers();
-    let mut app = app_builder.build();
+    let app = app_builder.build();
     // app.use_cors().use_rate_limit();
     let _ = app.run().await;
 }
