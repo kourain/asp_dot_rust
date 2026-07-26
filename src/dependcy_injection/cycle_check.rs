@@ -23,8 +23,6 @@ pub fn check_dependency_cycles(service: &ServiceProviderScope) {
             } else {
                 // owner registered but dependency of it has not been registered —
                 // this is almost certainly a DI configuration error
-
-                #[cfg(debug_assertions)]
                 LOGGER::warn(format!("Service {} require {} but it has not been registered in ServiceProviderScope", edge.owner_name, dep_name));
             }
         }

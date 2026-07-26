@@ -1,9 +1,8 @@
 use proc_macro::TokenStream;
 
-
 pub(crate) fn derive_di(input: TokenStream) -> TokenStream {
     let ast = syn::parse_macro_input!(input as syn::DeriveInput);
-    let ten = &ast.ident;
+    let struct_name = &ast.ident;
 
     let syn::Data::Struct(data) = &ast.data else {
         panic!("Only support struct");
@@ -22,13 +21,14 @@ pub(crate) fn derive_di(input: TokenStream) -> TokenStream {
     });
 
     quote::quote! {
-        
-        impl DependcyInjectableService for #ten {
+
+        impl DependcyInjectableService for #struct_name {
             fn inject_service(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
                 Self {
                     #(#init_props),*
                 }
             }
         }
-    }.into()
+    }
+    .into()
 }
