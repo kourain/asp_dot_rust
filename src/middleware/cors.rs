@@ -4,10 +4,8 @@ use http::header;
 use crate::{
     Application,
     configuration::CorsConfiguration,
-    dependcy_injection::DependcyInjectableService,
     http_context::{HttpContext, http_header::AspDotRustHttpHeader},
     middleware::Middleware,
-    services::configuration::ConfigurationService,
 };
 use std::sync::Arc;
 #[derive(Debug, Clone, Default)]
@@ -18,7 +16,10 @@ pub struct CorsMiddleware {
 #[injectable_service]
 impl CorsMiddleware {
     pub fn new(routing_service: Arc<crate::services::routing::RoutingService>, configuration: Option<Arc<CorsConfiguration>>) -> Self {
-        Self { routing_service, configuration: configuration.unwrap_or_default() }
+        Self {
+            routing_service,
+            configuration: configuration.unwrap_or_default(),
+        }
     }
 }
 #[async_trait::async_trait]

@@ -1,5 +1,4 @@
 use proc_macro::TokenStream;
-use quote::ToTokens;
 
 
 pub(crate) fn derive_di(input: TokenStream) -> TokenStream {

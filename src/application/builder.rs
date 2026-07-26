@@ -54,7 +54,6 @@ impl ApplicationBuilder {
     pub fn with_https_port(&mut self, port: u16) -> &mut Self {
         self.https_port.insert(port);
         todo!("ADD SSL SUPPORT");
-        self
     }
 
     pub fn build(self) -> Application {
