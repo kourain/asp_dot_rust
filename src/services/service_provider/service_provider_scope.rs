@@ -4,31 +4,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use crate::dependcy_injection::DependcyInjectableService;
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ServiceType {
-    Singleton,
-    Scope,
-    Transient,
-}
-struct ServiceInstance {
-    service_type: ServiceType,
-    instance: Arc<OnceLock<Arc<dyn Any + Send + Sync>>>,
-}
-impl Clone for ServiceInstance {
-    fn clone(&self) -> Self {
-        if self.service_type == ServiceType::Singleton {
-            return ServiceInstance {
-                service_type: self.service_type,
-                instance: self.instance.clone(),
-            };
-        }
-        ServiceInstance {
-            service_type: self.service_type.clone(),
-            instance: Arc::new(OnceLock::new()),
-        }
-    }
-}
+use crate::{dependcy_injection::DependcyInjectableService, services::service_provider::{ServiceInstance, ServiceType}};
 pub struct ServiceProviderScope {
     _inner_map: HashMap<TypeId, ServiceInstance>,
 }
@@ -115,5 +91,8 @@ impl ServiceProviderScope {
     {
         let type_id = TypeId::of::<T>();
         self._inner_map.contains_key(&type_id)
+    }
+    pub fn contains_type_id(&self, type_id: &TypeId) -> bool {
+        self._inner_map.contains_key(type_id)
     }
 }

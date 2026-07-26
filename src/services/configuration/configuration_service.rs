@@ -1,11 +1,12 @@
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
+    sync::Arc,
 };
 
 use crate::dependcy_injection::DependcyInjectableService;
 pub struct ConfigurationService {
-    _inner: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    _inner: HashMap<TypeId, Arc<dyn Any + Send + Sync>>,
 }
 impl DependcyInjectableService for ConfigurationService {
     fn inject_service(_service_provider: &crate::services::service_provider::ServiceProviderScope) -> Self {
@@ -23,14 +24,14 @@ impl ConfigurationService {
     where
         T: Clone + Send + Sync + 'static,
     {
-        self._inner.insert(TypeId::of::<T>(), Box::new(config));
+        self._inner.insert(TypeId::of::<T>(), Arc::new(config));
     }
-    pub fn get<T: 'static + Send + Sync>(&self) -> Option<T>
+    pub fn get<T: 'static + Send + Sync>(&self) -> Option<Arc<T>>
     where
         T: Clone + Send + Sync + 'static,
     {
         match self._inner.get(&TypeId::of::<T>()) {
-            Some(config) => config.downcast_ref::<T>().cloned(),
+            Some(config) => config.clone().downcast::<T>().ok(),
             None => None,
         }
     }

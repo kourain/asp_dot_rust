@@ -1,3 +1,4 @@
+use asp_dot_rust_macros::injectable_service;
 use http::header;
 
 use crate::{
@@ -12,16 +13,12 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Default)]
 pub struct CorsMiddleware {
     routing_service: Arc<crate::services::routing::RoutingService>,
-    configuration: CorsConfiguration,
+    configuration: Arc<CorsConfiguration>,
 }
-impl DependcyInjectableService for CorsMiddleware {
-    fn inject_service(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
-        let routing_service = service_scope.get_service::<crate::services::routing::RoutingService>();
-        let configuration = service_scope.get_service::<ConfigurationService>();
-        CorsMiddleware {
-            routing_service,
-            configuration: configuration.get::<CorsConfiguration>().unwrap_or_default(),
-        }
+#[injectable_service]
+impl CorsMiddleware {
+    pub fn new(routing_service: Arc<crate::services::routing::RoutingService>, configuration: Option<Arc<CorsConfiguration>>) -> Self {
+        Self { routing_service, configuration: configuration.unwrap_or_default() }
     }
 }
 #[async_trait::async_trait]

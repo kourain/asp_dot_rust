@@ -1,12 +1,15 @@
+use std::sync::Arc;
+
 use crate::{
     Application,
-    configuration::StaticFileConfiguration, http_context::http_header::AspDotRustHttpHeader,
+    configuration::StaticFileConfiguration,
     dependcy_injection::DependcyInjectableService,
+    http_context::http_header::AspDotRustHttpHeader,
     middleware::{self, Middleware},
     services::configuration::ConfigurationService,
 };
 pub struct StaticFileMiddleware {
-    config: StaticFileConfiguration,
+    config: Arc<StaticFileConfiguration>,
 }
 impl DependcyInjectableService for StaticFileMiddleware {
     fn inject_service(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {

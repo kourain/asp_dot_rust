@@ -7,8 +7,8 @@ unsafe impl<T> Send for ShareMutPtr<T> {}
 unsafe impl<T> Sync for ShareMutPtr<T> {}
 
 impl<T> ShareMutPtr<T> {
-    pub fn new(write_stream: &mut T) -> Self {
-        Self(write_stream as *mut T)
+    pub fn new(value: &mut T) -> Self {
+        Self(value as *mut T)
     }
 }
 

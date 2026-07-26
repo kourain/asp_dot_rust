@@ -1,15 +1,9 @@
 use std::{collections::HashSet, net::IpAddr, sync::Arc};
 
+#[cfg(debug_assertions)]
+use crate::dependcy_injection::cycle_check::check_dependency_cycles;
 use crate::{
-    Application,
-    hosted_service::ApplicationHostedService,
-    logging::LOGGER,
-    middleware::app_middlewares::ApplicationMiddlewares,
-    services::{
-        configuration::ConfigurationService,
-        service_provider::service_provider_scope::{ServiceProviderScope, ServiceType},
-    },
-    utils::build_info,
+    Application, hosted_service::ApplicationHostedService, logging::LOGGER, middleware::app_middlewares::ApplicationMiddlewares, services::{configuration::ConfigurationService, service_provider::{ServiceType, service_provider_scope::ServiceProviderScope}}, utils::build_info,
 };
 
 pub struct ApplicationBuilder {
@@ -18,7 +12,7 @@ pub struct ApplicationBuilder {
     pub http_port: HashSet<u16>,
     pub https_port: HashSet<u16>,
     pub configuration: ConfigurationService,
-    pub service_provider: ServiceProviderScope,
+    pub service: ServiceProviderScope,
     pub(crate) hosted_services: ApplicationHostedService,
 }
 
@@ -32,7 +26,7 @@ impl ApplicationBuilder {
             http_port: HashSet::new(),
             https_port: HashSet::new(),
             configuration: ConfigurationService::new(),
-            service_provider: ServiceProviderScope::new(),
+            service: ServiceProviderScope::new(),
             hosted_services: Vec::new(),
         }
     }
@@ -64,8 +58,12 @@ impl ApplicationBuilder {
     }
 
     pub fn build(self) -> Application {
-        let mut service = self.service_provider;
+        let mut service = self.service;
         service.add_instance::<ConfigurationService>(Arc::new(self.configuration), ServiceType::Singleton);
+
+        #[cfg(debug_assertions)]
+        check_dependency_cycles(&service);
+
         Application {
             name: self.name,
             ip: self.ip,

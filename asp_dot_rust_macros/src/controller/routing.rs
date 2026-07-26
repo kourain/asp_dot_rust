@@ -135,14 +135,14 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                     #(#match_routes)*
                     _ => {
                         self.http_context.response.status_code = http::StatusCode::NOT_FOUND;
-                        self.http_context.response.body = http::StatusCode::NOT_FOUND.canonical_reason().unwrap_or("Not Found").as_bytes().to_vec();
+                        self.http_context.response.body = http::StatusCode::NOT_FOUND.canonical_reason().unwrap().as_bytes().to_vec();
                     }
                 };
                 let body_len = self.http_context.response.body.len();
                 self.http_context.response.headers.set_content_length(body_len);
             }
         }
-        impl ::asp_dot_rust::controller::StructName for #self_ty {
+        impl ::asp_dot_rust::utils::StructName for #self_ty {
             fn str_name() -> &'static str {
                 stringify!(#self_ty)
             }
