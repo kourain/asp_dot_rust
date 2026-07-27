@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{FnArg, ImplItem, ItemImpl, PatType, Type, parse_macro_input};
 
-use crate::utils::compiler_error::token_type_to_string;
+use crate::utils::compiler_error::{create_compiler_error, token_type_to_string};
 
 pub(crate) fn injectable_service(_args: TokenStream, item: TokenStream) -> TokenStream {
     let main_crate_path = crate::utils::find_crate::asp_dot_rust_crate_path();
@@ -32,13 +32,13 @@ pub(crate) fn injectable_service(_args: TokenStream, item: TokenStream) -> Token
     if let syn::ReturnType::Type(_, ty) = &new_fn.sig.output {
         if let Type::Path(type_path) = &**ty {
             if type_path.path.segments.last().unwrap().ident != "Self" {
-                panic!("fn `new` must return Self");
+                return create_compiler_error(new_fn, "fn `new` must return Self");
             }
         } else {
-            panic!("fn `new` must return Self");
+            return create_compiler_error(new_fn, "fn `new` must return Self");
         }
     } else {
-        panic!("fn `new` must return Self");
+        return create_compiler_error(new_fn, "fn `new` must return Self");
     }
 
     // extract the inner type from each Arc<T> parameter
