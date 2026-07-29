@@ -1,26 +1,24 @@
+use asp_dot_rust_macros::inject_require;
 use http::header;
 
 use crate::{
     Application,
     configuration::CorsConfiguration,
-    dependcy_injection::DependcyInjectableService,
     http_context::{HttpContext, http_header::AspDotRustHttpHeader},
     middleware::Middleware,
-    services::configuration::ConfigurationService,
 };
 use std::sync::Arc;
 #[derive(Debug, Clone, Default)]
 pub struct CorsMiddleware {
     routing_service: Arc<crate::services::routing::RoutingService>,
-    configuration: CorsConfiguration,
+    configuration: Arc<CorsConfiguration>,
 }
-impl DependcyInjectableService for CorsMiddleware {
-    fn inject_service(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
-        let routing_service = service_scope.get_service::<crate::services::routing::RoutingService>();
-        let configuration = service_scope.get_service::<ConfigurationService>();
-        CorsMiddleware {
+#[inject_require]
+impl CorsMiddleware {
+    pub fn new(routing_service: Arc<crate::services::routing::RoutingService>, configuration: Option<Arc<CorsConfiguration>>) -> Self {
+        Self {
             routing_service,
-            configuration: configuration.get::<CorsConfiguration>().unwrap_or_default(),
+            configuration: configuration.unwrap_or_default(),
         }
     }
 }

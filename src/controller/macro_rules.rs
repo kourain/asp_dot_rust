@@ -1,6 +1,15 @@
+/// create Controller with impl StructName
 #[macro_export]
 macro_rules! api_controller {
     ( $vis:vis $name:ident { $( $field_name:ident : $field_type:ty ),* $(,)? } ) => {
+        /// pre-impl 
+        /// ```no_run
+        /// impl asp_dot_rust::utils::StructName for 
+        /// {
+        ///     fn str_name() -> &'static str {...}
+        /// }
+        /// ```
+        #[derive(asp_dot_rust_macros::StructName)]
         $vis struct $name {
             $(
                 $field_name : $field_type,

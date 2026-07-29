@@ -9,7 +9,7 @@ pub(crate) struct AuthorizeMiddleware {
     schema: String,
 }
 impl DependcyInjectableService for AuthorizeMiddleware {
-    fn inject_service(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+    fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
         AuthorizeMiddleware::default()
     }
 }
@@ -32,8 +32,10 @@ impl Middleware for AuthorizeMiddleware {
     }
 }
 impl Application {
-    pub fn use_authorize(&mut self) -> &mut Self {
-        self.add_middleware::<AuthorizeMiddleware>();
+    pub fn use_authorize(&mut self, schema: impl Into<String>) -> &mut Self {
+        let mut middleware = AuthorizeMiddleware::default();
+        middleware.schema = schema.into();
+        self.add_middleware_instance(middleware);
         self
     }
     pub fn use_authorize_bearer(&mut self) -> &mut Self {

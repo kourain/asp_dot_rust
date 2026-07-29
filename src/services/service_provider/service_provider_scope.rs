@@ -1,34 +1,13 @@
 use std::{
-    any::{Any, TypeId},
+    any::{Any, TypeId, type_name},
     collections::HashMap,
     sync::{Arc, OnceLock},
 };
 
-use crate::dependcy_injection::DependcyInjectableService;
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ServiceType {
-    Singleton,
-    Scope,
-    Transient,
-}
-struct ServiceInstance {
-    service_type: ServiceType,
-    instance: Arc<OnceLock<Arc<dyn Any + Send + Sync>>>,
-}
-impl Clone for ServiceInstance {
-    fn clone(&self) -> Self {
-        if self.service_type == ServiceType::Singleton {
-            return ServiceInstance {
-                service_type: self.service_type,
-                instance: self.instance.clone(),
-            };
-        }
-        ServiceInstance {
-            service_type: self.service_type.clone(),
-            instance: Arc::new(OnceLock::new()),
-        }
-    }
-}
+use crate::{
+    dependcy_injection::DependcyInjectableService,
+    services::service_provider::{ServiceInstance, ServiceType},
+};
 pub struct ServiceProviderScope {
     _inner_map: HashMap<TypeId, ServiceInstance>,
 }
@@ -46,12 +25,12 @@ impl ServiceProviderScope {
                 ServiceType::Singleton | ServiceType::Scope => {
                     return instance
                         .instance
-                        .get_or_init(|| Arc::new(T::inject_service(self)))
+                        .get_or_init(|| Arc::new(T::inject(self)))
                         .clone()
                         .downcast::<T>()
                         .expect("Type mismatch when downcasting service");
                 }
-                ServiceType::Transient => Arc::new(T::inject_service(self)),
+                ServiceType::Transient => Arc::new(T::inject(self)),
             },
             None => {
                 panic!("Service {} not found in scope", std::any::type_name::<T>());
@@ -62,7 +41,15 @@ impl ServiceProviderScope {
     where
         T: DependcyInjectableService + Send + Sync + 'static,
     {
+        if service_type == ServiceType::Transient {
+            let type_name = type_name::<T>();
+            panic!("Cann't add {type_name} to ServiceProviderScope as Transient")
+        }
         let type_id = TypeId::of::<T>();
+        if self._inner_map.contains_key(&type_id) {
+            let type_name = type_name::<T>();
+            panic!("{type_name} already exist in ServiceProviderScope")
+        }
         let instance: Arc<OnceLock<Arc<dyn Any + Send + Sync>>> = Arc::new(OnceLock::new());
         _ = instance.set(service);
         self._inner_map.insert(type_id, ServiceInstance { service_type, instance: instance });
@@ -115,5 +102,8 @@ impl ServiceProviderScope {
     {
         let type_id = TypeId::of::<T>();
         self._inner_map.contains_key(&type_id)
+    }
+    pub fn contains_type_id(&self, type_id: &TypeId) -> bool {
+        self._inner_map.contains_key(type_id)
     }
 }

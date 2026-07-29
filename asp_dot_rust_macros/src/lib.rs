@@ -1,8 +1,14 @@
 mod controller;
+mod dependcy_injection;
+mod struct_macro;
+mod utils;
+
 use proc_macro::TokenStream;
 
+use crate::dependcy_injection::flags::InjectFlags;
+
 /// using the controller_route attribute to define a controller and its routes
-/// 
+///
 ///```no_run
 ///#[controller_route("")]
 ///impl HomeController {
@@ -53,7 +59,7 @@ pub fn get(_args: TokenStream, item: TokenStream) -> TokenStream {
 pub fn post(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "POST")
 }
-    
+
 /// registers a function as a PUT route handler <br>
 /// Example usage:
 ///
@@ -107,4 +113,54 @@ pub fn options(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "HEAD")
+}
+
+///TODO: re-write
+/// Auto Impl DependcyInjectableService for this Struct
+// #[proc_macro_derive(DependcyInjectableService)]
+// pub fn derive_di(input: TokenStream) -> TokenStream {
+//     dependcy_injection::derive::derive_di(input)
+// }
+
+#[proc_macro_derive(StructName)]
+pub fn struct_name(input: TokenStream) -> TokenStream {
+    struct_macro::derive_struct_name::struct_name(input)
+}
+
+/// inject service and config <br>
+/// Example usage:
+///
+/// ```no_run
+/// #[injectable_service]
+/// impl ExampleService1 {
+///     fn new(service2: Arc<Service2>, service3: Arc<Service3>, configuration1: Option<Arc<Configuration1>>) -> Self
+///     {
+///         //your logic to create ExampleService1
+///     }
+///     //other impl
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn inject_require(args: TokenStream, item: TokenStream) -> TokenStream {
+    let flag = InjectFlags::CONFIG | InjectFlags::SERVICE;
+    dependcy_injection::inject_impliment::inject(args, item, flag)
+}
+
+/// inject httpcontext service and config <br>
+/// Example usage:
+///
+/// ```no_run
+/// #[controller_route("")]
+/// impl Controller1 {
+///     fn new(http_context: HttpContextRef,service2: Arc<Service2>, service3: Arc<Service3>, configuration1: Option<Arc<Configuration1>>) -> Self
+///     {
+///         //your logic to create Controller1
+///     }
+///     //other impl
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn controller_inject_require(args: TokenStream, item: TokenStream) -> TokenStream {
+    let flag = InjectFlags::SERVICE | InjectFlags::CONFIG | InjectFlags::INJECT_CONTROLLER;
+    dependcy_injection::inject_impliment::inject(args, item, flag)
 }

@@ -102,7 +102,7 @@ impl MemoryCacheService {
     }
 }
 impl DependcyInjectableService for MemoryCacheService {
-    fn inject_service(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
+    fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
     where
         Self: Sized,
     {

@@ -1,6 +1,7 @@
+use asp_dot_rust_macros::inject_require;
 use dashmap::DashMap;
 
-use crate::{MutexAsync, dependcy_injection::DependcyInjectableService};
+use crate::MutexAsync;
 use std::{
     any::{Any, TypeId},
     collections::VecDeque,
@@ -10,12 +11,12 @@ use std::{
 pub struct AppQueueService {
     _queue: DashMap<(TypeId, TypeId), MutexAsync<VecDeque<Box<dyn Any + Send + Sync>>>>,
 }
-impl DependcyInjectableService for AppQueueService {
-    fn inject_service(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+
+#[inject_require]
+impl AppQueueService {
+    pub fn new() -> Self {
         AppQueueService::default()
     }
-}
-impl AppQueueService {
     pub async fn add_queue_async<S, V>(self, value: V)
     where
         S: 'static,
