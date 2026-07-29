@@ -8,7 +8,7 @@ impl ApplicationBuilder {
         T: BackGroundService + 'static,
     {
         LOGGER::info(format!("Registering background service: {}", std::any::type_name::<T>()));
-        self.hosted_services.push((std::any::type_name::<T>(), Box::new(T::inject_service(&self.service))));
+        self.hosted_services.push((std::any::type_name::<T>(), Box::new(T::inject(&self.service))));
         self
     }
 }

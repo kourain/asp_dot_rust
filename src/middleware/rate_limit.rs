@@ -10,7 +10,7 @@ pub struct RateLimitMiddleware {
     block_duration_seconds: u32,
 }
 impl DependcyInjectableService for RateLimitMiddleware {
-    fn inject_service(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+    fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
         RateLimitMiddleware {
             ip_request_counts: MutexAsync::new(std::collections::HashMap::new()),
             ip_blocked_until: MutexAsync::new(std::collections::HashMap::new()),

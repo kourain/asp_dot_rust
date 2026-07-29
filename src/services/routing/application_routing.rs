@@ -1,6 +1,12 @@
 use std::sync::{Arc, LazyLock, Mutex};
 
-use crate::{ApplicationBuilder, controller::ActionRoute, logging::LOGGER, services::{routing::RoutingService, service_provider::ServiceType}};
+use crate::{
+    ApplicationBuilder,
+    controller::ActionRoute,
+    dependcy_injection::DependcyInjectableController,
+    logging::LOGGER,
+    services::{routing::RoutingService, service_provider::ServiceType},
+};
 
 pub(crate) static CONTROLLER_REGISTRY: LazyLock<Mutex<RoutingService>> = LazyLock::new(|| Mutex::new(RoutingService::default()));
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
@@ -25,7 +31,7 @@ pub(crate) fn bootstrap_registered_controllers() {
 
 pub fn register_controller<T: 'static>(root_route: &str, action_routes: Vec<ActionRoute>) -> ControllerCollect
 where
-    T: crate::controller::WithHttpContext + crate::controller::Routing + Send + 'static,
+    T: DependcyInjectableController + crate::controller::Routing + Send + 'static,
 {
     let mut registry = CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry");
     registry.register_controller::<T>(root_route, action_routes)

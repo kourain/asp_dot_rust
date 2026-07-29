@@ -1,4 +1,4 @@
-use asp_dot_rust_macros::injectable_service;
+use asp_dot_rust_macros::inject_require;
 use dashmap::DashMap;
 
 use crate::MutexAsync;
@@ -12,7 +12,7 @@ pub struct AppQueueService {
     _queue: DashMap<(TypeId, TypeId), MutexAsync<VecDeque<Box<dyn Any + Send + Sync>>>>,
 }
 
-#[injectable_service]
+#[inject_require]
 impl AppQueueService {
     pub fn new() -> Self {
         AppQueueService::default()

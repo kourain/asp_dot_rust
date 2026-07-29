@@ -24,7 +24,7 @@ impl BackGroundService for MemoryCacheBackgroundService {
     }
 }
 impl DependcyInjectableService for MemoryCacheBackgroundService {
-    fn inject_service(service_scope: &ServiceProviderScope) -> Self {
+    fn inject(service_scope: &ServiceProviderScope) -> Self {
         let memcache = service_scope.get_service::<MemoryCacheService>();
         MemoryCacheBackgroundService {
             memcache,

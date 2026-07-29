@@ -14,7 +14,5 @@ pub mod threading;
 pub mod utils;
 
 pub use application::{Application, ApplicationBuilder};
-pub use asp_dot_rust_macros::controller_route;
-// pub use controller::{delete, get, head, options, patch, post, put, route};
 pub use inventory;
 pub type MutexAsync<T> = tokio::sync::Mutex<T>;

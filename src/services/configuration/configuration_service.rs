@@ -9,7 +9,7 @@ pub struct ConfigurationService {
     _inner: HashMap<TypeId, Arc<dyn Any + Send + Sync>>,
 }
 impl DependcyInjectableService for ConfigurationService {
-    fn inject_service(_service_provider: &crate::services::service_provider::ServiceProviderScope) -> Self {
+    fn inject(_service_provider: &crate::services::service_provider::ServiceProviderScope) -> Self {
         Self::new()
     }
 }

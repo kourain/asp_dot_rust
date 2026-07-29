@@ -11,3 +11,4 @@ proc-macro-crate = "3.5.0"
 proc-macro2 = "1.0.106"
 quote = "1.0.45"
 syn = { version = "3.0.3", features = ["full"] }
+bitflags = "1"

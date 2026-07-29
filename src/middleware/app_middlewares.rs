@@ -56,7 +56,7 @@ impl Application {
         M: Middleware + 'static,
     {
         LOGGER::info(format!("Adding middleware: {}", std::any::type_name::<M>()));
-        let middleware_instance = M::inject_service(&self.service_provider);
+        let middleware_instance = M::inject(&self.service_provider);
         self._middlewares.add(middleware_instance);
         self
     }

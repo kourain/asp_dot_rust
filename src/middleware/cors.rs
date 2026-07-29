@@ -1,4 +1,4 @@
-use asp_dot_rust_macros::injectable_service;
+use asp_dot_rust_macros::inject_require;
 use http::header;
 
 use crate::{
@@ -13,7 +13,7 @@ pub struct CorsMiddleware {
     routing_service: Arc<crate::services::routing::RoutingService>,
     configuration: Arc<CorsConfiguration>,
 }
-#[injectable_service]
+#[inject_require]
 impl CorsMiddleware {
     pub fn new(routing_service: Arc<crate::services::routing::RoutingService>, configuration: Option<Arc<CorsConfiguration>>) -> Self {
         Self {

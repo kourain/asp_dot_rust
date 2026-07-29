@@ -36,7 +36,7 @@ macro_rules! middleware {
             ) $body
         }
         impl $crate::dependcy_injection::DependcyInjectableService for $name {
-            fn inject_service(
+            fn inject(
                 _service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope,
             ) -> Self {
                 Self

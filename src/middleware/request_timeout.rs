@@ -1,20 +1,16 @@
+use crate::{Application, configuration::RequestTimeoutConfiguration, http_context::HttpContext, logging::LOGGER, middleware::Middleware};
+use asp_dot_rust_macros::inject_require;
 use std::sync::Arc;
-
-use crate::{
-    Application, configuration::RequestTimeoutConfiguration, dependcy_injection::DependcyInjectableService, http_context::HttpContext, logging::LOGGER, middleware::Middleware, services::configuration::ConfigurationService,
-};
 
 #[derive(Debug, Clone)]
 pub struct RequestTimeoutMiddleware {
     request_timeout_config: Arc<RequestTimeoutConfiguration>,
 }
-impl DependcyInjectableService for RequestTimeoutMiddleware {
-    fn inject_service(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
-        let config = service_scope
-            .get_service::<ConfigurationService>()
-            .get::<RequestTimeoutConfiguration>().unwrap();
-        RequestTimeoutMiddleware {
-            request_timeout_config: config,
+#[inject_require]
+impl RequestTimeoutMiddleware {
+    fn new(request_timeout_cfg: Option<Arc<RequestTimeoutConfiguration>>) -> RequestTimeoutMiddleware {
+        Self {
+            request_timeout_config: request_timeout_cfg.unwrap(),
         }
     }
 }

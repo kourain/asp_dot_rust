@@ -174,7 +174,6 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
 
     let expanded = quote! {
         use #main_crate_path::http_context::AspDotRustHttpHeader;
-        #[allow(dead_code)]
         #input_impl_tokens
         /// impl by #[controller_route] macro
         #[async_trait::async_trait]

@@ -23,7 +23,7 @@ pub(crate) fn derive_di(input: TokenStream) -> TokenStream {
     quote::quote! {
 
         impl DependcyInjectableService for #struct_name {
-            fn inject_service(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+            fn inject(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
                 Self {
                     #(#init_props),*
                 }

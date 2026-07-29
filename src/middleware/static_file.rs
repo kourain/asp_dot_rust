@@ -12,7 +12,7 @@ pub struct StaticFileMiddleware {
     config: Arc<StaticFileConfiguration>,
 }
 impl DependcyInjectableService for StaticFileMiddleware {
-    fn inject_service(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+    fn inject(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
         let config = service_scope.get_service::<ConfigurationService>().get::<StaticFileConfiguration>().unwrap_or_default();
         StaticFileMiddleware { config }
     }

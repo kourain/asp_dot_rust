@@ -1,25 +1,23 @@
 use asp_dot_rust::{
     api_controller,
-    controller::{ActionResult, WithHttpContext, get, post, put, route},
-    controller_route,
+    controller::{ActionResult, HttpContextRef, get, post, put, route},
     logging::LOGGER,
 };
+use asp_dot_rust_macros::{controller_inject_require, controller_route};
 
 api_controller!(pub HomeController {
     temp: String,
 });
 
-impl WithHttpContext for HomeController {
-    fn new(http_context: asp_dot_rust::controller::HttpContextRef) -> Self {
-        Self {
-            http_context: http_context,
-            temp: "Temporary data".to_string(),
-        }
-    }
-}
-
+#[controller_inject_require]
 #[controller_route("")]
 impl HomeController {
+    fn new(http_context: HttpContextRef) -> Self {
+        Self {
+            temp: Default::default(),
+            http_context,
+        }
+    }
     #[get("/")]
     pub async fn index(&mut self) -> impl ActionResult {
         LOGGER::info("Handling index action".to_string());

@@ -1,1 +1,1 @@
-pub mod struct_name;
+pub mod derive_struct_name;
