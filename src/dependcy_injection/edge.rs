@@ -1,7 +1,7 @@
 pub use inventory;
 use std::any::TypeId;
 
-/// One cạnh trong đồ thị phụ thuộc: owner phụ thuộc vào danh sách dependencies
+/// One edge in the dependency graph is dependent on the list of dependencies: the owner depends on the list of dependencies.
 pub struct DependencyEdge {
     pub owner: fn() -> TypeId,
     pub owner_name: &'static str,

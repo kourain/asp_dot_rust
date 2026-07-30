@@ -1,7 +1,7 @@
-use crate::http_context::HttpContext;
+use crate::http_context::HttpContextRef;
 use std::pin::Pin;
 
-pub fn invoke_async<'a>(http_context: &'a mut HttpContext) -> Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+pub fn invoke_async<'a>(http_context: &'a mut HttpContextRef) -> Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
     Box::pin(async {
         match &http_context.routing_info {
             Some(route_info) => {

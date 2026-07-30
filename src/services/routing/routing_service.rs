@@ -1,5 +1,8 @@
 use crate::{
-    controller::{ActionRoute, Routing}, dependcy_injection::{DependcyInjectableController, DependcyInjectableService}, http_context::HttpContext, services::routing::ControllerCollect, utils::ShareMutPtr,
+    controller::{ActionRoute, Routing},
+    dependcy_injection::{DependcyInjectableController, DependcyInjectableService},
+    http_context::HttpContextRef,
+    services::routing::ControllerCollect,
 };
 use matchit::Router;
 use std::{
@@ -11,7 +14,7 @@ use std::{
     str::FromStr,
 };
 
-type ControllerInvoke = for<'a> fn(&'a mut HttpContext, String) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
+type ControllerInvoke = for<'a> fn(&'a mut HttpContextRef, String) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 #[derive(Clone, Debug)]
 pub struct ControllerInfo {
     pub controller_type: TypeId,
@@ -100,8 +103,7 @@ impl RoutingService {
             action_name: action_name,
             invoke_async: |http_context, action_name| {
                 Box::pin(async move {
-                    let http_context_ref = ShareMutPtr::new(http_context);
-                    let mut controller = T::inject(http_context_ref);
+                    let mut controller = T::inject(http_context.clone());
                     controller.routing(action_name).await;
                 })
             },
@@ -111,7 +113,11 @@ impl RoutingService {
             Ok(_) => {
                 for method in methods {
                     // Route already exists, update it
-                    self._router.at_mut(&lower_route).unwrap().value.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
+                    self._router
+                        .at_mut(&lower_route)
+                        .unwrap()
+                        .value
+                        .insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
                 }
             }
             Err(_) => {

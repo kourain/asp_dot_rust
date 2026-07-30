@@ -1,9 +1,12 @@
 mod controllers;
+mod middleware;
 use asp_dot_rust::{
     ApplicationBuilder,
     configuration::{CorsConfiguration, RateLimitConfiguration},
     logging::LOGGER,
 };
+
+use crate::middleware::TestMidware;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
 async fn test_application() {
@@ -27,6 +30,7 @@ async fn test_application() {
     app_builder.add_controllers();
     // app_builder.add_memory_cache();
     let mut app = app_builder.build();
+    app.add_middleware::<TestMidware>();
     //app.use_cors();//.use_rate_limit();
     let _ = app.run().await;
 }

@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use crate::{
     Application,
-    http_context::HttpContext,
+    http_context::{_HttpContext, HttpContextRef},
     logging::LOGGER,
     middleware::{Middleware, MiddlewareNext, auto_route},
+    utils::ShareMutPtr,
 };
 
 pub(crate) struct ApplicationMiddlewares {
@@ -31,7 +32,7 @@ impl ApplicationMiddlewares {
             let middleware = middleware.clone();
             let next_handler = next.clone();
             LOGGER::trace(format!("Adding middleware to pipeline: {}", middleware.type_name()));
-            next = Arc::new(move |http_context: &mut HttpContext| {
+            next = Arc::new(move |http_context: &mut HttpContextRef| {
                 let middleware = middleware.clone();
                 LOGGER::trace(format!("Nexting to middleware: {}", middleware.type_name()));
                 let next = next_handler.clone();
@@ -43,7 +44,7 @@ impl ApplicationMiddlewares {
         }
         self.pipeline = Some(next);
     }
-    pub async fn execute(&self, http_context: &mut HttpContext) {
+    pub async fn execute(&self, http_context: &mut HttpContextRef) {
         if let Some(root) = self.pipeline.as_ref() {
             root(http_context).await;
         }
@@ -69,7 +70,8 @@ impl Application {
         self._middlewares.add(middleware_instance);
         self
     }
-    pub async fn call_middlewares_async(&self, http_context: &mut HttpContext) {
-        self._middlewares.execute(http_context).await;
+    pub async fn call_middlewares_async(&self, http_context: &mut _HttpContext) {
+        let mut http_context = ShareMutPtr::new(http_context);
+        self._middlewares.execute(&mut http_context).await;
     }
 }

@@ -14,7 +14,7 @@ macro_rules! api_controller {
             $(
                 $field_name : $field_type,
             )*
-            http_context: $crate::controller::HttpContextRef,
+            http_context: $crate::http_context::HttpContextRef,
         }
     };
 }

@@ -12,7 +12,7 @@ pub trait DependcyInjectableService: Send + Sync + 'static {
         Self: Sized;
 }
 pub trait DependcyInjectableController: StructName + Send + Sync + 'static {
-    fn inject(http_context: crate::controller::HttpContextRef) -> Self
+    fn inject(http_context: crate::http_context::HttpContextRef) -> Self
     where
         Self: Sized;
 }

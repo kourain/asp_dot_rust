@@ -19,7 +19,7 @@ impl DependcyInjectableService for StaticFileMiddleware {
 }
 #[async_trait::async_trait]
 impl Middleware for StaticFileMiddleware {
-    async fn invoke_async<'a>(&self, http_context: &'a mut crate::http_context::HttpContext, next: middleware::MiddlewareNext) {
+    async fn invoke_async(&self, http_context: &mut crate::http_context::HttpContextRef, next: middleware::MiddlewareNext) {
         let request_path = http_context.request.path().to_string();
         let static_file_path = format!("{}/{}", self.config.static_files_directory, request_path.trim_start_matches('/'));
 

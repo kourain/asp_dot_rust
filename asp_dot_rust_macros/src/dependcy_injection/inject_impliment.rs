@@ -90,7 +90,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
             #input
             impl #main_crate_path::dependcy_injection::DependcyInjectableController for #self_ty {
                 fn inject(
-                    http_context: #main_crate_path::controller::HttpContextRef,
+                    http_context: #main_crate_path::http_context::HttpContextRef,
                 ) -> Self {
                     let service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope = &http_context.service_provider;
                     #configuration_service

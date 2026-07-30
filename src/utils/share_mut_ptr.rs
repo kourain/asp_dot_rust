@@ -1,6 +1,5 @@
 use std::ops::{Deref, DerefMut};
 
-
 pub struct ShareMutPtr<T>(*mut T);
 
 unsafe impl<T> Send for ShareMutPtr<T> {}
@@ -9,6 +8,12 @@ unsafe impl<T> Sync for ShareMutPtr<T> {}
 impl<T> ShareMutPtr<T> {
     pub fn new(value: &mut T) -> Self {
         Self(value as *mut T)
+    }
+}
+
+impl<T> Clone for ShareMutPtr<T> {
+    fn clone(&self) -> Self {
+        Self(self.0)
     }
 }
 

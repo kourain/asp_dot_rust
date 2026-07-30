@@ -4,7 +4,7 @@ use http::header;
 use crate::{
     Application,
     configuration::CorsConfiguration,
-    http_context::{HttpContext, http_header::AspDotRustHttpHeader},
+    http_context::{HttpContextRef, http_header::AspDotRustHttpHeader},
     middleware::Middleware,
 };
 use std::sync::Arc;
@@ -24,7 +24,7 @@ impl CorsMiddleware {
 }
 #[async_trait::async_trait]
 impl Middleware for CorsMiddleware {
-    async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: crate::middleware::MiddlewareNext) {
+    async fn invoke_async(&self, http_context: &mut HttpContextRef, next: crate::middleware::MiddlewareNext) {
         {
             let request_origin = http_context.request.headers().origin();
 

@@ -42,7 +42,7 @@ impl Application {
                 service.invoke_async().await
             });
         }
-        _ = hyper_server(app).await;
+        _ = hyper_server(&app).await;
         Ok(())
     }
 }

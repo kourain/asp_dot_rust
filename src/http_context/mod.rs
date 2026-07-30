@@ -1,8 +1,11 @@
+mod http;
 pub(crate) mod http_context;
 pub mod http_header;
 pub(crate) mod http_request;
 pub(crate) mod http_response;
-mod http;
 
-pub use http_context::HttpContext;
+use crate::utils::ShareMutPtr;
+pub use http_context::_HttpContext;
 pub use http_header::AspDotRustHttpHeader;
+
+pub type HttpContextRef = ShareMutPtr<http_context::_HttpContext>;

@@ -5,7 +5,7 @@ impl ActionResult for String {
     fn get_body_async<'a>(&'a self) -> impl Future<Output = Vec<u8>> + Send {
         async move { self.as_bytes().to_vec() }
     }
-    fn write_to_http_context_async<'a>(&'a self, http_context: &mut crate::controller::HttpContextRef) -> impl Future<Output = ()> + Send {
+    fn write_to_http_context_async<'a>(&'a self, http_context: &mut crate::http_context::HttpContextRef) -> impl Future<Output = ()> + Send {
         async move {
             http_context.response.status_code = self.status_code();
             http_context.response.headers.set_content_length(self.content_length());
