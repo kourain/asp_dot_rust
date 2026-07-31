@@ -86,6 +86,9 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
 
     let expanded;
     if flag.contains(InjectFlags::INJECT_CONTROLLER) {
+        if !is_http_context_ref_injected {
+            return create_compiler_error(new_fn, "`new` fn args must contain HttpContextRef");
+        }
         expanded = quote! {
             #input
             impl #main_crate_path::dependcy_injection::DependcyInjectableController for #self_ty {

@@ -6,7 +6,7 @@ use tokio::net::TcpStream;
 
 use crate::{
     Application,
-    http_context::{AspDotRustHttpHeader, _HttpContext, http_request::HttpRequest, http_response::HttpResponse},
+    http_context::{_HttpContext, AspDotRustHttpHeader, http_request::HttpRequest, http_response::HttpResponse},
     logging::LOGGER,
 };
 
@@ -41,6 +41,8 @@ fn create_streaming_body(body_vec: Vec<u8>) -> Channel<Bytes, Infallible> {
 
 pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: &Arc<crate::services::routing::RoutingService>) -> std::io::Result<()> {
     let app_clone = app.clone();
+    let client_socket_addr = stream.peer_addr().unwrap();
+    let local_listen_socket_addr = stream.local_addr().unwrap();
     let service = service_fn(move |req| {
         let app = app_clone.clone();
         let start = std::time::Instant::now();
@@ -50,7 +52,7 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
         async move {
             LOGGER::info(format!("Hyper received {} {} {:?} (Content-Length: {})", req.method(), req.uri(), req.version(), content_length));
 
-            let custom_req = HttpRequest::from_http(req);
+            let custom_req = HttpRequest::from_http(req, client_socket_addr, local_listen_socket_addr);
 
             // Create an in-memory response to run through existing pipeline
             let custom_resp = HttpResponse::new_in_memory();
