@@ -46,11 +46,18 @@ pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> 
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {
+                        let (client_addr, local_addr) = match (stream.peer_addr(), stream.local_addr()) {
+                            (Ok(c), Ok(l)) => (c, l),
+                            (Err(e), _) | (_, Err(e)) => {
+                                LOGGER::warn(format!("Failed to read socket address, dropping connection: {}", e));
+                                continue;
+                            }
+                        };
                         let app = app.clone();
                         let routing_service = routing_service.clone();
                         let hypercfg = hypercfg.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, app, routing_service, hypercfg).await {
+                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, client_addr, local_addr, app, routing_service, hypercfg).await {
                                 LOGGER::error(format!("Error occurred: {}", e));
                             }
                         });
