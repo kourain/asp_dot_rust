@@ -10,10 +10,10 @@ use std::{
 };
 use tokio::net::TcpListener;
 
-pub(crate) async fn hyper_server(ips: HashSet<IpAddr>, http_ports: HashSet<u16>, app_service_provider: ServiceProviderScope, middleware_pipeline: MiddlewareNext) -> std::io::Result<()> {
+pub(crate) async fn hyper_server(ips: &HashSet<IpAddr>, http_ports: HashSet<u16>, app_service_provider: Arc<ServiceProviderScope>, middleware_pipeline: MiddlewareNext) -> std::io::Result<()> {
     let listeners = {
         // Every ip is served on every port. The order is fixed (IPv4 first), so the result never depends on HashSet order.
-        let mut ips: Vec<IpAddr> = ips.into_iter().collect();
+        let mut ips: Vec<IpAddr> = ips.iter().copied().collect();
         ips.sort_by_key(|ip| (ip.is_ipv6(), *ip));
         let mut ports: Vec<u16> = http_ports.into_iter().collect();
         ports.sort_unstable();
@@ -45,7 +45,6 @@ pub(crate) async fn hyper_server(ips: HashSet<IpAddr>, http_ports: HashSet<u16>,
         let configuration_service = app_service_provider.get_service::<ConfigurationService>().await;
         configuration_service.get::<crate::configuration::HyperConfig>()
     };
-    let app_service_provider = Arc::new(app_service_provider);
     #[cfg(panic = "unwind")]
     super::handle_error::HandleError::install_request_panic_hook();
     futures::future::try_join_all(listeners.into_iter().map(|listener| {
@@ -57,12 +56,19 @@ pub(crate) async fn hyper_server(ips: HashSet<IpAddr>, http_ports: HashSet<u16>,
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {
+                        let (client_addr, local_addr) = match (stream.peer_addr(), stream.local_addr()) {
+                            (Ok(c), Ok(l)) => (c, l),
+                            (Err(e), _) | (_, Err(e)) => {
+                                LOGGER::warn(format!("Failed to read socket address, dropping connection: {}", e));
+                                continue;
+                            }
+                        };
                         let app_service_provider = app_service_provider.clone();
                         let middleware_pipeline = middleware_pipeline.clone();
                         let routing_service = routing_service.clone();
                         let hypercfg = hypercfg.capture().unwrap_or_default();
                         tokio::spawn(async move {
-                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, app_service_provider, middleware_pipeline, routing_service, hypercfg).await {
+                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, client_addr, local_addr, app_service_provider, middleware_pipeline, routing_service, hypercfg).await {
                                 LOGGER::error(format!("Error occurred: {}", e));
                             }
                         });

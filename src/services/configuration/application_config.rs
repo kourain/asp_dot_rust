@@ -27,7 +27,9 @@ impl ApplicationBuilder {
     }
     fn set_https_port(&mut self, cli: &CfgRequire<StartupArgsConfiguration>) {
         if let Some(port) = cli.get_parsed::<u16>("https-port") {
-            self.with_https_port(port);
+            let cert = cli.get("tls-cert").expect("--https-port was specified without a corresponding --tls-cert");
+            let key = cli.get("tls-key").expect("--https-port was specified without a corresponding --tls-key");
+            self.with_https_port(port, cert, key);
         }
     }
 }
