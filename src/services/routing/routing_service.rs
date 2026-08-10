@@ -1,8 +1,5 @@
 use crate::{
-    controller::{ActionRoute, Routing},
-    dependcy_injection::{DependcyInjectableController, DependcyInjectableService},
-    http_context::HttpContextRef,
-    services::routing::ControllerCollect,
+    controller::{ActionRoute, Routing}, dependcy_injection::{DependcyInjectableController, DependcyInjectableService}, http_context::HttpContext, services::routing::ControllerCollect, utils::ShareMutPtr,
 };
 use matchit::Router;
 use std::{
@@ -14,7 +11,7 @@ use std::{
     str::FromStr,
 };
 
-type ControllerInvoke = for<'a> fn(&'a mut HttpContextRef, String) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
+type ControllerInvoke = for<'a> fn(&'a mut HttpContext, String) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 #[derive(Clone, Debug)]
 pub struct ControllerInfo {
     pub controller_type: TypeId,
@@ -103,7 +100,7 @@ impl RoutingService {
             action_name: action_name,
             invoke_async: |http_context, action_name| {
                 Box::pin(async move {
-                    let mut controller = T::inject(http_context.clone());
+                    let mut controller = T::inject(ShareMutPtr::new(http_context));
                     controller.routing(action_name).await;
                 })
             },

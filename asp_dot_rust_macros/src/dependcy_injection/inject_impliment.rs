@@ -1,6 +1,6 @@
 use crate::{
     dependcy_injection::flags::InjectFlags,
-    utils::compiler_error::{create_compiler_error, token_to_string, token_type_to_string},
+    utils::compiler_error::{create_compiler_error, token_type_to_string},
 };
 use proc_macro::TokenStream;
 use quote::quote;
@@ -159,13 +159,11 @@ fn extract_option_arc_inner(ty: &Type) -> Option<Type> {
 fn is_http_context_ref(ty: &Type) -> bool {
     if let Type::Path(p) = ty {
         let seg = p.path.segments.last().unwrap();
-        eprint!("{:?}", token_to_string(&p));
         if seg.ident == "HttpContextRef" {
             return true;
         }
-        // else if seg.ident == "HttpContext" {
-        // HttpContextStruct is private inside main crate
-        // }
+    } else if let Type::Reference(r) = ty {
+        return is_http_context_ref(&r.elem);
     }
     false
 }

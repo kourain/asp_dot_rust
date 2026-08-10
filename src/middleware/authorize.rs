@@ -1,7 +1,7 @@
 use crate::{
     Application,
     dependcy_injection::DependcyInjectableService,
-    http_context::{HttpContextRef, http_header::AspDotRustHttpHeader},
+    http_context::{HttpContext, http_header::AspDotRustHttpHeader},
     middleware::{Middleware, MiddlewareNext},
 };
 #[derive(Default)]
@@ -15,7 +15,7 @@ impl DependcyInjectableService for AuthorizeMiddleware {
 }
 #[async_trait::async_trait]
 impl Middleware for AuthorizeMiddleware {
-    async fn invoke_async(&self, http_context: &mut HttpContextRef, next: MiddlewareNext) {
+    async fn invoke_async(&self, http_context: &mut HttpContext, next: MiddlewareNext) {
         let auth_header: Option<String> = http_context.request.headers.authorization();
         if let Some(auth_header) = auth_header {
             let split_token: Vec<&str> = auth_header.trim().split(" ").collect::<Vec<&str>>();

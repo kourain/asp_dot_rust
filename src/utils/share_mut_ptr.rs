@@ -13,7 +13,7 @@ impl<T> ShareMutPtr<T> {
 
 impl<T> Clone for ShareMutPtr<T> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        panic!("ShareMutPtr cannot be cloned. It is a unique mutable pointer.");
     }
 }
 

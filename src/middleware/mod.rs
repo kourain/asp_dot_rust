@@ -5,16 +5,16 @@ pub(crate) mod cors;
 pub(crate) mod request_timeout;
 pub(crate) mod static_file;
 use crate::dependcy_injection::DependcyInjectableService;
-use crate::http_context::HttpContextRef;
+use crate::http_context::HttpContext;
 use async_trait::async_trait;
 use core::any::type_name;
 use core::{future::Future, pin::Pin};
 use std::sync::Arc;
 
-pub type MiddlewareNext = Arc<dyn for<'a> Fn(&'a mut HttpContextRef) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> + Send + Sync>;
+pub type MiddlewareNext = Arc<dyn for<'a> Fn(&'a mut HttpContext) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> + Send + Sync>;
 #[async_trait]
 pub trait Middleware: DependcyInjectableService + Send + Sync {
-    async fn invoke_async(&self, http_context: &mut HttpContextRef, next: MiddlewareNext);
+    async fn invoke_async(&self, http_context: &mut HttpContext, next: MiddlewareNext);
     fn type_name(&self) -> &'static str {
         type_name::<Self>()
     }

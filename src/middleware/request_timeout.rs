@@ -1,4 +1,4 @@
-use crate::{Application, configuration::RequestTimeoutConfiguration, http_context::HttpContextRef, logging::LOGGER, middleware::Middleware};
+use crate::{Application, configuration::RequestTimeoutConfiguration, http_context::HttpContext, logging::LOGGER, middleware::Middleware};
 use asp_dot_rust_macros::inject_require;
 use std::sync::Arc;
 
@@ -16,7 +16,7 @@ impl RequestTimeoutMiddleware {
 }
 #[async_trait::async_trait]
 impl Middleware for RequestTimeoutMiddleware {
-    async fn invoke_async(&self, http_context: &mut HttpContextRef, next: crate::middleware::MiddlewareNext) {
+    async fn invoke_async(&self, http_context: &mut HttpContext, next: crate::middleware::MiddlewareNext) {
         LOGGER::debug("RequestTimeoutMiddleware: Checking request timeout");
         let timeout = std::time::Duration::from_secs(self.request_timeout_config.timeout_seconds);
         if let Err(_) = tokio::time::timeout(timeout, next(http_context)).await {

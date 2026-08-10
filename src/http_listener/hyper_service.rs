@@ -6,7 +6,7 @@ use tokio::net::TcpStream;
 
 use crate::{
     Application,
-    http_context::{_HttpContext, AspDotRustHttpHeader, http_request::HttpRequest, http_response::HttpResponse},
+    http_context::{HttpContext, AspDotRustHttpHeader, http_request::HttpRequest, http_response::HttpResponse},
     logging::LOGGER,
 };
 
@@ -58,7 +58,7 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
             let custom_resp = HttpResponse::new_in_memory();
 
             // Build HttpContext and run middlewares/handlers
-            let mut http_context = _HttpContext::new(custom_req, custom_resp, app.service_provider.create_scope());
+            let mut http_context = HttpContext::new(custom_req, custom_resp, app.service_provider.create_scope());
             http_context.routing_info = routing_service.resolve(&http_context.request.path);
             app.call_middlewares_async(&mut http_context).await;
 
