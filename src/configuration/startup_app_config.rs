@@ -1,6 +1,5 @@
-use std::{collections::HashMap, env, ops::Deref, str::FromStr};
-
 use crate::{application::ApplicationBuilder, logging::LOGGER};
+use std::{collections::HashMap, env, ops::Deref, str::FromStr};
 
 /// Recognized token forms, parsed left to right in a single pass:
 /// - `--key=value`
@@ -81,7 +80,7 @@ impl ApplicationBuilder {
         if !self.configuration.contains::<StartupAppConfiguration>() {
             self.configuration.insert(StartupAppConfiguration::default());
         }
-    
+
         let old_cli = self.configuration.get::<StartupAppConfiguration>().unwrap();
         let new_cli = old_cli.deref().clone().parse(args);
 
@@ -105,7 +104,15 @@ impl ApplicationBuilder {
     }
     fn set_https_port(&mut self, cli: &StartupAppConfiguration) {
         if let Some(port) = cli.get_parsed::<u16>("https-port") {
-            self.with_https_port(port);
+            if let Some(cert_path) = cli.get("tls-cert") {
+                if let Some(key_path) = cli.get("tls-key") {
+                    self.with_https_port(port, cert_path, key_path);
+                } else {
+                    panic!("--https-port was specified without a corresponding --tls-key");
+                }
+            } else {
+                panic!("--https-port was specified without a corresponding --tls-cert");
+            }
         }
     }
 }
