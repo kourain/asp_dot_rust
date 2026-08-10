@@ -1,5 +1,8 @@
 use crate::{
-    controller::{ActionRoute, Routing}, dependcy_injection::{DependcyInjectableController, DependcyInjectableService}, http_context::HttpContext, services::routing::ControllerCollect, utils::ShareMutPtr,
+    controller::{ActionRoute, Routing},
+    dependcy_injection::{DependcyInjectableController, DependcyInjectableService},
+    http_context::HttpContext,
+    services::routing::ControllerCollect,
 };
 use matchit::Router;
 use std::{
@@ -91,7 +94,6 @@ impl RoutingService {
     where
         T: DependcyInjectableController + Routing + Send + 'static,
     {
-        let lower_route = route.to_lowercase();
         let controller_type_id = TypeId::of::<T>();
         let route_info = ControllerInfo {
             controller_type: controller_type_id,
@@ -100,21 +102,17 @@ impl RoutingService {
             action_name: action_name,
             invoke_async: |http_context, action_name| {
                 Box::pin(async move {
-                    let mut controller = T::inject(ShareMutPtr::new(http_context));
+                    let mut controller = T::inject(http_context);
                     controller.routing(action_name).await;
                 })
             },
         };
 
-        match self._router.at(&route) {
-            Ok(_) => {
+        match self._router.at_mut(&route) {
+            Ok(exist_route) => {
                 for method in methods {
                     // Route already exists, update it
-                    self._router
-                        .at_mut(&lower_route)
-                        .unwrap()
-                        .value
-                        .insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
+                    exist_route.value.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
                 }
             }
             Err(_) => {
@@ -123,8 +121,8 @@ impl RoutingService {
                 for method in methods {
                     method_map.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
                 }
-                self._router.insert(&lower_route, method_map).unwrap_or_else(|e| {
-                    panic!("Controller {} failed to insert route: {}, error: {:?}", std::any::type_name::<T>(), lower_route, e);
+                self._router.insert(&route, method_map).unwrap_or_else(|e| {
+                    panic!("Controller {} failed to insert route: {}, error: {:?}", std::any::type_name::<T>(), route, e);
                 });
             }
         }
@@ -154,8 +152,7 @@ impl RoutingService {
         }
     }
     pub fn get_allowed_methods(&self, path: &str) -> HashSet<http::Method> {
-        let lower_path = path.to_lowercase();
-        let matched = self._router.at(&lower_path);
+        let matched = self._router.at(path);
         if let Ok(matched) = matched { matched.value.keys().cloned().collect() } else { HashSet::new() }
     }
 }

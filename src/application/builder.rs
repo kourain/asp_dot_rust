@@ -32,26 +32,39 @@ impl ApplicationBuilder {
     }
 
     pub fn with_ip(&mut self, ip: impl Into<String>) -> &mut Self {
+        if self.ip.contains(&"0.0.0.0".parse().unwrap()) || self.ip.contains(&"::".parse().unwrap()) {
+            self.ip.clear();
+        }
         self.ip.insert(ip.into().parse::<std::net::IpAddr>().expect("Invalid IP address format"));
         self
     }
 
     pub fn with_loopback_ip(&mut self) -> &mut Self {
+        if self.ip.contains(&"0.0.0.0".parse().unwrap()) || self.ip.contains(&"::".parse().unwrap()) {
+            self.ip.clear();
+        }
         self.ip.insert("127.0.0.1".parse().unwrap());
         self
     }
     /// Binds the application to all available network interfaces
     pub fn with_any_ip(&mut self) -> &mut Self {
+        self.ip.clear();
         self.ip.insert("0.0.0.0".parse().unwrap());
         self.ip.insert("::".parse().unwrap());
         self
     }
     pub fn with_http_port(&mut self, port: u16) -> &mut Self {
+        if self.https_port.contains(&port) {
+            panic!("Port {} is already in use by HTTPS. Please choose a different port for HTTP.", port);
+        }
         self.http_port.insert(port);
         self
     }
 
     pub fn with_https_port(&mut self, port: u16) -> &mut Self {
+        if self.http_port.contains(&port) {
+            panic!("Port {} is already in use by HTTP. Please choose a different port for HTTPS.", port);
+        }
         self.https_port.insert(port);
         todo!("ADD SSL SUPPORT");
     }

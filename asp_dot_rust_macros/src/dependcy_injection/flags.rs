@@ -8,3 +8,11 @@ bitflags! {
         const INJECT_CONTROLLER = 0b100;
     }
 }
+
+#[derive(PartialEq)]
+pub enum HttpInjectType {
+    None,
+    ShareMutPtr,
+    BorrowHttpContext,
+    MoveHttpContext
+}
