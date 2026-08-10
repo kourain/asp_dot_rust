@@ -1,9 +1,9 @@
 use futures::FutureExt;
 use http_body_util::channel::Channel;
 use hyper::{Response, body::Bytes, service::service_fn};
-use std::{convert::Infallible, panic::AssertUnwindSafe};
+use std::{convert::Infallible, panic::AssertUnwindSafe, net::SocketAddr};
 use std::sync::Arc;
-use tokio::net::TcpStream;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     Application,
@@ -40,10 +40,27 @@ fn create_streaming_body(body_vec: Vec<u8>) -> Channel<Bytes, Infallible> {
     body
 }
 
-pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: &Arc<crate::services::routing::RoutingService>) -> std::io::Result<()> {
+/// Serve a single accepted connection over HTTP/1 or HTTP/2 (negotiated
+/// automatically). `io` can be a plain `TcpStream` (HTTP) or a TLS-wrapped
+/// stream such as `tokio_rustls::server::TlsStream<TcpStream>` (HTTPS) —
+/// both implement `AsyncRead + AsyncWrite`, so this function is shared by
+/// the HTTP and HTTPS listeners instead of being duplicated.
+///
+/// The peer/local socket addresses are taken as parameters (rather than
+/// queried from `io` itself) because a TLS stream no longer exposes
+/// `peer_addr`/`local_addr` directly; callers grab these from the raw
+/// `TcpStream` before wrapping it (e.g. before the TLS handshake).
+pub(crate) async fn hyper_service<S>(
+    io: S,
+    client_socket_addr: SocketAddr,
+    local_listen_socket_addr: SocketAddr,
+    app: Arc<Application>,
+    routing_service: &Arc<crate::services::routing::RoutingService>,
+) -> std::io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     let app_clone = app.clone();
-    let client_socket_addr = stream.peer_addr().unwrap();
-    let local_listen_socket_addr = stream.local_addr().unwrap();
     let service = service_fn(move |req| {
         let app = app_clone.clone();
         let start = std::time::Instant::now();
@@ -96,7 +113,7 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
     });
 
     let builder = auto_conn::Builder::new(hyper_util::rt::TokioExecutor::new());
-    // wrap the tokio TcpStream so hyper-util can use hyper RT traits
-    let io = TokioIo::new(stream);
+    // wrap the async stream so hyper-util can use hyper RT traits
+    let io = TokioIo::new(io);
     builder.serve_connection(io, service).await.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }

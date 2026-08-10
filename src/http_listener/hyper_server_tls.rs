@@ -1,16 +1,22 @@
-use crate::{Application, logging::LOGGER};
 use std::sync::Arc;
-use tokio::net::TcpListener;
 
-pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> {
-    // NOTE: iterate every (ip, port) combination (Cartesian product), not a
-    // pairwise zip — with_any_ip() registers 2 IPs, and zip() would silently
-    // drop the second one if only one port were configured.
-    let bindings: Vec<_> = app.ip.iter().flat_map(|ip| app.http_port.iter().map(move |port| (*ip, *port))).collect();
+use rustls::ServerConfig;
+use tokio::net::TcpListener;
+use tokio_rustls::TlsAcceptor;
+
+use crate::{Application, logging::LOGGER};
+
+pub(crate) async fn hyper_server_tls(app: &Arc<Application>, tls_config: Arc<ServerConfig>) -> std::io::Result<()> {
+    let acceptor = TlsAcceptor::from(tls_config);
+
+    // Same Cartesian-product binding strategy as the plain HTTP listener.
+    let bindings: Vec<_> = app.ip.iter().flat_map(|ip| app.https_port.iter().map(move |port| (*ip, *port))).collect();
+
     futures::future::try_join_all(bindings.into_iter().map(|(ip, port)| {
+        let acceptor = acceptor.clone();
         async move {
             let listener = TcpListener::bind((ip, port)).await?;
-            LOGGER::info(format!("HTTP server listening on {}:{}", ip, port));
+            LOGGER::info(format!("HTTPS server listening on {}:{}", ip, port));
             let routing_service = app.service_provider.get_service::<crate::services::routing::RoutingService>();
             loop {
                 match listener.accept().await {
@@ -24,8 +30,20 @@ pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> 
                         };
                         let app = app.clone();
                         let routing_service = routing_service.clone();
+                        let acceptor = acceptor.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, client_addr, local_addr, app, &routing_service).await {
+                            // Perform the TLS handshake before handing the connection to hyper.
+                            // A failed handshake (bad client, port scan, expired cert on the
+                            // client's trust store, etc.) must only drop this one connection,
+                            // never crash the accept loop.
+                            let tls_stream = match acceptor.accept(stream).await {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    LOGGER::warn(format!("TLS handshake failed with {}: {}", client_addr, e));
+                                    return;
+                                }
+                            };
+                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(tls_stream, client_addr, local_addr, app, &routing_service).await {
                                 LOGGER::error(format!("Error occurred: {}", e));
                             }
                         });
@@ -34,11 +52,11 @@ pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> 
                         match error.kind() {
                             std::io::ErrorKind::ConnectionAborted | std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe => {
                                 LOGGER::warn(format!("TCP connection aborted: {}", error));
-                                continue; // skip this error and continue accepting new connections
+                                continue;
                             }
                             _ => {
                                 LOGGER::error(format!("Failed to accept TCP connection: {}", error));
-                                continue; // log the error and continue accepting new connections
+                                continue;
                             }
                         }
                         #[allow(unreachable_code)]
