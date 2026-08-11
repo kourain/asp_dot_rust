@@ -51,7 +51,7 @@ fn dfs_detect(node: TypeId, graph: &HashMap<TypeId, (&'static str, Vec<TypeId>)>
     if let Some((_, deps)) = graph.get(&node) {
         for &dep in deps {
             if stack.contains(&dep) {
-                // tìm thấy vòng lặp — cắt path từ điểm bắt đầu vòng
+                // found loop, return the cycle path
                 let start_idx = path.iter().position(|&n| n == dep).unwrap();
                 let mut cycle = path[start_idx..].to_vec();
                 cycle.push(dep);

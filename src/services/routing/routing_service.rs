@@ -14,7 +14,7 @@ use std::{
     str::FromStr,
 };
 
-type ControllerInvoke = for<'a> fn(&'a mut HttpContext, String) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
+type ControllerInvoke = for<'a> fn(&'a mut HttpContext, &'static str) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 #[derive(Clone, Debug)]
 pub struct ControllerInfo {
     pub controller_type: TypeId,
@@ -54,7 +54,7 @@ impl DependcyInjectableService for RoutingService {
     }
 }
 impl RoutingService {
-    pub fn register_controller<T: 'static>(&mut self, root_route: &str, action_routes: Vec<ActionRoute>) -> ControllerCollect
+    pub fn register_controller<T: 'static>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
     where
         T: DependcyInjectableController + Routing + Send + 'static,
     {

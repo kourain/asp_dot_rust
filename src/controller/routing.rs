@@ -3,7 +3,7 @@ pub trait Routing: 'static + Sized
 where
     Self: Sized,
 {
-    async fn routing(&mut self, method_name: String);
+    async fn routing(&mut self, method_name: &'static str);
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActionRoute {

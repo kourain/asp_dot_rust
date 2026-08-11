@@ -29,7 +29,7 @@ pub(crate) fn bootstrap_registered_controllers() {
     }
 }
 
-pub fn register_controller<T: 'static>(root_route: &str, action_routes: Vec<ActionRoute>) -> ControllerCollect
+pub fn register_controller<T: 'static>(root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
 where
     T: DependcyInjectableController + crate::controller::Routing + Send + 'static,
 {

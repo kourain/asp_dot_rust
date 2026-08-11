@@ -178,8 +178,8 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
         /// impl by #[controller_route] macro
         #[async_trait::async_trait]
         impl #main_crate_path::controller::Routing for #self_ty {
-            async fn routing(&mut self, method_name: String){
-                match method_name.as_str() {
+            async fn routing(&mut self, method_name: &'static str) {
+                match method_name {
                     #(#match_routes)*
                     _ => {
                         self.http_context.response.status_code = http::StatusCode::NOT_FOUND;
