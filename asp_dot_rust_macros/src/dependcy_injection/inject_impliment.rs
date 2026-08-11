@@ -1,6 +1,7 @@
 use crate::{
-    dependcy_injection::flags::InjectFlags,
+    dependcy_injection::flags::{HttpInjectType, InjectFlags},
     utils::compiler_error::{create_compiler_error, token_type_to_string},
+    utils::extract_type::get_exact_type,
 };
 use proc_macro::TokenStream;
 use quote::quote;
@@ -9,8 +10,9 @@ use syn::{FnArg, ImplItem, ItemImpl, PatType, Type, parse_macro_input};
 pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -> TokenStream {
     let main_crate_path = crate::utils::find_crate::asp_dot_rust_crate_path();
     let input = parse_macro_input!(item as ItemImpl);
-    let self_ty = &input.self_ty; // MyService
-    let self_ty_str = quote!(#self_ty).to_string();
+    let self_ty = &input.self_ty; // MyService | &MyService | &mut MyService | MyService<'a>
+    let real_self_ty = get_exact_type(self_ty);
+    let self_ty_str = quote!(#real_self_ty).to_string();
 
     // find the `new` function in the impl block
     let new_fn = input
@@ -44,8 +46,9 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
     // extract the inner type from each Arc<T> parameter
     let mut inner_types = Vec::new();
     let mut call_args = Vec::new();
+    let mut http_context_inject = quote! {};
     let mut configuration_service = quote! {};
-    let mut is_http_context_ref_injected = false;
+    let mut httpcontext_inject_state = HttpInjectType::None;
     for arg in &new_fn.sig.inputs {
         if let FnArg::Typed(PatType { ty, .. }) = arg {
             if flag.contains(InjectFlags::SERVICE)
@@ -62,12 +65,20 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                 inner_types.push(inner.clone());
                 configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
             } else if flag.contains(InjectFlags::INJECT_CONTROLLER) {
-                if is_http_context_ref(ty) {
-                    if is_http_context_ref_injected {
+                let http_inject_type = get_http_inject_type(ty);
+                if http_inject_type != HttpInjectType::None {
+                    if httpcontext_inject_state != HttpInjectType::None {
                         return create_compiler_error(new_fn, "Can't inject HttpContextRef more than once");
-                    } else {
-                        call_args.push(quote! { http_context });
-                        is_http_context_ref_injected = true;
+                    }
+                    httpcontext_inject_state = http_inject_type;
+                    match httpcontext_inject_state {
+                        HttpInjectType::ShareMutPtr => {
+                            http_context_inject = quote! { let http_ctx_ref = #main_crate_path::utils::ShareMutPtr::new(http_context); };
+                            call_args.push(quote! { http_ctx_ref });
+                        }
+                        HttpInjectType::BorrowHttpContext => call_args.push(quote! { http_context }),
+                        HttpInjectType::MoveHttpContext => return create_compiler_error(new_fn, "Can't inject HttpContext, use &mut HttpContext, &HttpContext or HttpContextRef instead"),
+                        _ => {}
                     }
                 }
             } else {
@@ -86,16 +97,17 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
 
     let expanded;
     if flag.contains(InjectFlags::INJECT_CONTROLLER) {
-        if !is_http_context_ref_injected {
+        if httpcontext_inject_state == HttpInjectType::None {
             return create_compiler_error(new_fn, "`new` fn args must contain HttpContextRef");
         }
         expanded = quote! {
             #input
             impl #main_crate_path::dependcy_injection::DependcyInjectableController for #self_ty {
                 fn inject(
-                    http_context: #main_crate_path::http_context::HttpContextRef,
+                    http_context: &mut #main_crate_path::http_context::HttpContext,
                 ) -> Self {
                     let service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope = &http_context.service_provider;
+                    #http_context_inject
                     #configuration_service
                     Self::new( #(#call_args),* )
                 }
@@ -108,6 +120,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                 fn inject(
                     service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope
                 ) -> Self {
+                    #http_context_inject
                     #configuration_service
                     Self::new( #(#call_args),* )
                 }
@@ -156,14 +169,19 @@ fn extract_option_arc_inner(ty: &Type) -> Option<Type> {
     None
 }
 
-fn is_http_context_ref(ty: &Type) -> bool {
+fn get_http_inject_type(ty: &Type) -> HttpInjectType {
     if let Type::Path(p) = ty {
         let seg = p.path.segments.last().unwrap();
         if seg.ident == "HttpContextRef" {
-            return true;
+            return HttpInjectType::ShareMutPtr;
+        } else if seg.ident == "HttpContext" {
+            return HttpInjectType::MoveHttpContext;
         }
     } else if let Type::Reference(r) = ty {
-        return is_http_context_ref(&r.elem);
+        let child_type = get_http_inject_type(&r.elem);
+        if child_type == HttpInjectType::MoveHttpContext {
+            return HttpInjectType::BorrowHttpContext;
+        }
     }
-    false
+    HttpInjectType::None
 }

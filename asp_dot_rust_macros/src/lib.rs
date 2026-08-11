@@ -115,13 +115,6 @@ pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "HEAD")
 }
 
-///TODO: re-write
-/// Auto Impl DependcyInjectableService for this Struct
-// #[proc_macro_derive(DependcyInjectableService)]
-// pub fn derive_di(input: TokenStream) -> TokenStream {
-//     dependcy_injection::derive::derive_di(input)
-// }
-
 #[proc_macro_derive(StructName)]
 pub fn struct_name(input: TokenStream) -> TokenStream {
     struct_macro::derive_struct_name::struct_name(input)

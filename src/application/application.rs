@@ -12,9 +12,9 @@ use crate::{
 pub struct Application {
     pub name: String,
     pub runner_id: uuid::Uuid,
-    pub ip: HashSet<IpAddr>,
-    pub http_port: HashSet<u16>,
-    pub https_port: HashSet<u16>,
+    pub(crate) ip: HashSet<IpAddr>,
+    pub(crate) http_port: HashSet<u16>,
+    pub(crate) https_port: HashSet<u16>,
     pub service_provider: ServiceProviderScope,
     pub(crate) _middlewares: ApplicationMiddlewares,
     pub(crate) _hosted_services: ApplicationHostedService,
