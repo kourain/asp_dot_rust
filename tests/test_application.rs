@@ -31,6 +31,6 @@ async fn test_application() {
     // app_builder.add_memory_cache();
     let mut app = app_builder.build();
     app.add_middleware::<TestMidware>();
-    //app.use_cors();//.use_rate_limit();
+    app.use_cors().use_rate_limit();
     let _ = app.run().await;
 }

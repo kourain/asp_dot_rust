@@ -76,9 +76,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                             http_context_inject = quote! { let http_ctx_ref = #main_crate_path::utils::ShareMutPtr::new(http_context); };
                             call_args.push(quote! { http_ctx_ref });
                         }
-                        HttpInjectType::BorrowHttpContext => call_args.push(quote! { http_context }),
-                        HttpInjectType::MoveHttpContext => return create_compiler_error(new_fn, "Can't inject HttpContext, use &mut HttpContext, &HttpContext or HttpContextRef instead"),
-                        _ => {}
+                        HttpInjectType::BorrowHttpContext | HttpInjectType::MoveHttpContext | _ => return create_compiler_error(new_fn, "Can't inject HttpContext, use HttpContextRef instead"),
                     }
                 }
             } else {

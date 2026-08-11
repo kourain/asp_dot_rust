@@ -1,13 +1,13 @@
-use asp_dot_rust_macros::inject_require;
-use http::header;
-
 use crate::{
     Application,
     configuration::CorsConfiguration,
     http_context::{HttpContext, http_header::AspDotRustHttpHeader},
+    macros::inject_require,
     middleware::Middleware,
 };
+use http::header;
 use std::sync::Arc;
+
 #[derive(Debug, Clone, Default)]
 pub struct CorsMiddleware {
     routing_service: Arc<crate::services::routing::RoutingService>,
