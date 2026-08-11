@@ -4,14 +4,12 @@ pub mod edge;
 pub use edge::DependencyEdge;
 pub use inventory;
 
-use crate::utils::StructName;
-
-pub trait DependcyInjectableService: Send + Sync + 'static {
+    pub trait DependcyInjectableService: Send + Sync + 'static {
     fn inject(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
     where
         Self: Sized;
 }
-pub trait DependcyInjectableController: StructName + Send + Sync + 'static {
+pub trait DependcyInjectableController: Send + Sync + 'static {
     fn inject(http_context: &mut crate::http_context::HttpContext) -> Self
     where
         Self: Sized;

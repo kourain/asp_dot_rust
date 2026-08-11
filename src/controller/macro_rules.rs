@@ -9,7 +9,6 @@ macro_rules! api_controller {
         ///     fn str_name() -> &'static str {...}
         /// }
         /// ```
-        #[derive(asp_dot_rust_macros::StructName)]
         $vis struct $name {
             $(
                 $field_name : $field_type,

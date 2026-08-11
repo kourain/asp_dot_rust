@@ -1,6 +1,5 @@
 mod controller;
 mod dependcy_injection;
-mod struct_macro;
 mod utils;
 
 use proc_macro::TokenStream;
@@ -113,11 +112,6 @@ pub fn options(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "HEAD")
-}
-
-#[proc_macro_derive(StructName)]
-pub fn struct_name(input: TokenStream) -> TokenStream {
-    struct_macro::derive_struct_name::struct_name(input)
 }
 
 /// inject service and config <br>

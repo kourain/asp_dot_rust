@@ -65,7 +65,7 @@ impl RoutingService {
         let controller_collect = ControllerCollect {
             type_id: TypeId::of::<T>(),
             type_name: std::any::type_name::<T>(),
-            controller_name: T::str_name(),
+            controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
         };
         self._registered_controllers.insert(controller_collect.clone());
         controller_collect
@@ -97,7 +97,7 @@ impl RoutingService {
         let controller_type_id = TypeId::of::<T>();
         let route_info = ControllerInfo {
             controller_type: controller_type_id,
-            controller_name: T::str_name(),
+            controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
             controller_type_name: std::any::type_name::<T>(),
             action_name: action_name,
             invoke_async: |http_context, action_name| {
