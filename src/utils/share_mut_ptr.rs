@@ -12,8 +12,8 @@ impl<T> ShareMutPtr<T> {
     pub fn new(value: &mut T) -> Self {
         Self(value as *mut T, Arc::new(AtomicBool::new(false)))
     }
-    pub fn new_with_notify(value: &mut T, notify: Arc<AtomicBool>) -> Self {
-        Self(value as *mut T, notify)
+    pub fn new_with_state(value: &mut T, state: Arc<AtomicBool>) -> Self {
+        Self(value as *mut T, state)
     }
 }
 
@@ -27,7 +27,7 @@ impl<T> Deref for ShareMutPtr<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        if self.1.load(std::sync::atomic::Ordering::Relaxed) {
+        if !self.1.load(std::sync::atomic::Ordering::Relaxed) {
             let type_name = std::any::type_name::<T>();
             panic!("{} of ShareMutPtr<T>: Target already drop", type_name);
         }
@@ -37,7 +37,7 @@ impl<T> Deref for ShareMutPtr<T> {
 
 impl<T> DerefMut for ShareMutPtr<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        if self.1.load(std::sync::atomic::Ordering::Relaxed) {
+        if !self.1.load(std::sync::atomic::Ordering::Relaxed) {
             let type_name = std::any::type_name::<T>();
             panic!("{} of ShareMutPtr<T>: Target already drop", type_name);
         }
