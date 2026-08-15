@@ -1,4 +1,3 @@
-mod http;
 pub(crate) mod http_context;
 pub mod http_header;
 pub(crate) mod http_request;

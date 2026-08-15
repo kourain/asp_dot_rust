@@ -1,5 +1,4 @@
-use crate::{Application, configuration::RequestTimeoutConfiguration, http_context::HttpContext, logging::LOGGER, middleware::Middleware};
-use asp_dot_rust_macros::inject_require;
+use crate::{Application, configuration::RequestTimeoutConfiguration, http_context::HttpContext, logging::LOGGER, macros::inject_require, middleware::Middleware};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]

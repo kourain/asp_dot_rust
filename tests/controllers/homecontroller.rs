@@ -3,8 +3,8 @@ use asp_dot_rust::{
     controller::{ActionResult, get, post, put, route},
     http_context::HttpContextRef,
     logging::LOGGER,
+    macros::{controller_inject_require, controller_route},
 };
-use asp_dot_rust_macros::{controller_inject_require, controller_route};
 
 api_controller!(pub HomeController {
     temp: String,

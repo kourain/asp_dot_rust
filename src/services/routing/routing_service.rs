@@ -31,20 +31,12 @@ pub struct ResolvedRoute {
     pub path_params: HashMap<String, String>,
     pub query_params: HashMap<String, String>,
 }
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct RoutingService {
-    // _route: Router<TypeId>,
     _router: Router<HashMap<http::Method, ControllerInfo>>, // key: "route", value: HashMap<http_method, resolved controller action info>
     _registered_controllers: HashSet<ControllerCollect>,
 }
-impl Debug for RoutingService {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RoutingService")
-            .field("registered_routes", &self._router)
-            .field("registered_controllers", &self._registered_controllers)
-            .finish()
-    }
-}
+
 impl DependcyInjectableService for RoutingService {
     fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
     where
@@ -102,8 +94,10 @@ impl RoutingService {
             action_name: action_name,
             invoke_async: |http_context, action_name| {
                 Box::pin(async move {
-                    let mut controller = T::inject(http_context);
+                    let is_valid = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+                    let mut controller = T::inject(http_context, is_valid.clone());
                     controller.routing(action_name).await;
+                    is_valid.store(false, std::sync::atomic::Ordering::Release);
                 })
             },
         };

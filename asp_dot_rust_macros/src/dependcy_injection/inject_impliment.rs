@@ -73,12 +73,10 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                     httpcontext_inject_state = http_inject_type;
                     match httpcontext_inject_state {
                         HttpInjectType::ShareMutPtr => {
-                            http_context_inject = quote! { let http_ctx_ref = #main_crate_path::utils::ShareMutPtr::new(http_context); };
+                            http_context_inject = quote! { let http_ctx_ref = #main_crate_path::utils::ShareMutPtr::new_with_state(http_context, is_valid); };
                             call_args.push(quote! { http_ctx_ref });
                         }
-                        HttpInjectType::BorrowHttpContext => call_args.push(quote! { http_context }),
-                        HttpInjectType::MoveHttpContext => return create_compiler_error(new_fn, "Can't inject HttpContext, use &mut HttpContext, &HttpContext or HttpContextRef instead"),
-                        _ => {}
+                        HttpInjectType::BorrowHttpContext | HttpInjectType::MoveHttpContext | _ => return create_compiler_error(new_fn, "Can't inject HttpContext, use HttpContextRef instead"),
                     }
                 }
             } else {
@@ -105,6 +103,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
             impl #main_crate_path::dependcy_injection::DependcyInjectableController for #self_ty {
                 fn inject(
                     http_context: &mut #main_crate_path::http_context::HttpContext,
+                    is_valid: std::sync::Arc<std::sync::atomic::AtomicBool>
                 ) -> Self {
                     let service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope = &http_context.service_provider;
                     #http_context_inject

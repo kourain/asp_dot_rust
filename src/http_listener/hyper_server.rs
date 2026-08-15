@@ -1,8 +1,6 @@
-use std::sync::Arc;
-
-use tokio::net::TcpListener;
-
 use crate::{Application, logging::LOGGER};
+use std::sync::Arc;
+use tokio::net::TcpListener;
 
 pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> {
     futures::future::try_join_all(app.ip.iter().zip(app.http_port.iter()).map(|(ip, port)| {

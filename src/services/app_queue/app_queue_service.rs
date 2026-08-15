@@ -1,7 +1,5 @@
-use asp_dot_rust_macros::inject_require;
+use crate::{MutexAsync, macros::inject_require};
 use dashmap::DashMap;
-
-use crate::MutexAsync;
 use std::{
     any::{Any, TypeId},
     collections::VecDeque,

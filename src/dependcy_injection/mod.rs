@@ -10,7 +10,7 @@ pub use inventory;
         Self: Sized;
 }
 pub trait DependcyInjectableController: Send + Sync + 'static {
-    fn inject(http_context: &mut crate::http_context::HttpContext) -> Self
+    fn inject(http_context: &mut crate::http_context::HttpContext, is_valid: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self
     where
         Self: Sized;
 }
