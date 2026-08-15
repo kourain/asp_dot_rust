@@ -1,5 +1,4 @@
 mod action_result;
-pub(crate) mod app_controller;
 pub mod macro_rules;
 pub(crate) mod routing;
 
