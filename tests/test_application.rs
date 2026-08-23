@@ -32,5 +32,5 @@ async fn test_application() {
     let mut app = app_builder.build();
     app.add_middleware::<TestMidware>();
     app.use_cors().use_rate_limit();
-    let _ = app.run().await;
+    app.run().await;
 }

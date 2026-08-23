@@ -17,7 +17,7 @@ impl ConfigurationService {
     pub fn new() -> Self {
         Self { _inner: HashMap::new() }
     }
-    pub fn constains<T: 'static + Send + Sync>(&self) -> bool {
+    pub fn contains<T: 'static + Send + Sync>(&self) -> bool {
         self._inner.contains_key(&TypeId::of::<T>())
     }
     pub fn insert<T: 'static + Send + Sync>(&mut self, config: T)

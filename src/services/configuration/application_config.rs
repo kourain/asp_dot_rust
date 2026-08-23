@@ -9,7 +9,7 @@ impl ApplicationBuilder {
     {
         let config = T::default();
 
-        if self.configuration.constains::<T>() {
+        if self.configuration.contains::<T>() {
             panic!("Configuration of type {} already exists", std::any::type_name::<T>());
         }
         LOGGER::info(format!("Add Default Config for: {}", std::any::type_name::<T>()));
@@ -26,7 +26,7 @@ impl ApplicationBuilder {
 
         cors_config(&mut config);
 
-        if self.configuration.constains::<T>() {
+        if self.configuration.contains::<T>() {
             panic!("Configuration of type {} already exists", std::any::type_name::<T>());
         }
         self.configuration.insert::<T>(config);

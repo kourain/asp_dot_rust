@@ -18,9 +18,7 @@ pub struct ApplicationBuilder {
 
 impl ApplicationBuilder {
     pub fn new(name: &str) -> Self {
-        LOGGER::verbose(format!("build at: {}", build_info::get_build_time_utc()));
-        LOGGER::info(format!("Initializing application builder: {}", name));
-        Self {
+        let mut app = Self {
             name: name.to_string(),
             ip: HashSet::new(),
             http_port: HashSet::new(),
@@ -28,7 +26,11 @@ impl ApplicationBuilder {
             configuration: ConfigurationService::new(),
             service: ServiceProviderScope::new(),
             hosted_services: Vec::new(),
-        }
+        };
+        app.with_args();
+        LOGGER::verbose(format!("build at: {}", build_info::get_build_time_utc()));
+        LOGGER::info(format!("Initializing application builder: {}", name));
+        app
     }
 
     pub fn with_ip(&mut self, ip: impl Into<String>) -> &mut Self {

@@ -24,7 +24,7 @@ impl Application {
         ApplicationBuilder::new(name)
     }
 
-    pub async fn run(mut self) -> std::io::Result<()> {
+    pub async fn run(mut self) {
         // ensure defaults so the server keeps running even if user didn't set ip/ports
         if self.ip.is_empty() {
             self.ip.insert("127.0.0.1".parse::<std::net::IpAddr>().unwrap());
@@ -43,6 +43,5 @@ impl Application {
             });
         }
         _ = hyper_server(&app).await;
-        Ok(())
     }
 }
