@@ -4,6 +4,7 @@ mod hyper_config;
 mod jwt_auth_config;
 mod rate_limit_config;
 mod request_timeout_config;
+mod startup_app_config;
 mod static_file_config;
 
 pub use cors_config::CorsConfiguration;
@@ -12,4 +13,5 @@ pub use hyper_config::HyperConfig;
 pub use jwt_auth_config::JwtAuthConfiguration;
 pub use rate_limit_config::RateLimitConfiguration;
 pub use request_timeout_config::RequestTimeoutConfiguration;
+pub use startup_app_config::StartupAppConfiguration;
 pub use static_file_config::StaticFileConfiguration;
