@@ -1,3 +1,6 @@
+use serde::Deserialize;
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct HyperConfig {
     pub max_request_body_size: usize,
     pub max_request_headers_size: usize,

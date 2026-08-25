@@ -24,12 +24,12 @@ impl Default for CorsConfiguration {
 impl CorsConfiguration {
     pub fn is_origin_allowed(&self, origin: impl Into<String>) -> bool {
         let origin = origin.into();
-        self.allowed_origins.get(&origin).is_some() || self.allowed_origins.contains("*".into())
+        self.allowed_origins.get(&origin).is_some() || self.allowed_origins.contains("*")
     }
     pub fn allow_origin(&mut self, origin: impl Into<String>) -> &Self {
         let o = origin.into();
         // if origin is *, clear all other origins
-        if self.allowed_origins.contains("*".into()) {
+        if self.allowed_origins.contains("*") {
             self.allowed_origins.clear();
         }
         self.allowed_origins.insert(o);
@@ -44,7 +44,7 @@ impl CorsConfiguration {
 
     pub fn allow_credentials(&mut self) -> &Self {
         // credentials and origin * are mutually exclusive
-        if self.allowed_origins.contains("*".into()) {
+        if self.allowed_origins.contains("*") {
             self.allowed_origins.clear();
         }
         self.allow_credentials = true;

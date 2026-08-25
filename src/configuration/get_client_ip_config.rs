@@ -1,3 +1,6 @@
+use serde::Deserialize;
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct GetClientIpConfiguration {
     pub header_name: String,
 }
