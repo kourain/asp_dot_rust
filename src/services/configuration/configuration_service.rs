@@ -1,4 +1,4 @@
-use crate::{dependcy_injection::DependcyInjectableService, logging::LOGGER};
+use crate::{dependcy_injection::DependcyInjectableService, logging::LOGGER, utils::get_real_path};
 use serde::de::DeserializeOwned;
 use std::{
     any::{Any, TypeId},
@@ -44,11 +44,23 @@ impl ConfigurationService {
             None => None,
         }
     }
-    pub fn load_main_toml(&mut self) {
-        self.add_toml_cfg(".\\appsettings.toml");
+    pub(crate) fn load_default_toml(&mut self) {
+        self.add_optional_toml_cfg(".\\appsettings.toml");
     }
     pub fn add_toml_cfg(&mut self, path: impl AsRef<str>) -> &mut Self {
-        match std::fs::read_to_string(path.as_ref()) {
+        match std::fs::read_to_string(get_real_path(&path)) {
+            Ok(data) => match data.parse() {
+                Ok(toml_table) => self._toml_tables.insert(path.as_ref().to_string(), toml_table),
+                Err(e) => panic!("Failed to parse {} file {}", path.as_ref(), e),
+            },
+            Err(_) => {
+                panic!("Failed to read configuration file {}", path.as_ref());
+            }
+        };
+        self
+    }
+    pub fn add_optional_toml_cfg(&mut self, path: impl AsRef<str>) -> &mut Self {
+        match std::fs::read_to_string(get_real_path(&path)) {
             Ok(data) => match data.parse() {
                 Ok(toml_table) => self._toml_tables.insert(path.as_ref().to_string(), toml_table),
                 Err(e) => panic!("Failed to parse {} file {}", path.as_ref(), e),
@@ -66,19 +78,59 @@ impl ConfigurationService {
     {
         let key = section.as_ref();
         let mut config = T::default();
+        let mut has_value = false;
         for (path, table) in self._toml_tables.iter() {
             let Some(value) = table.get(key) else {
                 continue;
             };
             let value_cfg: Result<T, toml::de::Error> = value.clone().try_into();
             match value_cfg {
-                Ok(val) => config = val,
+                Ok(val) => {
+                    config = val;
+                    has_value = true;
+                }
                 Err(_) => {
                     panic!("Failed to parse [{}] of toml {} as {}", key, path, std::any::type_name::<T>());
                 }
             }
         }
-        self.insert(config);
+        if has_value {
+            LOGGER::trace(format!("Add TOML Config for: {}", std::any::type_name::<T>()));
+            LOGGER::verbose(format!("{} = {:#?}", std::any::type_name::<T>(), config.clone()));
+            self.insert(config);
+        } else {
+            panic!("Failed to find [{}] in any loaded toml configuration", key);
+        }
         self
     }
-}
+    pub fn configure_optional<T>(&mut self, section: impl AsRef<str>) -> &mut Self
+    where
+        T: DeserializeOwned + Default + Debug + Clone + Send + Sync + 'static,
+    {
+        let key = section.as_ref();
+        let mut config = T::default();
+        let mut has_value = false;
+        for (path, table) in self._toml_tables.iter() {
+            let Some(value) = table.get(key) else {
+                continue;
+            };
+            let value_cfg: Result<T, toml::de::Error> = value.clone().try_into();
+            match value_cfg {
+                Ok(val) => {
+                    config = val;
+                    has_value = true;
+                }
+                Err(_) => {
+                    panic!("Failed to parse [{}] of toml {} as {}", key, path, std::any::type_name::<T>());
+                }
+            }
+        }
+        if has_value {
+            LOGGER::trace(format!("Add TOML Config for: {}", std::any::type_name::<T>()));
+            LOGGER::verbose(format!("{} = {:#?}", std::any::type_name::<T>(), config.clone()));
+            self.insert(config);
+        } else {
+            LOGGER::warn(format!("Failed to find [{}] in any loaded toml configuration", key));
+        }
+        self
+    }}

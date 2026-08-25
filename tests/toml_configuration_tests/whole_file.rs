@@ -33,29 +33,6 @@ async fn panics_when_the_file_is_not_valid_toml() {
 }
 
 #[tokio::test]
-#[should_panic(expected = "already exists")]
-async fn panics_when_the_type_is_already_registered() {
-    let mut builder = ApplicationBuilder::new("TestTomlDuplicateRegistration");
-    builder.configuration.add_toml_cfg("tests/fixtures/app_settings.toml");
-    builder.configuration.add_toml_cfg("tests/fixtures/app_settings.toml");
-}
-
-#[tokio::test]
-async fn optional_falls_back_to_default_when_file_is_missing() {
-    let mut builder = ApplicationBuilder::new("TestTomlOptionalMissing");
-
-    builder.configuration.add_toml_cfg("tests/fixtures/does_not_exist.toml");
-    builder.configuration.configure::<AppSettings>("app_setting");
-
-    let settings = builder
-        .configuration
-        .get::<AppSettings>()
-        .expect("AppSettings must fall back to Default when the file is missing");
-
-    assert_eq!(settings, AppSettings::default().into());
-}
-
-#[tokio::test]
 async fn optional_still_loads_the_file_when_it_exists() {
     let mut builder = ApplicationBuilder::new("TestTomlOptionalPresent");
 

@@ -22,7 +22,7 @@ async fn loads_multiple_typed_sections_from_one_file() {
 }
 
 #[tokio::test]
-#[should_panic(expected = "has no [")]
+#[should_panic(expected = "Failed to find [")]
 async fn panics_when_the_section_is_missing() {
     let mut builder = ApplicationBuilder::new("TestTomlMissingSection");
     builder.configuration.configure::<RateLimitConfiguration>("does_not_exist");
