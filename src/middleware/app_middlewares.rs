@@ -5,7 +5,6 @@ use crate::{
     http_context::HttpContext,
     logging::LOGGER,
     middleware::{Middleware, MiddlewareNext, auto_route},
-    utils::ShareMutPtr,
 };
 
 pub(crate) struct ApplicationMiddlewares {
@@ -70,8 +69,7 @@ impl Application {
         self._middlewares.add(middleware_instance);
         self
     }
-    pub async fn call_middlewares_async(&self, http_context: &mut HttpContext) {
-        let mut http_context = ShareMutPtr::new(http_context);
-        self._middlewares.execute(&mut http_context).await;
+    pub(crate) async fn call_middlewares_async(&self, http_context: &mut HttpContext) {
+        self._middlewares.execute(http_context).await;
     }
 }

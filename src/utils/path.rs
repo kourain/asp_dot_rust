@@ -1,4 +1,5 @@
 /// get real path of a file(ignore case), if the file does not exist, return the original path
+/// Eg: get_real_path("C:\\Users\\User\\documents\\file.txt") -> "C:\\Users\\User\\Documents\\file.txt"
 pub fn get_real_path(path: impl AsRef<str>) -> String {
     let path = path.as_ref();
     let path = std::path::Path::new(path);
@@ -9,6 +10,7 @@ pub fn get_real_path(path: impl AsRef<str>) -> String {
 }
 
 /// check if the path is in the folder
+/// Eg: is_path_in_folder("C:\\Users\\User\\Documents\\file.txt", "C:\\Users\\User") -> true
 pub fn is_path_in_folder(path: impl AsRef<str>, folder: impl AsRef<str>) -> bool {
     let path = path.as_ref();
     let folder = folder.as_ref();

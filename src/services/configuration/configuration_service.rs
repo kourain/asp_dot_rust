@@ -23,9 +23,13 @@ impl ConfigurationService {
             _toml_tables: HashMap::new(),
         }
     }
+
+    /// check if the configuration of type T exists
     pub fn contains<T: 'static + Send + Sync>(&self) -> bool {
         self._inner.contains_key(&TypeId::of::<T>())
     }
+
+    /// insert a configuration of type T, if the configuration of type T already exists, it will be replaced
     pub fn insert<T: 'static + Send + Sync>(&mut self, config: T)
     where
         T: Clone + Send + Sync + 'static,
@@ -35,6 +39,8 @@ impl ConfigurationService {
         }
         self._inner.insert(TypeId::of::<T>(), Arc::new(config));
     }
+
+    /// get a configuration of type T, if the configuration of type T does not exist, return None
     pub fn get<T: 'static + Send + Sync>(&self) -> Option<Arc<T>>
     where
         T: Clone + Send + Sync + 'static,
@@ -44,9 +50,13 @@ impl ConfigurationService {
             None => None,
         }
     }
+
+    /// load default toml configuration file, if the file does not exist, it will be ignored
     pub(crate) fn load_default_toml(&mut self) {
         self.add_optional_toml_cfg(".\\appsettings.toml");
     }
+
+    /// add a toml configuration file, if the file does not exist, it will panic
     pub fn add_toml_cfg(&mut self, path: impl AsRef<str>) -> &mut Self {
         match std::fs::read_to_string(get_real_path(&path)) {
             Ok(data) => match data.parse() {
@@ -59,6 +69,8 @@ impl ConfigurationService {
         };
         self
     }
+
+    /// add a toml configuration file, if the file does not exist, it will be ignored
     pub fn add_optional_toml_cfg(&mut self, path: impl AsRef<str>) -> &mut Self {
         match std::fs::read_to_string(get_real_path(&path)) {
             Ok(data) => match data.parse() {
@@ -72,6 +84,8 @@ impl ConfigurationService {
         };
         self
     }
+
+    /// configure a configuration of type T from the toml configuration file, if the configuration of type T does not exist, it will panic
     pub fn configure<T>(&mut self, section: impl AsRef<str>) -> &mut Self
     where
         T: DeserializeOwned + Default + Debug + Clone + Send + Sync + 'static,
@@ -103,6 +117,8 @@ impl ConfigurationService {
         }
         self
     }
+
+    /// configure a configuration of type T from the toml configuration file, if the configuration of type T does not exist, it will be ignored
     pub fn configure_optional<T>(&mut self, section: impl AsRef<str>) -> &mut Self
     where
         T: DeserializeOwned + Default + Debug + Clone + Send + Sync + 'static,
