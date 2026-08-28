@@ -53,7 +53,7 @@ impl ConfigurationService {
 
     /// load default toml configuration file, if the file does not exist, it will be ignored
     pub(crate) fn load_default_toml(&mut self) {
-        self.add_optional_toml_cfg(".\\appsettings.toml");
+        self.add_optional_toml_cfg("./appsettings.toml");
     }
 
     /// add a toml configuration file, if the file does not exist, it will panic
