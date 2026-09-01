@@ -1,5 +1,5 @@
+use crate::macros::DependencyInjectableService;
 use crate::services::routing::{Route, RoutingResult, routing_result::ResolvedRoute};
-use asp_dot_rust_macros::DependencyInjectableService;
 use matchit::Router;
 use std::{
     collections::{HashMap, HashSet},

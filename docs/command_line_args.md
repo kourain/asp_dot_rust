@@ -26,13 +26,9 @@ Parsing is a single left-to-right pass over the token list:
 
 Additional parsing rules, verified against `tests/command_line_configuration.rs`:
 
-- **Last occurrence wins.** `--http-port 8080 --http-port 9090` resolves to
-  `"9090"`.
-- **A boolean flag does not consume the next flag.**
-  `--verbose --http-port 8080` yields `verbose = "true"` *and*
-  `http-port = "8080"`, not `verbose = "--http-port"`.
-- **Positional tokens (no `--` prefix) are dropped entirely** and do not
-  count toward `len()`.
+- **Last occurrence wins.** `--http-port 8080 --http-port 9090` resolves to `"9090"`.
+- **A boolean flag does not consume the next flag.** `--verbose --http-port 8080` yields `verbose = "true"` *and* `http-port = "8080"`, not `verbose = "--http-port"`.
+- **Positional tokens (no `--` prefix) are dropped entirely** and do not count toward `len()`.
 - A bare `--` with nothing after it (empty key) is ignored.
 
 ## Framework-recognized flags
@@ -45,18 +41,17 @@ directly to the builder, in addition to being stored in
 | ---- | ----------- | ----- | --------------- |
 | `--ip <addr>` | `ApplicationBuilder::with_ip` | Must parse as `std::net::IpAddr`; an invalid value panics (`Invalid IP address format`). | 0.2.0 |
 | `--http-port <port>` | `ApplicationBuilder::with_http_port` | Parsed as `u16` via `get_parsed`; silently ignored if missing or not a valid `u16`. | 0.2.0 |
-| `--https-port <port>` | `ApplicationBuilder::with_https_port` | Same parsing as `--http-port`. HTTPS support itself is not implemented yet (see [Known limitations](#known-limitations-what-not-work)). | 0.2.0 |
+| `--https-port <port>` | `ApplicationBuilder::with_https_port` | Same parsing as `--http-port`. Only takes effect when `--tls-cert` and `--tls-key` are also given (see below); otherwise it is ignored with a warning logged. | 0.2.0 |
+| `--tls-cert <path>` | `ApplicationBuilder::with_https_port` | Path to a PEM-encoded certificate chain (leaf certificate first, then any intermediates). Required alongside `--https-port` and `--tls-key` to enable HTTPS. | 0.2.6 |
+| `--tls-key <path>` | `ApplicationBuilder::with_https_port` | Path to a PEM-encoded private key (PKCS#8, PKCS#1/RSA, or SEC1/EC). Required alongside `--https-port` and `--tls-cert` to enable HTTPS. | 0.2.6 |
 
-Any other flag (e.g. `--verbose`, `--env=dev`, `--worker-threads 4`) is
-parsed and stored, but **not** interpreted by the framework — reading it is
-entirely up to your own code.
+If `--https-port` is given without either `--tls-cert` or `--tls-key`, HTTPS is **not** enabled — a warning is logged and only the HTTP listener starts. A malformed or unreadable certificate/key panics at build time instead of being silently ignored. See `docs/hyper_server.md#https--tls` for full details, including the single-certificate limitation and how to configure HTTPS directly on `ApplicationBuilder` without the command line.
+
+Any other flag (e.g. `--verbose`, `--env=dev`, `--worker-threads 4`) is parsed and stored, but **not** interpreted by the framework — reading it is entirely up to your own code.
 
 ## Reading custom flags in application code
 
-Once `ApplicationBuilder::new()` has run, `StartupAppConfiguration` is
-already registered in `ConfigurationService`, so it can be read the same way
-as any other configuration object — either directly off the builder, or
-later through dependency injection.
+Once `ApplicationBuilder::new()` has run, `StartupAppConfiguration` is already registered in `ConfigurationService`, so it can be read the same way as any other configuration object — either directly off the builder, or later through dependency injection.
 
 ```rust
 use asp_dot_rust::{ApplicationBuilder, configuration::StartupAppConfiguration};
@@ -72,8 +67,7 @@ if cli.contains("verbose") {
 let worker_threads: u32 = cli.get_parsed("worker-threads").unwrap_or(4);
 ```
 
-From an injectable service, using the same `Option<Arc<T>>` pattern
-documented in `docs/dependency_injection.md`:
+From an injectable service, using the same `Option<Arc<T>>` pattern documented in `docs/dependency_injection.md`:
 
 ```rust
 use std::sync::Arc;
@@ -97,8 +91,7 @@ impl WorkerService {
 
 ## Parsing an arbitrary argument list directly
 
-`StartupAppConfiguration::parse` is public so tests (and other custom entry
-points) can parse a source other than `std::env::args()`:
+`StartupAppConfiguration::parse` is public so tests (and other custom entry points) can parse a source other than `std::env::args()`:
 
 ```rust
 use asp_dot_rust::configuration::StartupAppConfiguration;
@@ -110,21 +103,14 @@ assert_eq!(cli.get("http-port"), Some("8080"));
 assert_eq!(cli.get("verbose"), Some("true"));
 ```
 
-In normal application code you should not need this — it exists mainly for
-testing and for callers who want to parse a custom source instead of the
-real process arguments.
+In normal application code you should not need this — it exists mainly for testing and for callers who want to parse a custom source instead of the real process arguments.
 
 ## Known limitations (what not work)
 
-- **No short/combined flags.** Only the long `--flag` form is recognized;
-  there is no `-v`, and boolean flags cannot be combined (`-abc`).
-- **No arrays / repeated values.** A repeated `--key` does not accumulate
-  into a list — only the last occurrence is kept.
-- **No validation of unknown flags.** Any `--something` not recognized by
-  the framework is stored but never flagged as invalid or unused — typos in
-  flag names fail silently.
-- **Invalid `--ip` panics immediately** (`expect("Invalid IP address format")`)
-  rather than falling back to a default or returning an error.
+- **No short/combined flags.** Only the long `--flag` form is recognized; there is no `-v`, and boolean flags cannot be combined (`-abc`).
+- **No arrays / repeated values.** A repeated `--key` does not accumulate into a list — only the last occurrence is kept.
+- **No validation of unknown flags.** Any `--something` not recognized by the framework is stored but never flagged as invalid or unused — typos in flag names fail silently.
+- **Invalid `--ip` panics immediately** (`expect("Invalid IP address format")`) rather than falling back to a default or returning an error.
 
 ## API summary
 
