@@ -27,7 +27,7 @@ fn expand_middleware(input: &ItemImpl) -> Result<TokenStream2, TokenStream> {
     };
     let main_crate = asp_dot_rust_crate_path();
     let invoke = middleware_invoke(invoke, &main_crate)?;
-    let scope = quote! { #main_crate::services::service_provider::service_provider_scope::ServiceProviderScope };
+    let scope = quote! { #main_crate::services::service_provider::ServiceProviderScope };
     let constructor = Constructor {
         trait_name: format_ident!("DependencyInjectableMiddleware"),
         parameters: quote! { service_scope: &#scope, next: #main_crate::middleware::MiddlewareNext },

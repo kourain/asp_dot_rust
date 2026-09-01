@@ -1,14 +1,12 @@
-use std::{collections::HashSet, net::IpAddr, sync::Arc};
-
-use rustls::ServerConfig;
-use tokio::net::TcpListener;
-use tokio_rustls::TlsAcceptor;
-
 use crate::{
     middleware::MiddlewareNext,
     logging::LOGGER,
     services::{configuration::ConfigurationService, routing::RoutingService, service_provider::ServiceProviderScope},
 };
+use rustls::ServerConfig;
+use std::{collections::HashSet, net::IpAddr, sync::Arc};
+use tokio::net::TcpListener;
+use tokio_rustls::TlsAcceptor;
 
 pub(crate) async fn hyper_server_tls(ips: &HashSet<IpAddr>, https_ports: HashSet<u16>, app_service_provider: Arc<ServiceProviderScope>, middleware_pipeline: MiddlewareNext, tls_config: Arc<ServerConfig>) -> std::io::Result<()> {
     let acceptor = TlsAcceptor::from(tls_config);
@@ -27,7 +25,7 @@ pub(crate) async fn hyper_server_tls(ips: &HashSet<IpAddr>, https_ports: HashSet
         let middleware_pipeline = middleware_pipeline.clone();
         async move {
             let listener = TcpListener::bind((ip, port)).await?;
-            LOGGER::info(format!("HTTPS server listening on {}:{}", ip, port));
+            LOGGER::info(format!("HTTPS server listening on {}:{}", if ip.is_ipv4() { "IPv4" } else { "IPv6" }, port));
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {
@@ -56,7 +54,6 @@ pub(crate) async fn hyper_server_tls(ips: &HashSet<IpAddr>, https_ports: HashSet
                                 }
                                 Err(e) => {
                                     LOGGER::warn(format!("TLS handshake failed with {}: {}", client_addr, e));
-                                    return;
                                 }
                             };
                         });

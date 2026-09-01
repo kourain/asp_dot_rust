@@ -13,7 +13,7 @@ use crate::{
     dependency_injection::{DependencyInjectableService, Serv},
     hosted_service::BackGroundService,
     logging::LOGGER,
-    services::{configuration::ConfigurationService, service_provider::service_provider_scope::ServiceProviderScope},
+    services::{configuration::ConfigurationService, service_provider::ServiceProviderScope},
 };
 
 /// Watches the TOML files of `ConfigurationService` and reloads the configuration when they change.

@@ -6,7 +6,7 @@ use crate::{
     http_listener::{hyper_server, hyper_server_tls},
     logging::LOGGER,
     middleware::app_middlewares::ApplicationMiddlewaresBuilder,
-    services::{configuration::ConfigurationService, routing::RoutingServiceBuilder, service_provider::service_provider_scope::ServiceProviderScope},
+    services::{configuration::ConfigurationService, routing::RoutingServiceBuilder, service_provider::ServiceProviderScope},
 };
 
 pub struct Application {

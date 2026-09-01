@@ -1,5 +1,3 @@
-use std::{collections::HashSet, net::IpAddr, path::Path, sync::Arc};
-
 use crate::{
     Application,
     hosted_service::{ApplicationHostedService, ConfigurationWatcherBackgroundService},
@@ -9,9 +7,10 @@ use crate::{
     services::{
         configuration::ConfigurationService,
         routing::{RoutingService, RoutingServiceBuilder},
-        service_provider::{ServiceType, service_provider_scope::ServiceProviderScope},
+        service_provider::{ServiceProviderScope, ServiceType},
     },
 };
+use std::{collections::HashSet, net::IpAddr, path::Path, sync::Arc};
 
 pub struct ApplicationBuilder {
     pub name: String,

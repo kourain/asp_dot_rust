@@ -18,7 +18,7 @@ use asp_dot_rust::{
     logging::{LOGGER, LogCommand, LogLevel},
     macros::{controller_inject, controller_route},
     middleware::{Middleware, MiddlewareNext},
-    services::{configuration::CfgEntryAllowReloadFile::NotAllowed, service_provider::service_provider_scope::ServiceProviderScope},
+    services::{configuration::CfgEntryAllowReloadFile::NotAllowed, service_provider::ServiceProviderScope},
 };
 use http_body_util::{BodyExt, Empty};
 use hyper::body::Bytes;

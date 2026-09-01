@@ -50,7 +50,7 @@ pub(crate) fn derive_injectable_middleware(item: TokenStream) -> TokenStream {
         #[#main_crate::third_party::async_trait::async_trait]
         impl #impl_generics #main_crate::dependency_injection::DependencyInjectableMiddleware for #name #ty_generics #where_clause {
             async fn inject(
-                service_scope: &#main_crate::services::service_provider::service_provider_scope::ServiceProviderScope,
+                service_scope: &#main_crate::services::service_provider::ServiceProviderScope,
                 next: #main_crate::middleware::MiddlewareNext,
             ) -> Self {
                 #configuration

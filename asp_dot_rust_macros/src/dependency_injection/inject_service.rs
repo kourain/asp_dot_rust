@@ -14,7 +14,7 @@ pub(crate) fn expand(item: TokenStream) -> TokenStream {
     let main_crate = asp_dot_rust_crate_path();
     let constructor = Constructor {
         trait_name: format_ident!("DependencyInjectableService"),
-        parameters: quote! { service_scope: &#main_crate::services::service_provider::service_provider_scope::ServiceProviderScope },
+        parameters: quote! { service_scope: &#main_crate::services::service_provider::ServiceProviderScope },
         scope_binding: TokenStream2::new(),
         extra_argument: None,
         options: ConstructorInjectOptions::ALLOW_ASYNC | ConstructorInjectOptions::REGISTER_DEPENDENCIES,
