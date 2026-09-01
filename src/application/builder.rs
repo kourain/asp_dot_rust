@@ -1,9 +1,15 @@
 use std::{collections::HashSet, net::IpAddr, sync::Arc};
 
-#[cfg(debug_assertions)]
-use crate::dependcy_injection::cycle_check::check_dependency_cycles;
 use crate::{
-    Application, hosted_service::ApplicationHostedService, logging::LOGGER, middleware::app_middlewares::ApplicationMiddlewares, services::{configuration::ConfigurationService, service_provider::{ServiceType, service_provider_scope::ServiceProviderScope}}, utils::build_info,
+    Application,
+    hosted_service::ApplicationHostedService,
+    logging::LOGGER,
+    middleware::app_middlewares::ApplicationMiddlewares,
+    services::{
+        configuration::ConfigurationService,
+        service_provider::{ServiceType, service_provider_scope::ServiceProviderScope},
+    },
+    utils::build_info,
 };
 
 pub struct ApplicationBuilder {
@@ -75,10 +81,7 @@ impl ApplicationBuilder {
     pub fn build(self) -> Application {
         let mut service = self.service;
         service.add_instance::<ConfigurationService>(Arc::new(self.configuration), ServiceType::Singleton);
-
-        #[cfg(debug_assertions)]
-        check_dependency_cycles(&service);
-
+        service.check_dependency_cycles();
         Application {
             name: self.name,
             ip: self.ip,
