@@ -1,0 +1,10 @@
+[rate_limit]
+max_requests = 100
+limit_seconds = 60
+block_duration_seconds = 300
+
+[jwt]
+secret_key = "test-secret"
+token_expiration_seconds = 7200
+token_issuer = "asp_dot_rust_tests"
+token_audience = "asp_dot_rust_tests_clients"

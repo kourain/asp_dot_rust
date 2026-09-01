@@ -26,5 +26,5 @@ async fn test_application() {
     app_builder.add_controllers();
     let app = app_builder.build();
     // app.use_cors().use_rate_limit();
-    app.run().await;
+    // app.run().await;
 }

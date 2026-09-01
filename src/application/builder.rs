@@ -27,6 +27,7 @@ impl ApplicationBuilder {
             service: ServiceProviderScope::new(),
             hosted_services: Vec::new(),
         };
+        app.configuration.load_default_toml();
         app.with_args();
         LOGGER::verbose(format!("build at: {}", build_info::get_build_time_utc()));
         LOGGER::info(format!("Initializing application builder: {}", name));

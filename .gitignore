@@ -2,4 +2,3 @@
 /.vscode
 Cargo.lock
 *.log
-*.md
