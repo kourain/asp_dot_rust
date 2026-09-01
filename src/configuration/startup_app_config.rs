@@ -108,10 +108,10 @@ impl ApplicationBuilder {
                 if let Some(key_path) = cli.get("tls-key") {
                     self.with_https_port(port, cert_path, key_path);
                 } else {
-                    panic!("--https-port was specified without a corresponding --tls-key");
+                    LOGGER::warn("--https-port was specified without a corresponding --tls-key");
                 }
             } else {
-                panic!("--https-port was specified without a corresponding --tls-cert");
+                LOGGER::warn("--https-port was specified without a corresponding --tls-cert");
             }
         }
     }
