@@ -31,22 +31,20 @@ impl WrapperService {
 }
 
 pub struct CycleServiceX {
-    pub y: Arc<CycleServiceY>,
 }
 
 #[inject_require]
 impl CycleServiceX {
-    pub fn new(y: Arc<CycleServiceY>) -> Self {
-        CycleServiceX { y }
+    pub fn new(_: Arc<CycleServiceY>) -> Self {
+        CycleServiceX {  }
     }
 }
 pub struct CycleServiceY {
-    pub x: Arc<CycleServiceX>,
 }
 
 #[inject_require]
 impl CycleServiceY {
-    pub fn new(x: Arc<CycleServiceX>) -> Self {
-        CycleServiceY { x }
+    pub fn new(_: Arc<CycleServiceX>) -> Self {
+        CycleServiceY { }
     }
 }
