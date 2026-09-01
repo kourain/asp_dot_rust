@@ -105,7 +105,11 @@ impl ApplicationBuilder {
     }
     fn set_https_port(&mut self, cli: &StartupAppConfiguration) {
         if let Some(port) = cli.get_parsed::<u16>("https-port") {
-            self.with_https_port(port);
+            if let Some(cert_path) = cli.get("tls-cert"){
+                if let Some(key_path) = cli.get("tls-key"){
+                    self.with_https_port(port, cert_path, key_path);
+                }
+            }
         }
     }
 }
