@@ -1,11 +1,11 @@
 /// get real path of a file(ignore case), if the file does not exist, return the original path
 /// Eg: get_real_path("C:\\Users\\User\\documents\\file.txt") -> "C:\\Users\\User\\Documents\\file.txt"
-pub fn get_real_path(path: impl AsRef<str>) -> String {
+pub fn get_real_path(path: impl AsRef<str>) -> Option<String> {
     let path = path.as_ref();
     let path = std::path::Path::new(path);
     match std::fs::canonicalize(path) {
-        Ok(p) => p.to_string_lossy().to_string(),
-        Err(_) => path.to_string_lossy().to_string(),
+        Ok(p) => Some(p.to_string_lossy().to_string()),
+        Err(_) => None,
     }
 }
 

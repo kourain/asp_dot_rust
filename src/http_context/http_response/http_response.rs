@@ -24,7 +24,7 @@ pub struct HttpResponse {
 impl HttpResponse {
     pub(crate) fn new_in_memory() -> Self {
         Self {
-            status_code: http::StatusCode::OK,
+            status_code: http::StatusCode::NO_CONTENT,
             headers: HeaderMap::new(),
             body: Vec::new(),
             version: http::Version::HTTP_11,

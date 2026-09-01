@@ -58,7 +58,7 @@ impl ConfigurationService {
 
     /// add a toml configuration file, if the file does not exist, it will panic
     pub fn add_toml_cfg(&mut self, path: impl AsRef<str>) -> &mut Self {
-        match std::fs::read_to_string(get_real_path(&path)) {
+        match std::fs::read_to_string(get_real_path(&path).unwrap()) {
             Ok(data) => match data.parse() {
                 Ok(toml_table) => self._toml_tables.insert(path.as_ref().to_string(), toml_table),
                 Err(e) => panic!("Failed to parse {} file {}", path.as_ref(), e),
@@ -72,16 +72,23 @@ impl ConfigurationService {
 
     /// add a toml configuration file, if the file does not exist, it will be ignored
     pub fn add_optional_toml_cfg(&mut self, path: impl AsRef<str>) -> &mut Self {
-        match std::fs::read_to_string(get_real_path(&path)) {
-            Ok(data) => match data.parse() {
-                Ok(toml_table) => self._toml_tables.insert(path.as_ref().to_string(), toml_table),
-                Err(e) => panic!("Failed to parse {} file {}", path.as_ref(), e),
-            },
-            Err(_) => {
-                LOGGER::warn(format!("Failed to read configuration file {}", path.as_ref()));
-                None
+        match get_real_path(&path) {
+            Some(value) => {
+                match std::fs::read_to_string(value) {
+                    Ok(data) => match data.parse() {
+                        Ok(toml_table) => self._toml_tables.insert(path.as_ref().to_string(), toml_table),
+                        Err(e) => panic!("Failed to parse {} file {}", path.as_ref(), e),
+                    },
+                    Err(_) => {
+                        LOGGER::warn(format!("Failed to read configuration file {}", path.as_ref()));
+                        None
+                    }
+                };
             }
-        };
+            None => {
+                LOGGER::warn(format!("Failed to find configuration file {}", path.as_ref()));
+            }
+        }
         self
     }
 
@@ -149,4 +156,5 @@ impl ConfigurationService {
             LOGGER::warn(format!("Failed to find [{}] in any loaded toml configuration", key));
         }
         self
-    }}
+    }
+}

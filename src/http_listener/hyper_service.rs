@@ -1,12 +1,13 @@
+use futures::FutureExt;
 use http_body_util::channel::Channel;
 use hyper::{Response, body::Bytes, service::service_fn};
-use std::convert::Infallible;
+use std::{convert::Infallible, panic::AssertUnwindSafe};
 use std::sync::Arc;
 use tokio::net::TcpStream;
 
 use crate::{
     Application,
-    http_context::{HttpContext, AspDotRustHttpHeader, http_request::HttpRequest, http_response::HttpResponse},
+    http_context::{AspDotRustHttpHeader, HttpContext, http_request::HttpRequest, http_response::HttpResponse},
     logging::LOGGER,
 };
 
@@ -60,8 +61,14 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
             // Build HttpContext and run middlewares/handlers
             let mut http_context = HttpContext::new(custom_req, custom_resp, app.service_provider.create_scope());
             http_context.routing_info = routing_service.resolve(&http_context.request.path);
-            app.call_middlewares_async(&mut http_context).await;
-
+            match AssertUnwindSafe(app.call_middlewares_async(&mut http_context)).catch_unwind().await {
+                Ok(()) => {}
+                Err(panic_payload) => {
+                    LOGGER::error(format!("Unhandled panic: {:?}", panic_payload));
+                    http_context.response.status_code = http::StatusCode::INTERNAL_SERVER_ERROR;
+                    http_context.response.body = b"Internal Server Error".to_vec();
+                }
+            }
             // Convert internal response to http::Response<Vec<u8>> and then to hyper::Response<Body>
             let http_response = http_context.response.move_to_http_response();
             let mut builder = Response::builder().status(http_response.status());
