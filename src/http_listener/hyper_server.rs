@@ -24,7 +24,7 @@ pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> 
             let port = *port;
             match TcpListener::bind((ip, port)).await {
                 Ok(listener) => {
-                    LOGGER::info(format!("HTTP server listening on {}:{}", ip, port));
+                    LOGGER::info(format!("HTTP server listening on {}:{}", if ip.is_ipv4() { "IPv4" } else { "IPv6" }, port));
                     listeners.push(listener);
                 }
                 // `[::]` is optional when `0.0.0.0` is served: the host has no IPv6, or `[::]` is the same socket as `0.0.0.0`

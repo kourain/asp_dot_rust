@@ -6,7 +6,7 @@ use crate::{
     http_listener::{hyper_server, hyper_server_tls},
     logging::LOGGER,
     middleware::{app_middlewares::ApplicationMiddlewares},
-    services::service_provider::service_provider_scope::ServiceProviderScope,
+    services::service_provider::ServiceProviderScope,
 };
 
 pub struct Application {
@@ -51,7 +51,7 @@ impl Application {
         };
 
         if let Err(e) = result {
-            LOGGER::error(format!("Server terminated with error: {}", e));
+            panic!("Error occurred while running the application: {}", e);
         }
     }
 }

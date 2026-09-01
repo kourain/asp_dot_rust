@@ -1,6 +1,7 @@
 use crate::http_context::http_request::HttpRequest;
 use crate::http_context::http_response::HttpResponse;
-use crate::services::service_provider::service_provider_scope::ServiceProviderScope;
+use crate::services::service_provider::ServiceProviderScope;
+
 pub struct HttpContext {
     pub request: HttpRequest,
     pub response: HttpResponse,
