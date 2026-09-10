@@ -58,8 +58,8 @@ fn nested_dependency_resolves_through_the_same_scope() {
     );
 }
 
-#[test]
-fn contains_service_reflects_registration_state() {
+#[tokio::test]
+async fn contains_service_reflects_registration_state() {
     let mut builder = ApplicationBuilder::new("TestContainsService");
 
     assert!(!builder.service.contains_service::<CounterService>());

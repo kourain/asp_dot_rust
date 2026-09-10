@@ -1,7 +1,9 @@
 pub mod cycle_check;
 pub mod edge;
+pub mod inject_types;
 
 pub use edge::DependencyEdge;
+pub use inject_types::{Cfg, CfgReload, CfgRequire, Serv};
 pub use inventory;
 
 pub trait DependcyInjectableService: Send + Sync + 'static {

@@ -52,11 +52,39 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
     for arg in &new_fn.sig.inputs {
         if let FnArg::Typed(PatType { ty, .. }) = arg {
             if flag.contains(InjectFlags::SERVICE)
+                && let Some(inner) = extract_wrapper_inner(ty, "Serv")
+            {
+                let arg = quote! { #main_crate_path::dependcy_injection::Serv(service_scope.get_service::<#inner>()) };
+                call_args.push(arg);
+                inner_types.push(inner.clone());
+            } else if flag.contains(InjectFlags::SERVICE)
                 && let Some(inner) = extract_arc_inner(ty)
             {
                 let arg = quote! { service_scope.get_service::<#inner>() };
                 call_args.push(arg);
                 inner_types.push(inner.clone());
+            } else if flag.contains(InjectFlags::CONFIG)
+                && let Some(inner) = extract_wrapper_inner(ty, "CfgRequire")
+            {
+                let arg = quote! { #main_crate_path::dependcy_injection::CfgRequire(configuration_service.require::<#inner>()) };
+                call_args.push(arg);
+                inner_types.push(inner.clone());
+                configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
+            } else if flag.contains(InjectFlags::CONFIG)
+                && let Some(inner) = extract_wrapper_inner(ty, "CfgReload")
+            {
+                let missing_msg = format!("CfgReload<{}> was never registered via configure_reload::<{}>(...)", quote!(#inner), quote!(#inner));
+                let arg = quote! { #main_crate_path::dependcy_injection::CfgReload(configuration_service.get_reload::<#inner>().expect(#missing_msg)) };
+                call_args.push(arg);
+                inner_types.push(inner.clone());
+                configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
+            } else if flag.contains(InjectFlags::CONFIG)
+                && let Some(inner) = extract_wrapper_inner(ty, "Cfg")
+            {
+                let arg = quote! { #main_crate_path::dependcy_injection::Cfg(configuration_service.get::<#inner>()) };
+                call_args.push(arg);
+                inner_types.push(inner.clone());
+                configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
             } else if flag.contains(InjectFlags::CONFIG)
                 && let Some(inner) = extract_option_arc_inner(ty)
             {
@@ -83,7 +111,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                 return syn::Error::new_spanned(
                     ty,
                     format!(
-                        "Field must be std::sync::Arc<T> (Service) or Option<std::sync::Arc<T>> (Configuration), found: {}",
+                        "Field must be Arc<T>/Serv<T> (Service), Option<Arc<T>>/Cfg<T> (optional config), CfgRequire<T> (required config), or CfgReload<T> (reloadable config), found: {}",
                         token_type_to_string(ty)
                     ),
                 )
@@ -143,6 +171,23 @@ fn extract_arc_inner(ty: &Type) -> Option<Type> {
     if let Type::Path(p) = ty {
         let seg = p.path.segments.last()?;
         if seg.ident == "Arc" {
+            if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
+                if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
+                    return Some(inner.clone());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Extract inner type T from a single-generic-arg wrapper like `Serv<T>`,
+/// `Cfg<T>`, `CfgRequire<T>`, `CfgReload<T>` — matched by ident name only,
+/// so it works regardless of which crate path the wrapper was imported from.
+fn extract_wrapper_inner(ty: &Type, wrapper_name: &str) -> Option<Type> {
+    if let Type::Path(p) = ty {
+        let seg = p.path.segments.last()?;
+        if seg.ident == wrapper_name {
             if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
                 if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
                     return Some(inner.clone());
