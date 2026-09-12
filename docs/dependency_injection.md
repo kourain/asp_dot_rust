@@ -71,20 +71,21 @@ builder.service.add_transient::<RandomIdGenerator>(); // new value every call
 
 ## Injecting dependencies into another service
 
-Any parameter of `fn new` typed as `Arc<T>` is resolved as a service
-dependency; the container calls `get_service::<T>()` for you:
+Any parameter of `fn new` typed as `Serv<T>` is resolved as a service
+dependency; the container calls `get_service::<T>()` for you and hands it
+back wrapped as `Serv<T>` (derefs to `Arc<T>`):
 
 ```rust
-use std::sync::Arc;
+use asp_dot_rust::dependcy_injection::Serv;
 use asp_dot_rust::macros::inject_require;
 
 pub struct Ex2Service {
-    ex_service: Arc<ExService>,
+    ex_service: Serv<ExService>,
 }
 
 #[inject_require]
 impl Ex2Service {
-    pub fn new(ex_service: Arc<ExService>) -> Self {
+    pub fn new(ex_service: Serv<ExService>) -> Self {
         Ex2Service { ex_service }
     }
 }
@@ -96,30 +97,50 @@ resolved, or `get_service` panics with `Service <name> not found in scope`.
 
 ## Injecting configuration
 
-A parameter typed as `Option<Arc<T>>` is treated as configuration rather than
-a service, and is resolved from the application's `ConfigurationService`:
+Configuration is resolved from the application's `ConfigurationService`
+rather than the service container, via three wrapper types depending on how
+missing configuration should be handled:
+
+| Wrapper | Resolves via | If never registered |
+| ------- | ------------- | -------------------- |
+| `Cfg<T>` | `ConfigurationService::get::<T>()` | `Cfg(None)` |
+| `CfgRequire<T>` | `ConfigurationService::require::<T>()` | panics |
+| `CfgReload<T>` | `ConfigurationService::get_reload::<T>()` | panics (only valid if `T` was bound with `configure_reload::<T>()`) |
 
 ```rust
+use asp_dot_rust::dependcy_injection::{Cfg, CfgRequire};
+
 #[inject_require]
 impl Ex2Service {
-    pub fn new(config: Option<Arc<AuditConfiguration>>) -> Self {
-        Ex2Service { enabled: config.map(|c| c.enabled).unwrap_or(false) }
+    pub fn new(config: Cfg<AuditConfiguration>) -> Self {
+        Ex2Service { enabled: config.0.map(|c| c.enabled).unwrap_or(false) }
+    }
+
+    // or, if the service cannot function without this configuration:
+    pub fn new_strict(config: CfgRequire<AuditConfiguration>) -> Self {
+        Ex2Service { enabled: config.0.enabled }
     }
 }
 ```
+
+`CfgReload<T>` gives a `Serv`/`Cfg`-style wrapper around `Arc<ArcSwap<T>>`,
+for configuration that can change while the application is running (see
+[`appsetting.md`](./appsetting.md) for `configure_reload::<T>()` /
+`reload_all()`).
 
 ## Injecting into a controller
 
 Controllers use `#[controller_inject_require]` instead of `#[inject_require]`
 and must take an `HttpContextRef` as one of their parameters, in addition to
-any `Arc<T>` service or `Option<Arc<T>>` configuration parameters:
+any `Serv<T>` service or `Cfg<T>`/`CfgRequire<T>`/`CfgReload<T>` configuration
+parameters:
 
 ```rust
 use asp_dot_rust::prelude::*;
 
 #[controller_route("home")]
 impl HomeController {
-    fn new(ctx: HttpContextRef, ex_service: Arc<ExService>) -> Self {
+    fn new(ctx: HttpContextRef, ex_service: Serv<ExService>) -> Self {
         HomeController { ctx, ex_service }
     }
 
@@ -162,6 +183,10 @@ runtime.
 - Only a single implementation per concrete type is supported. Registering
   multiple implementations of the same trait behind `Arc<dyn Trait>` is not
   built in and requires a manual wrapper service.
+- `fn new` parameters must be one of `Serv<T>`, `Cfg<T>`, `CfgRequire<T>`,
+  `CfgReload<T>` (or `HttpContextRef` for controllers). Bare `Arc<T>` /
+  `Option<Arc<T>>` parameters are **no longer recognized** as of 0.2.1 —
+  use `Serv<T>` / `Cfg<T>` instead.
 
 ## API summary
 

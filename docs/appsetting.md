@@ -13,7 +13,7 @@ typed Rust structs on demand via `serde`.
 | Raw file store | `ConfigurationService::add_toml_cfg` | Reads and parses a TOML file into a `toml::Table`, keyed internally by its path. Can be called multiple times to load several files. |
 | Section binding | `ConfigurationService::configure::<T>(section)` | Looks up a top-level table named `section` across every loaded file, deserializes it into `T`, and registers `T` in the same `ConfigurationService` used for regular configuration objects. |
 | Typed config object | any `T: DeserializeOwned + Default + Debug + Clone + Send + Sync + 'static` | The Rust struct a section is bound to, e.g. `RateLimitConfiguration`, `JwtAuthConfiguration`, or an app-defined type. |
-| Consumption | `ConfigurationService::get::<T>()` or `Option<Arc<T>>` constructor parameter | Same retrieval path already used for configuration registered with `insert::<T>()` — see `docs/dependency_injection.md`. |
+| Consumption | `ConfigurationService::get::<T>()` or `Cfg<T>` constructor parameter | Same retrieval path already used for configuration registered with `insert::<T>()` — see `docs/dependency_injection.md`. |
 
 ## Loading a TOML file and binding a section
 
@@ -85,10 +85,11 @@ It auto call when ApplicationBuilder creating
 ## Consuming configuration in an injectable service
 
 Once a section has been bound with `configure::<T>()`, it is retrievable
-through the same `Option<Arc<T>>` constructor-parameter mechanism documented
+through the same `Cfg<T>` constructor-parameter mechanism documented
 in `docs/dependency_injection.md`:
 
 ```rust
+use asp_dot_rust::dependcy_injection::Cfg;
 use asp_dot_rust::macros::inject_require;
 
 pub struct RateLimiterService {
@@ -97,8 +98,8 @@ pub struct RateLimiterService {
 
 #[inject_require]
 impl RateLimiterService {
-    pub fn new(config: Option<Arc<RateLimitConfiguration>>) -> Self {
-        Self { config: config.map(|c| (*c).clone()).unwrap_or_default() }
+    pub fn new(config: Cfg<RateLimitConfiguration>) -> Self {
+        Self { config: config.0.map(|c| (*c).clone()).unwrap_or_default() }
     }
 }
 ```
