@@ -90,13 +90,13 @@ in `docs/dependency_injection.md`:
 
 ```rust
 use asp_dot_rust::dependcy_injection::Cfg;
-use asp_dot_rust::macros::inject_require;
+use asp_dot_rust::macros::inject;
 
 pub struct RateLimiterService {
     config: RateLimitConfiguration,
 }
 
-#[inject_require]
+#[inject]
 impl RateLimiterService {
     pub fn new(config: Cfg<RateLimitConfiguration>) -> Self {
         Self { config: config.0.map(|c| (*c).clone()).unwrap_or_default() }

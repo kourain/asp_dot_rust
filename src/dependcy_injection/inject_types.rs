@@ -3,7 +3,7 @@ use std::{ops::Deref, sync::Arc};
 
 /// Injected service: resolved via `ServiceProviderScope::get_service::<T>()`.
 ///
-/// The tuple field is `pub` only so the `#[inject_require]` macro can
+/// The tuple field is `pub` only so the `#[inject]` macro can
 /// construct `Serv(...)` from generated code in the caller's crate; prefer
 /// `.unwrap()` (or the `Deref` to `Arc<T>`) over reaching into `.0` directly.
 pub struct Serv<T: ?Sized>(pub Arc<T>);
@@ -23,7 +23,7 @@ impl<T: ?Sized> Clone for Serv<T> {
 /// Optional configuration: resolves to `None` if the type was never
 /// registered in `ConfigurationService`.
 ///
-/// The tuple field is `pub` only so the `#[inject_require]` macro can
+/// The tuple field is `pub` only so the `#[inject]` macro can
 /// construct `Cfg(...)` from generated code in the caller's crate; prefer
 /// `.unwrap()` over reaching into `.0` directly.
 pub struct Cfg<T>(pub Option<Arc<T>>);
@@ -58,7 +58,7 @@ impl<T> Clone for Cfg<T> {
 /// Required configuration: panics at construction time if the type was never
 /// registered in `ConfigurationService`.
 ///
-/// The tuple field is `pub` only so the `#[inject_require]` macro can
+/// The tuple field is `pub` only so the `#[inject]` macro can
 /// construct `CfgRequire(...)` from generated code in the caller's crate;
 /// prefer `.unwrap()` over reaching into `.0` directly.
 pub struct CfgRequire<T>(pub Arc<T>);
@@ -84,7 +84,7 @@ impl<T> Clone for CfgRequire<T> {
 /// whenever `ConfigurationService::reload_all()` re-reads the TOML file(s)
 /// this section was bound from via `configure_reload::<T>()`.
 ///
-/// The tuple field is `pub` only so the `#[inject_require]` macro can
+/// The tuple field is `pub` only so the `#[inject]` macro can
 /// construct `CfgReload(...)` from generated code in the caller's crate;
 /// prefer `.unwrap()` over reaching into `.0` directly.
 pub struct CfgReload<T>(pub Arc<ArcSwap<T>>);
