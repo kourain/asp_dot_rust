@@ -1,4 +1,4 @@
-use crate::{Application, configuration::RequestTimeoutConfiguration, http_context::HttpContext, logging::LOGGER, macros::inject_require, middleware::Middleware};
+use crate::{Application, configuration::RequestTimeoutConfiguration, dependcy_injection::CfgRequire, http_context::HttpContext, logging::LOGGER, macros::inject_require, middleware::Middleware};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -7,7 +7,7 @@ pub struct RequestTimeoutMiddleware {
 }
 #[inject_require]
 impl RequestTimeoutMiddleware {
-    fn new(request_timeout_cfg: Option<Arc<RequestTimeoutConfiguration>>) -> RequestTimeoutMiddleware {
+    fn new(request_timeout_cfg: CfgRequire<RequestTimeoutConfiguration>) -> RequestTimeoutMiddleware {
         Self {
             request_timeout_config: request_timeout_cfg.unwrap(),
         }

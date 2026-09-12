@@ -120,7 +120,7 @@ pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```no_run
 /// #[injectable_service]
 /// impl ExampleService1 {
-///     fn new(service2: Arc<Service2>, service3: Arc<Service3>, configuration1: Option<Arc<Configuration1>>) -> Self
+///     fn new(service2: Serv<Service2>, service3: Serv<Service3>, configuration1: Cfg<Configuration1>) -> Self
 ///     {
 ///         //your logic to create ExampleService1
 ///     }
@@ -139,7 +139,7 @@ pub fn inject_require(args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```no_run
 /// #[controller_route("")]
 /// impl Controller1 {
-///     fn new(http_context: HttpContextRef,service2: Arc<Service2>, service3: Arc<Service3>, configuration1: Option<Arc<Configuration1>>) -> Self
+///     fn new(http_context: HttpContextRef,service2: Serv<Service2>, service3: Serv<Service3>, configuration1: Cfg<Configuration1>) -> Self
 ///     {
 ///         //your logic to create Controller1
 ///     }

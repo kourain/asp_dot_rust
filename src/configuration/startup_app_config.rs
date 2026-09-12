@@ -75,7 +75,7 @@ impl ApplicationBuilder {
     /// this run. Recognized flags (eg: `--ip`, `--http-port`, `--https-port`) are
     /// applied directly to the builder; the full parsed set is stored in
     /// `ConfigurationService` as `StartupAppConfiguration` so any service can
-    /// read custom flags via `Option<Arc<StartupAppConfiguration>>`.
+    /// read custom flags via `Cfg<StartupAppConfiguration>`.
     pub(crate) fn with_args(&mut self) -> &mut Self {
         let args: Vec<String> = env::args().skip(1).collect();
         if !self.configuration.contains::<StartupAppConfiguration>() {

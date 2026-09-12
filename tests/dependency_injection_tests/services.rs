@@ -1,7 +1,7 @@
-use std::sync::{Arc, atomic::{AtomicU32, Ordering}};
+use std::sync::atomic::{AtomicU32, Ordering};
 
+use asp_dot_rust::dependcy_injection::Serv;
 use asp_dot_rust_macros::inject_require;
-
 
 /// A simple service with no dependencies.
 pub struct CounterService {
@@ -20,31 +20,29 @@ impl CounterService {
 
 /// A service that depends on `CounterService`
 pub struct WrapperService {
-    pub inner: Arc<CounterService>,
+    pub inner: Serv<CounterService>,
 }
 
 #[inject_require]
 impl WrapperService {
-    pub fn new(inner: Arc<CounterService>) -> Self {
-        WrapperService { inner }
+    pub fn new(inner: Serv<CounterService>) -> Self {
+        WrapperService { inner: inner }
     }
 }
 
-pub struct CycleServiceX {
-}
+pub struct CycleServiceX {}
 
 #[inject_require]
 impl CycleServiceX {
-    pub fn new(_: Arc<CycleServiceY>) -> Self {
-        CycleServiceX {  }
+    pub fn new(_: Serv<CycleServiceY>) -> Self {
+        CycleServiceX {}
     }
 }
-pub struct CycleServiceY {
-}
+pub struct CycleServiceY {}
 
 #[inject_require]
 impl CycleServiceY {
-    pub fn new(_: Arc<CycleServiceX>) -> Self {
-        CycleServiceY { }
+    pub fn new(_: Serv<CycleServiceX>) -> Self {
+        CycleServiceY {}
     }
 }
