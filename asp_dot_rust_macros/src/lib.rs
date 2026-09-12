@@ -128,7 +128,7 @@ pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn inject_require(args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
     let flag = InjectFlags::CONFIG | InjectFlags::SERVICE;
     dependcy_injection::inject_impliment::inject(args, item, flag)
 }
@@ -147,7 +147,7 @@ pub fn inject_require(args: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn controller_inject_require(args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn controller_inject(args: TokenStream, item: TokenStream) -> TokenStream {
     let flag = InjectFlags::SERVICE | InjectFlags::CONFIG | InjectFlags::INJECT_CONTROLLER;
     dependcy_injection::inject_impliment::inject(args, item, flag)
 }

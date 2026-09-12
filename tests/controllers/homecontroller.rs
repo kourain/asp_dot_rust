@@ -3,7 +3,7 @@ use asp_dot_rust::{
     controller::{ActionResult, get, post, put, route},
     http_context::HttpContextRef,
     logging::LOGGER,
-    macros::{controller_inject_require, controller_route},
+    macros::{controller_inject, controller_route},
 };
 
 api_controller!(pub HomeController {
@@ -11,7 +11,7 @@ api_controller!(pub HomeController {
 });
 
 #[controller_route("")]
-#[controller_inject_require]
+#[controller_inject]
 impl HomeController {
     fn new(http_context: HttpContextRef) -> Self {
         Self {

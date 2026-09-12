@@ -1,14 +1,14 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use asp_dot_rust::dependcy_injection::Serv;
-use asp_dot_rust_macros::inject_require;
+use asp_dot_rust_macros::inject;
 
 /// A simple service with no dependencies.
 pub struct CounterService {
     pub id: u32,
 }
 
-#[inject_require]
+#[inject]
 impl CounterService {
     pub fn new() -> Self {
         static COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -23,7 +23,7 @@ pub struct WrapperService {
     pub inner: Serv<CounterService>,
 }
 
-#[inject_require]
+#[inject]
 impl WrapperService {
     pub fn new(inner: Serv<CounterService>) -> Self {
         WrapperService { inner: inner }
@@ -32,7 +32,7 @@ impl WrapperService {
 
 pub struct CycleServiceX {}
 
-#[inject_require]
+#[inject]
 impl CycleServiceX {
     pub fn new(_: Serv<CycleServiceY>) -> Self {
         CycleServiceX {}
@@ -40,7 +40,7 @@ impl CycleServiceX {
 }
 pub struct CycleServiceY {}
 
-#[inject_require]
+#[inject]
 impl CycleServiceY {
     pub fn new(_: Serv<CycleServiceX>) -> Self {
         CycleServiceY {}

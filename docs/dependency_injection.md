@@ -11,21 +11,21 @@ controllers.
 | Concept | Type | Purpose |
 | ------- | ---- | ------- |
 | Container | `ServiceProviderScope` | Holds every registered service and resolves them by type. Exposed as the public `service` field on `ApplicationBuilder`. |
-| Injectable service | `#[inject_require]` on an `impl` block | Marks a type as constructible by the container and records its dependency edges for cycle detection. |
-| Injectable controller | `#[controller_inject_require]` on an `impl` block | Same as above, but for controllers, which additionally may receive an `HttpContextRef`. |
+| Injectable service | `#[inject]` on an `impl` block | Marks a type as constructible by the container and records its dependency edges for cycle detection. |
+| Injectable controller | `#[controller_inject]` on an `impl` block | Same as above, but for controllers, which additionally may receive an `HttpContextRef`. |
 | Lifetime | `ServiceType::{Singleton, Scope, Transient}` | Controls how long a resolved instance is reused. |
 
 ## Registering a service
 
 ```rust
 use std::sync::Arc;
-use asp_dot_rust::macros::inject_require;
+use asp_dot_rust::macros::inject;
 
 pub struct ExService {
     prefix: String,
 }
 
-#[inject_require]
+#[inject]
 impl ExService {
     pub fn new() -> Self {
         Self { prefix: "Hello".into() }
@@ -77,13 +77,13 @@ back wrapped as `Serv<T>` (derefs to `Arc<T>`):
 
 ```rust
 use asp_dot_rust::dependcy_injection::Serv;
-use asp_dot_rust::macros::inject_require;
+use asp_dot_rust::macros::inject;
 
 pub struct Ex2Service {
     ex_service: Serv<ExService>,
 }
 
-#[inject_require]
+#[inject]
 impl Ex2Service {
     pub fn new(ex_service: Serv<ExService>) -> Self {
         Ex2Service { ex_service }
@@ -110,7 +110,7 @@ missing configuration should be handled:
 ```rust
 use asp_dot_rust::dependcy_injection::{Cfg, CfgRequire};
 
-#[inject_require]
+#[inject]
 impl Ex2Service {
     pub fn new(config: Cfg<AuditConfiguration>) -> Self {
         Ex2Service { enabled: config.0.map(|c| c.enabled).unwrap_or(false) }
@@ -130,7 +130,7 @@ for configuration that can change while the application is running (see
 
 ## Injecting into a controller
 
-Controllers use `#[controller_inject_require]` instead of `#[inject_require]`
+Controllers use `#[controller_inject]` instead of `#[inject]`
 and must take an `HttpContextRef` as one of their parameters, in addition to
 any `Serv<T>` service or `Cfg<T>`/`CfgRequire<T>`/`CfgReload<T>` configuration
 parameters:
@@ -153,7 +153,7 @@ impl HomeController {
 
 ## Circular dependency detection
 
-Every `#[inject_require]`/`#[controller_inject_require]` impl registers its
+Every `#[inject]`/`#[controller_inject]` impl registers its
 dependency edges globally via `inventory::submit!`. `ApplicationBuilder::build()`
 walks this graph — restricted to the types actually registered in that
 builder's scope — and panics with the offending path if it finds a cycle,

@@ -1,6 +1,6 @@
 // --- Circular dependency detection -----------------------------------------
 //
-// `CycleServiceX` depends on `CycleServiceY` and vice-versa. `#[inject_require]`
+// `CycleServiceX` depends on `CycleServiceY` and vice-versa. `#[inject]`
 // records this edge via `inventory::submit!`, and `ServiceProviderScope::check_dependency_cycles`
 // (invoked from `ApplicationBuilder::build`) must detect and panic on it.
 // Since the fix in commit `a37438f`, this check runs in every build profile,

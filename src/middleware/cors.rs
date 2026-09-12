@@ -3,7 +3,7 @@ use crate::{
     configuration::CorsConfiguration,
     dependcy_injection::{Cfg, Serv},
     http_context::{HttpContext, http_header::AspDotRustHttpHeader},
-    macros::inject_require,
+    macros::inject,
     middleware::Middleware,
 };
 use http::header;
@@ -13,7 +13,7 @@ pub struct CorsMiddleware {
     routing_service: Serv<crate::services::routing::RoutingService>,
     configuration: Arc<CorsConfiguration>,
 }
-#[inject_require]
+#[inject]
 impl CorsMiddleware {
     pub fn new(routing_service: Serv<crate::services::routing::RoutingService>, configuration: Cfg<CorsConfiguration>) -> Self {
         Self {
