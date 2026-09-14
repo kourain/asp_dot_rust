@@ -81,31 +81,41 @@ impl ConfigurationService {
 
     /// add a toml configuration file, if the file does not exist, it will panic
     pub fn add_toml_cfg(&mut self, path: impl AsRef<str>) -> &mut Self {
-        match std::fs::read_to_string(get_real_path(&path).unwrap()) {
-            Ok(data) => match data.parse() {
-                Ok(toml_table) => {
-                    self._toml_tables.write().unwrap().insert(path.as_ref().to_string(), toml_table);
+        match get_real_path(&path) {
+            Some(path) => match std::fs::read_to_string(&path) {
+                Ok(data) => match data.parse() {
+                    Ok(toml_table) => {
+                        self._toml_tables.write().unwrap().insert(path, toml_table);
+                    }
+                    Err(e) => panic!("Failed to parse {} file {}", path, e),
+                },
+                Err(_) => {
+                    panic!("Failed to read configuration file {}", path);
                 }
-                Err(e) => panic!("Failed to parse {} file {}", path.as_ref(), e),
             },
-            Err(_) => {
+            None => {
                 panic!("Failed to read configuration file {}", path.as_ref());
             }
-        };
+        }
         self
     }
 
     /// add a toml configuration file, if the file does not exist, it will be ignored
     pub fn add_optional_toml_cfg(&mut self, path: impl AsRef<str>) -> &mut Self {
-        match std::fs::read_to_string(get_real_path(&path)) {
-            Ok(data) => match data.parse() {
-                Ok(toml_table) => {
-                    self._toml_tables.write().unwrap().insert(path.as_ref().to_string(), toml_table);
+        match get_real_path(&path) {
+            Some(path) => match std::fs::read_to_string(&path) {
+                Ok(data) => match data.parse() {
+                    Ok(toml_table) => {
+                        self._toml_tables.write().unwrap().insert(path, toml_table);
+                    }
+                    Err(e) => panic!("Failed to parse {} file {}", path, e),
+                },
+                Err(_) => {
+                    LOGGER::warn(format!("Failed to read configuration file {}", path));
                 }
-                Err(e) => panic!("Failed to parse {} file {}", path.as_ref(), e),
             },
-            Err(_) => {
-                LOGGER::warn(format!("Failed to read configuration file {}", path.as_ref()));
+            None => {
+                LOGGER::warn(format!("Failed to find configuration file {}", path.as_ref()));
             }
         };
         self
@@ -236,14 +246,17 @@ impl ConfigurationService {
         {
             let mut tables = self._toml_tables.write().unwrap();
             for path in paths {
-                match std::fs::read_to_string(get_real_path(&path)) {
-                    Ok(data) => match data.parse::<toml::Table>() {
-                        Ok(table) => {
-                            tables.insert(path, table);
-                        }
-                        Err(e) => LOGGER::warn(format!("Skipped reload of {}: failed to parse ({})", path, e)),
+                match get_real_path(&path) {
+                    Some(real_path) => match std::fs::read_to_string(&real_path) {
+                        Ok(data) => match data.parse::<toml::Table>() {
+                            Ok(table) => {
+                                tables.insert(path, table);
+                            }
+                            Err(e) => LOGGER::warn(format!("Skipped reload of {}: failed to parse ({})", path, e)),
+                        },
+                        Err(_) => LOGGER::warn(format!("Skipped reload of {}: failed to read", path)),
                     },
-                    Err(_) => LOGGER::warn(format!("Skipped reload of {}: failed to read", path)),
+                    None => LOGGER::warn(format!("Skipped reload of {}: failed to find file", path)),
                 }
             }
         }
