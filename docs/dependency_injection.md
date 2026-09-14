@@ -76,7 +76,7 @@ dependency; the container calls `get_service::<T>()` for you and hands it
 back wrapped as `Serv<T>` (derefs to `Arc<T>`):
 
 ```rust
-use asp_dot_rust::dependcy_injection::Serv;
+use asp_dot_rust::dependency_injection::Serv;
 use asp_dot_rust::macros::inject;
 
 pub struct Ex2Service {
@@ -95,29 +95,40 @@ Both `ExService` and `Ex2Service` must be registered
 (`add_singleton`/`add_scope`/`add_transient`) before `Ex2Service` is
 resolved, or `get_service` panics with `Service <name> not found in scope`.
 
-### Shortcut: `#[derive(DependcyInjectableService)]`
+### Shortcut: `#[derive(DependencyInjectableService)]`
 
 When every dependency a service needs is already a plain struct field typed
 `Serv<T>`, `Cfg<T>`, `CfgRequire<T>`, or `CfgReload<T>`, `fn new` can be
 skipped entirely:
 
 ```rust
-use asp_dot_rust::dependcy_injection::Serv;
-use asp_dot_rust_macros::DependcyInjectableService;
+use asp_dot_rust::dependency_injection::Serv;
+use asp_dot_rust_macros::DependencyInjectableService;
 
-#[derive(DependcyInjectableService)]
+#[derive(DependencyInjectableService)]
 pub struct Ex2Service {
     ex_service: Serv<ExService>,
 }
 ```
 
-This expands to the same `impl DependcyInjectableService` (and dependency
+This expands to the same `impl DependencyInjectableService` (and dependency
 edge registration) that `#[inject]` would generate for a `fn new`
 that just does `Self { ex_service }`. It only supports named-field structs
-(or unit structs) where every field is one of the four wrapper types; a
-field needing custom construction (a computed value, a non-DI default, a
-dependency the constructor needs but doesn't store) will be Default::default(), if it didn't impl Default trait, you must
-fall back to `#[inject]` on a hand-written `fn new` for those cases.
+(or unit structs). A field needing custom construction (a computed value, a
+non-DI default, a dependency the constructor needs but doesn't store) is not
+one of the four wrapper types, so it is built with `Default::default()`
+instead — a compile error if the field's type doesn't implement `Default`.
+
+This fallback is never silent: every field defaulted this way emits a
+compiler **warning** (via the `deprecated` lint) pointing at the field, e.g.:
+
+```text
+warning: use of deprecated function `Ex2Service::__di_default_field_marker_Ex2Service_1`: field `note` on `Ex2Service` is not Serv<T>, Cfg<T>, CfgRequire<T>, or CfgReload<T>; #[derive(DependencyInjectableService)] defaulted it via `Default::default()`. Use #[inject] on a hand-written `fn new` instead if this field needs real construction.
+```
+
+Treat that warning as a prompt to double-check the field is intentionally
+non-DI (and not, say, a typo'd `Serve<T>`) — fall back to `#[inject]` on a
+hand-written `fn new` if it needs real construction logic.
 
 ## Injecting configuration
 
@@ -132,7 +143,7 @@ missing configuration should be handled:
 | `CfgReload<T>` | `ConfigurationService::get_reload::<T>()` | panics (only valid if `T` was bound with `configure_reload::<T>()`) |
 
 ```rust
-use asp_dot_rust::dependcy_injection::{Cfg, CfgRequire};
+use asp_dot_rust::dependency_injection::{Cfg, CfgRequire};
 
 #[inject]
 impl Ex2Service {

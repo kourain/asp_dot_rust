@@ -1,10 +1,10 @@
 mod controller;
-mod dependcy_injection;
+mod dependency_injection;
 mod utils;
 
 use proc_macro::TokenStream;
 
-use crate::dependcy_injection::flags::InjectFlags;
+use crate::dependency_injection::flags::InjectFlags;
 
 /// using the controller_route attribute to define a controller and its routes
 ///
@@ -130,7 +130,7 @@ pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
     let flag = InjectFlags::CONFIG | InjectFlags::SERVICE;
-    dependcy_injection::inject_impliment::inject(args, item, flag)
+    dependency_injection::inject_impliment::inject(args, item, flag)
 }
 
 /// inject httpcontext service and config <br>
@@ -149,16 +149,16 @@ pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn controller_inject(args: TokenStream, item: TokenStream) -> TokenStream {
     let flag = InjectFlags::SERVICE | InjectFlags::CONFIG | InjectFlags::INJECT_CONTROLLER;
-    dependcy_injection::inject_impliment::inject(args, item, flag)
+    dependency_injection::inject_impliment::inject(args, item, flag)
 }
 
-/// Derive `DependcyInjectableService` directly from struct fields, when
+/// Derive `DependencyInjectableService` directly from struct fields, when
 /// every field is already `Serv<T>`, `Cfg<T>`, `CfgRequire<T>`, or
 /// `CfgReload<T>`. No `fn new` needed. <br>
 /// Example usage:
 ///
 /// ```no_run
-/// #[derive(DependcyInjectableService)]
+/// #[derive(DependencyInjectableService)]
 /// pub struct Ex2Service {
 ///     ex_service: Serv<ExService>,
 ///     audit_cfg: Cfg<AuditConfiguration>,
@@ -167,7 +167,7 @@ pub fn controller_inject(args: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// If a field needs custom construction (not a straight injected value),
 /// use `#[inject]` on a hand-written `fn new` instead.
-#[proc_macro_derive(DependcyInjectableService)]
-pub fn derive_dependcy_injectable_service(item: TokenStream) -> TokenStream {
-    dependcy_injection::derive_service::derive_injectable_service(item)
+#[proc_macro_derive(DependencyInjectableService)]
+pub fn derive_dependency_injectable_service(item: TokenStream) -> TokenStream {
+    dependency_injection::derive_service::derive_injectable_service(item)
 }

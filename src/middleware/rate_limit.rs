@@ -1,7 +1,7 @@
 use crate::{
     Application,
     configuration::RateLimitConfiguration,
-    dependcy_injection::DependcyInjectableService,
+    dependency_injection::DependencyInjectableService,
     http_context::HttpContext,
     middleware::{Middleware, MiddlewareNext},
     services::configuration::ConfigurationService,
@@ -15,7 +15,7 @@ pub struct RateLimitMiddleware {
     limit_seconds: u32,
     block_duration_seconds: u32,
 }
-impl DependcyInjectableService for RateLimitMiddleware {
+impl DependencyInjectableService for RateLimitMiddleware {
     fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
         let config_service = _service_scope.get_service::<ConfigurationService>();
         let config = config_service.get::<RateLimitConfiguration>().unwrap_or_default();

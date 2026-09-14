@@ -3,7 +3,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 use crate::{
     ApplicationBuilder,
     controller::ActionRoute,
-    dependcy_injection::DependcyInjectableController,
+    dependency_injection::DependencyInjectableController,
     logging::LOGGER,
     services::{routing::RoutingService, service_provider::ServiceType},
 };
@@ -31,7 +31,7 @@ pub(crate) fn bootstrap_registered_controllers() {
 
 pub fn register_controller<T: 'static>(root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
 where
-    T: DependcyInjectableController + crate::controller::Routing + Send + 'static,
+    T: DependencyInjectableController + crate::controller::Routing + Send + 'static,
 {
     let mut registry = CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry");
     registry.register_controller::<T>(root_route, action_routes)

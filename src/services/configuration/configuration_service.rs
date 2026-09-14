@@ -1,4 +1,4 @@
-use crate::{dependcy_injection::DependcyInjectableService, logging::LOGGER, utils::get_real_path};
+use crate::{dependency_injection::DependencyInjectableService, logging::LOGGER, utils::get_real_path};
 use arc_swap::ArcSwap;
 use serde::de::DeserializeOwned;
 use std::{
@@ -26,7 +26,7 @@ pub struct ConfigurationService {
     _toml_tables: RwLock<HashMap<String, toml::Table>>,
     _reload_sections: RwLock<HashMap<TypeId, ReloadEntry>>,
 }
-impl DependcyInjectableService for ConfigurationService {
+impl DependencyInjectableService for ConfigurationService {
     fn inject(_service_provider: &crate::services::service_provider::ServiceProviderScope) -> Self {
         Self::new()
     }

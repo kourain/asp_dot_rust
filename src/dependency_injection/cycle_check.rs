@@ -3,7 +3,7 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
-use crate::{dependcy_injection::edge::DependencyEdge, logging::LOGGER, services::service_provider::ServiceProviderScope};
+use crate::{dependency_injection::edge::DependencyEdge, logging::LOGGER, services::service_provider::ServiceProviderScope};
 
 impl ServiceProviderScope {
     pub fn check_dependency_cycles(self: &ServiceProviderScope) {
@@ -38,8 +38,8 @@ impl ServiceProviderScope {
         for &start in graph.keys() {
             if !visited.contains(&start) {
                 if let Some(cycle) = Self::dfs_detect(start, &graph, &mut visited, &mut stack, &mut path) {
-                    let dependcy_path = cycle.iter().map(|id| graph.get(id).map(|(n, _)| *n).unwrap_or("?")).collect::<Vec<_>>().join(" -> ");
-                    panic!("Found circular dependency: {}", dependcy_path);
+                    let dependency_path = cycle.iter().map(|id| graph.get(id).map(|(n, _)| *n).unwrap_or("?")).collect::<Vec<_>>().join(" -> ");
+                    panic!("Found circular dependency: {}", dependency_path);
                 }
             }
         }

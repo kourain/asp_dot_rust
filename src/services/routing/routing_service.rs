@@ -1,6 +1,6 @@
 use crate::{
     controller::{ActionRoute, Routing},
-    dependcy_injection::{DependcyInjectableController, DependcyInjectableService},
+    dependency_injection::{DependencyInjectableController, DependencyInjectableService},
     http_context::HttpContext,
     services::routing::ControllerCollect,
 };
@@ -37,7 +37,7 @@ pub struct RoutingService {
     _registered_controllers: HashSet<ControllerCollect>,
 }
 
-impl DependcyInjectableService for RoutingService {
+impl DependencyInjectableService for RoutingService {
     fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
     where
         Self: Sized,
@@ -48,7 +48,7 @@ impl DependcyInjectableService for RoutingService {
 impl RoutingService {
     pub fn register_controller<T: 'static>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
     where
-        T: DependcyInjectableController + Routing + Send + 'static,
+        T: DependencyInjectableController + Routing + Send + 'static,
     {
         for action in action_routes {
             let route = Self::join_route(root_route, action.route);
@@ -84,7 +84,7 @@ impl RoutingService {
 
     pub fn add_route<T: 'static>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str)
     where
-        T: DependcyInjectableController + Routing + Send + 'static,
+        T: DependencyInjectableController + Routing + Send + 'static,
     {
         let controller_type_id = TypeId::of::<T>();
         let route_info = ControllerInfo {

@@ -5,7 +5,7 @@ pub(crate) mod cors;
 pub(crate) mod rate_limit;
 pub(crate) mod request_timeout;
 pub(crate) mod static_file;
-use crate::dependcy_injection::DependcyInjectableService;
+use crate::dependency_injection::DependencyInjectableService;
 use crate::http_context::HttpContext;
 use async_trait::async_trait;
 use core::any::type_name;
@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 pub type MiddlewareNext = Arc<dyn for<'a> Fn(&'a mut HttpContext) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> + Send + Sync>;
 #[async_trait]
-pub trait Middleware: DependcyInjectableService + Send + Sync {
+pub trait Middleware: DependencyInjectableService + Send + Sync {
     async fn invoke_async(&self, http_context: &mut HttpContext, next: MiddlewareNext);
     fn type_name(&self) -> &'static str {
         type_name::<Self>()
@@ -35,7 +35,7 @@ macro_rules! middleware {
                 $next: $crate::middleware::MiddlewareNext,
             ) $body
         }
-        impl $crate::dependcy_injection::DependcyInjectableService for $name {
+        impl $crate::dependency_injection::DependencyInjectableService for $name {
             fn inject(
                 _service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope,
             ) -> Self {

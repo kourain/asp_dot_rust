@@ -1,6 +1,7 @@
 use crate::{
     Application,
     configuration::StaticFileConfiguration,
+    dependency_injection::DependencyInjectableService,
     http_context::http_header::AspDotRustHttpHeader,
     macros::inject_require,
     middleware::{self, Middleware},

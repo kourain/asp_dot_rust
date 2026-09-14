@@ -89,7 +89,7 @@ through the same `Cfg<T>` constructor-parameter mechanism documented
 in `docs/dependency_injection.md`:
 
 ```rust
-use asp_dot_rust::dependcy_injection::Cfg;
+use asp_dot_rust::dependency_injection::Cfg;
 use asp_dot_rust::macros::inject;
 
 pub struct RateLimiterService {
