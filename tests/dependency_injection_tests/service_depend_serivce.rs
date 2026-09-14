@@ -10,9 +10,9 @@ use asp_dot_rust::ApplicationBuilder;
 use crate::{dependency_injection_tests::services::*};
 
 
-#[test]
+#[tokio::test]
 #[should_panic(expected = "Found circular dependency")]
-fn build_panics_on_circular_dependency() {
+async fn build_panics_on_circular_dependency() {
     let mut builder = ApplicationBuilder::new("TestCircularDependency");
     builder.service.add_singleton::<CycleServiceX>();
     builder.service.add_singleton::<CycleServiceY>();
@@ -22,8 +22,8 @@ fn build_panics_on_circular_dependency() {
     let _ = builder.build();
 }
 
-#[test]
-fn build_succeeds_when_dependency_graph_has_no_cycle() {
+#[tokio::test]
+async fn build_succeeds_when_dependency_graph_has_no_cycle() {
     let mut builder = ApplicationBuilder::new("TestAcyclicDependency");
     builder.service.add_singleton::<CounterService>();
     builder.service.add_singleton::<WrapperService>();
