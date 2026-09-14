@@ -1,20 +1,20 @@
 use crate::{
     Application,
     configuration::StaticFileConfiguration,
+    dependency_injection::Cfg,
     http_context::http_header::AspDotRustHttpHeader,
-    macros::inject_require,
+    macros::inject,
     middleware::{self, Middleware},
     utils,
 };
-use std::sync::Arc;
 
 pub struct StaticFileMiddleware {
     static_dir_path: std::path::PathBuf,
 }
 
-#[inject_require]
+#[inject]
 impl StaticFileMiddleware {
-    pub fn new(config: Option<Arc<StaticFileConfiguration>>) -> Self {
+    pub fn new(config: Cfg<StaticFileConfiguration>) -> Self {
         let config = config.unwrap_or_default();
         let static_dir_path = std::path::Path::new(&config.static_files_directory);
         if !static_dir_path.is_dir() {

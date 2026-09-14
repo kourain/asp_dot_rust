@@ -1,10 +1,10 @@
 mod controller;
-mod dependcy_injection;
+mod dependency_injection;
 mod utils;
 
 use proc_macro::TokenStream;
 
-use crate::dependcy_injection::flags::InjectFlags;
+use crate::dependency_injection::flags::InjectFlags;
 
 /// using the controller_route attribute to define a controller and its routes
 ///
@@ -120,7 +120,7 @@ pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```no_run
 /// #[injectable_service]
 /// impl ExampleService1 {
-///     fn new(service2: Arc<Service2>, service3: Arc<Service3>, configuration1: Option<Arc<Configuration1>>) -> Self
+///     fn new(service2: Serv<Service2>, service3: Serv<Service3>, configuration1: Cfg<Configuration1>) -> Self
 ///     {
 ///         //your logic to create ExampleService1
 ///     }
@@ -128,9 +128,9 @@ pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn inject_require(args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
     let flag = InjectFlags::CONFIG | InjectFlags::SERVICE;
-    dependcy_injection::inject_impliment::inject(args, item, flag)
+    dependency_injection::inject_impliment::inject(args, item, flag)
 }
 
 /// inject httpcontext service and config <br>
@@ -139,7 +139,7 @@ pub fn inject_require(args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```no_run
 /// #[controller_route("")]
 /// impl Controller1 {
-///     fn new(http_context: HttpContextRef,service2: Arc<Service2>, service3: Arc<Service3>, configuration1: Option<Arc<Configuration1>>) -> Self
+///     fn new(http_context: HttpContextRef,service2: Serv<Service2>, service3: Serv<Service3>, configuration1: Cfg<Configuration1>) -> Self
 ///     {
 ///         //your logic to create Controller1
 ///     }
@@ -147,7 +147,27 @@ pub fn inject_require(args: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn controller_inject_require(args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn controller_inject(args: TokenStream, item: TokenStream) -> TokenStream {
     let flag = InjectFlags::SERVICE | InjectFlags::CONFIG | InjectFlags::INJECT_CONTROLLER;
-    dependcy_injection::inject_impliment::inject(args, item, flag)
+    dependency_injection::inject_impliment::inject(args, item, flag)
+}
+
+/// Derive `DependencyInjectableService` directly from struct fields, when
+/// every field is already `Serv<T>`, `Cfg<T>`, `CfgRequire<T>`, or
+/// `CfgReload<T>`. No `fn new` needed. <br>
+/// Example usage:
+///
+/// ```no_run
+/// #[derive(DependencyInjectableService)]
+/// pub struct Ex2Service {
+///     ex_service: Serv<ExService>,
+///     audit_cfg: Cfg<AuditConfiguration>,
+/// }
+/// ```
+///
+/// If a field needs custom construction (not a straight injected value),
+/// use `#[inject]` on a hand-written `fn new` instead.
+#[proc_macro_derive(DependencyInjectableService)]
+pub fn derive_dependency_injectable_service(item: TokenStream) -> TokenStream {
+    dependency_injection::derive_service::derive_injectable_service(item)
 }

@@ -1,7 +1,7 @@
 use crate::{
-    dependcy_injection::flags::{HttpInjectType, InjectFlags},
+    dependency_injection::flags::{HttpInjectType, InjectFlags},
     utils::compiler_error::{create_compiler_error, token_type_to_string},
-    utils::extract_type::get_exact_type,
+    utils::extract_type::{extract_wrapper_inner, get_exact_type},
 };
 use proc_macro::TokenStream;
 use quote::quote;
@@ -30,7 +30,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
 
     //check new is async or not
     if new_fn.sig.asyncness.is_some() {
-        return syn::Error::new_spanned(new_fn, "fn `new` cannot be async").to_compile_error().into();
+        return create_compiler_error(new_fn, "fn `new` cannot be async");
     }
 
     //check new is return type is Self or not
@@ -52,15 +52,30 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
     for arg in &new_fn.sig.inputs {
         if let FnArg::Typed(PatType { ty, .. }) = arg {
             if flag.contains(InjectFlags::SERVICE)
-                && let Some(inner) = extract_arc_inner(ty)
+                && let Some(inner) = extract_wrapper_inner(ty, "Serv")
             {
-                let arg = quote! { service_scope.get_service::<#inner>() };
+                let arg = quote! { #main_crate_path::dependency_injection::Serv(service_scope.get_service::<#inner>()) };
                 call_args.push(arg);
                 inner_types.push(inner.clone());
             } else if flag.contains(InjectFlags::CONFIG)
-                && let Some(inner) = extract_option_arc_inner(ty)
+                && let Some(inner) = extract_wrapper_inner(ty, "CfgRequire")
             {
-                let arg = quote! { configuration_service.get::<#inner>() };
+                let arg = quote! { #main_crate_path::dependency_injection::CfgRequire(configuration_service.require::<#inner>()) };
+                call_args.push(arg);
+                inner_types.push(inner.clone());
+                configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
+            } else if flag.contains(InjectFlags::CONFIG)
+                && let Some(inner) = extract_wrapper_inner(ty, "CfgReload")
+            {
+                let missing_msg = format!("CfgReload<{}> was never registered via configure_reload::<{}>(...)", quote!(#inner), quote!(#inner));
+                let arg = quote! { #main_crate_path::dependency_injection::CfgReload(configuration_service.get_reload::<#inner>().expect(#missing_msg)) };
+                call_args.push(arg);
+                inner_types.push(inner.clone());
+                configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
+            } else if flag.contains(InjectFlags::CONFIG)
+                && let Some(inner) = extract_wrapper_inner(ty, "Cfg")
+            {
+                let arg = quote! { #main_crate_path::dependency_injection::Cfg(configuration_service.get::<#inner>()) };
                 call_args.push(arg);
                 inner_types.push(inner.clone());
                 configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
@@ -80,15 +95,13 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                     }
                 }
             } else {
-                return syn::Error::new_spanned(
+                return create_compiler_error(
                     ty,
                     format!(
-                        "Field must be std::sync::Arc<T> (Service) or Option<std::sync::Arc<T>> (Configuration), found: {}",
+                        "Field must be Serv<T> (Service), Cfg<T> (optional config), CfgRequire<T> (required config), or CfgReload<T> (reloadable config), found: {}",
                         token_type_to_string(ty)
                     ),
                 )
-                .into_compile_error()
-                .into();
             }
         }
     }
@@ -100,7 +113,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
         }
         expanded = quote! {
             #input
-            impl #main_crate_path::dependcy_injection::DependcyInjectableController for #self_ty {
+            impl #main_crate_path::dependency_injection::DependencyInjectableController for #self_ty {
                 fn inject(
                     http_context: &mut #main_crate_path::http_context::HttpContext,
                     is_valid: std::sync::Arc<std::sync::atomic::AtomicBool>
@@ -115,7 +128,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
     } else {
         expanded = quote! {
             #input
-            impl #main_crate_path::dependcy_injection::DependcyInjectableService for #self_ty {
+            impl #main_crate_path::dependency_injection::DependencyInjectableService for #self_ty {
                 fn inject(
                     service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope
                 ) -> Self {
@@ -126,8 +139,8 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
             }
 
             // Register dependency edges to check for cycles at build time
-            #main_crate_path::dependcy_injection::inventory::submit! {
-                #main_crate_path::dependcy_injection::DependencyEdge {
+            #main_crate_path::dependency_injection::inventory::submit! {
+                #main_crate_path::dependency_injection::DependencyEdge {
                     owner: std::any::TypeId::of::<#self_ty>,
                     owner_name: #self_ty_str,
                     dependencies: || vec![ #( (std::any::TypeId::of::<#inner_types>(), std::any::type_name::<#inner_types>()) ),* ],
@@ -136,36 +149,6 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
         };
     }
     expanded.into()
-}
-
-/// Extract the inner type from Arc<T>
-fn extract_arc_inner(ty: &Type) -> Option<Type> {
-    if let Type::Path(p) = ty {
-        let seg = p.path.segments.last()?;
-        if seg.ident == "Arc" {
-            if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
-                if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
-                    return Some(inner.clone());
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Extract the inner type from Option<Arc<T>>
-fn extract_option_arc_inner(ty: &Type) -> Option<Type> {
-    if let Type::Path(p) = ty {
-        let seg = p.path.segments.last()?;
-        if seg.ident == "Option" {
-            if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
-                if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
-                    return extract_arc_inner(inner);
-                }
-            }
-        }
-    }
-    None
 }
 
 fn get_http_inject_type(ty: &Type) -> HttpInjectType {

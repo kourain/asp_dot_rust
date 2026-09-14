@@ -1,11 +1,11 @@
-use asp_dot_rust::{macros::inject_require, middleware::Middleware};
+use asp_dot_rust::{macros::inject, middleware::Middleware};
 use async_trait::async_trait;
 use std::sync::atomic::AtomicUsize;
 
 pub struct TestMidware {
     test_state: AtomicUsize,
 }
-#[inject_require]
+#[inject]
 impl TestMidware {
     fn new() -> Self {
         Self { test_state: AtomicUsize::new(0) }

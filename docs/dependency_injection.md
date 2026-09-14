@@ -11,21 +11,21 @@ controllers.
 | Concept | Type | Purpose |
 | ------- | ---- | ------- |
 | Container | `ServiceProviderScope` | Holds every registered service and resolves them by type. Exposed as the public `service` field on `ApplicationBuilder`. |
-| Injectable service | `#[inject_require]` on an `impl` block | Marks a type as constructible by the container and records its dependency edges for cycle detection. |
-| Injectable controller | `#[controller_inject_require]` on an `impl` block | Same as above, but for controllers, which additionally may receive an `HttpContextRef`. |
+| Injectable service | `#[inject]` on an `impl` block | Marks a type as constructible by the container and records its dependency edges for cycle detection. |
+| Injectable controller | `#[controller_inject]` on an `impl` block | Same as above, but for controllers, which additionally may receive an `HttpContextRef`. |
 | Lifetime | `ServiceType::{Singleton, Scope, Transient}` | Controls how long a resolved instance is reused. |
 
 ## Registering a service
 
 ```rust
 use std::sync::Arc;
-use asp_dot_rust::macros::inject_require;
+use asp_dot_rust::macros::inject;
 
 pub struct ExService {
     prefix: String,
 }
 
-#[inject_require]
+#[inject]
 impl ExService {
     pub fn new() -> Self {
         Self { prefix: "Hello".into() }
@@ -71,20 +71,21 @@ builder.service.add_transient::<RandomIdGenerator>(); // new value every call
 
 ## Injecting dependencies into another service
 
-Any parameter of `fn new` typed as `Arc<T>` is resolved as a service
-dependency; the container calls `get_service::<T>()` for you:
+Any parameter of `fn new` typed as `Serv<T>` is resolved as a service
+dependency; the container calls `get_service::<T>()` for you and hands it
+back wrapped as `Serv<T>` (derefs to `Arc<T>`):
 
 ```rust
-use std::sync::Arc;
-use asp_dot_rust::macros::inject_require;
+use asp_dot_rust::dependency_injection::Serv;
+use asp_dot_rust::macros::inject;
 
 pub struct Ex2Service {
-    ex_service: Arc<ExService>,
+    ex_service: Serv<ExService>,
 }
 
-#[inject_require]
+#[inject]
 impl Ex2Service {
-    pub fn new(ex_service: Arc<ExService>) -> Self {
+    pub fn new(ex_service: Serv<ExService>) -> Self {
         Ex2Service { ex_service }
     }
 }
@@ -94,32 +95,87 @@ Both `ExService` and `Ex2Service` must be registered
 (`add_singleton`/`add_scope`/`add_transient`) before `Ex2Service` is
 resolved, or `get_service` panics with `Service <name> not found in scope`.
 
-## Injecting configuration
+### Shortcut: `#[derive(DependencyInjectableService)]`
 
-A parameter typed as `Option<Arc<T>>` is treated as configuration rather than
-a service, and is resolved from the application's `ConfigurationService`:
+When every dependency a service needs is already a plain struct field typed
+`Serv<T>`, `Cfg<T>`, `CfgRequire<T>`, or `CfgReload<T>`, `fn new` can be
+skipped entirely:
 
 ```rust
-#[inject_require]
+use asp_dot_rust::dependency_injection::Serv;
+use asp_dot_rust_macros::DependencyInjectableService;
+
+#[derive(DependencyInjectableService)]
+pub struct Ex2Service {
+    ex_service: Serv<ExService>,
+}
+```
+
+This expands to the same `impl DependencyInjectableService` (and dependency
+edge registration) that `#[inject]` would generate for a `fn new`
+that just does `Self { ex_service }`. It only supports named-field structs
+(or unit structs). A field needing custom construction (a computed value, a
+non-DI default, a dependency the constructor needs but doesn't store) is not
+one of the four wrapper types, so it is built with `Default::default()`
+instead — a compile error if the field's type doesn't implement `Default`.
+
+This fallback is never silent: every field defaulted this way emits a
+compiler **warning** (via the `deprecated` lint) pointing at the field, e.g.:
+
+```text
+warning: use of deprecated function `Ex2Service::__di_default_field_marker_Ex2Service_1`: field `note` on `Ex2Service` is not Serv<T>, Cfg<T>, CfgRequire<T>, or CfgReload<T>; #[derive(DependencyInjectableService)] defaulted it via `Default::default()`. Use #[inject] on a hand-written `fn new` instead if this field needs real construction.
+```
+
+Treat that warning as a prompt to double-check the field is intentionally
+non-DI (and not, say, a typo'd `Serve<T>`) — fall back to `#[inject]` on a
+hand-written `fn new` if it needs real construction logic.
+
+## Injecting configuration
+
+Configuration is resolved from the application's `ConfigurationService`
+rather than the service container, via three wrapper types depending on how
+missing configuration should be handled:
+
+| Wrapper | Resolves via | If never registered |
+| ------- | ------------- | -------------------- |
+| `Cfg<T>` | `ConfigurationService::get::<T>()` | `Cfg(None)` |
+| `CfgRequire<T>` | `ConfigurationService::require::<T>()` | panics |
+| `CfgReload<T>` | `ConfigurationService::get_reload::<T>()` | panics (only valid if `T` was bound with `configure_reload::<T>()`) |
+
+```rust
+use asp_dot_rust::dependency_injection::{Cfg, CfgRequire};
+
+#[inject]
 impl Ex2Service {
-    pub fn new(config: Option<Arc<AuditConfiguration>>) -> Self {
-        Ex2Service { enabled: config.map(|c| c.enabled).unwrap_or(false) }
+    pub fn new(config: Cfg<AuditConfiguration>) -> Self {
+        Ex2Service { enabled: config.0.map(|c| c.enabled).unwrap_or(false) }
+    }
+
+    // or, if the service cannot function without this configuration:
+    pub fn new_strict(config: CfgRequire<AuditConfiguration>) -> Self {
+        Ex2Service { enabled: config.0.enabled }
     }
 }
 ```
 
+`CfgReload<T>` gives a `Serv`/`Cfg`-style wrapper around `Arc<ArcSwap<T>>`,
+for configuration that can change while the application is running (see
+[`appsetting.md`](./appsetting.md) for `configure_reload::<T>()` /
+`reload_all()`).
+
 ## Injecting into a controller
 
-Controllers use `#[controller_inject_require]` instead of `#[inject_require]`
+Controllers use `#[controller_inject]` instead of `#[inject]`
 and must take an `HttpContextRef` as one of their parameters, in addition to
-any `Arc<T>` service or `Option<Arc<T>>` configuration parameters:
+any `Serv<T>` service or `Cfg<T>`/`CfgRequire<T>`/`CfgReload<T>` configuration
+parameters:
 
 ```rust
 use asp_dot_rust::prelude::*;
 
 #[controller_route("home")]
 impl HomeController {
-    fn new(ctx: HttpContextRef, ex_service: Arc<ExService>) -> Self {
+    fn new(ctx: HttpContextRef, ex_service: Serv<ExService>) -> Self {
         HomeController { ctx, ex_service }
     }
 
@@ -132,7 +188,7 @@ impl HomeController {
 
 ## Circular dependency detection
 
-Every `#[inject_require]`/`#[controller_inject_require]` impl registers its
+Every `#[inject]`/`#[controller_inject]` impl registers its
 dependency edges globally via `inventory::submit!`. `ApplicationBuilder::build()`
 walks this graph — restricted to the types actually registered in that
 builder's scope — and panics with the offending path if it finds a cycle,
@@ -162,6 +218,10 @@ runtime.
 - Only a single implementation per concrete type is supported. Registering
   multiple implementations of the same trait behind `Arc<dyn Trait>` is not
   built in and requires a manual wrapper service.
+- `fn new` parameters must be one of `Serv<T>`, `Cfg<T>`, `CfgRequire<T>`,
+  `CfgReload<T>` (or `HttpContextRef` for controllers). Bare `Arc<T>` /
+  `Option<Arc<T>>` parameters are **no longer recognized** as of 0.2.1 —
+  use `Serv<T>` / `Cfg<T>` instead.
 
 ## API summary
 

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
 use crate::{
-    dependcy_injection::DependcyInjectableService,
+    dependency_injection::DependencyInjectableService,
     hosted_service::BackGroundService,
     logging::LOGGER,
     services::{memory_cache::MemoryCacheService, service_provider::service_provider_scope::ServiceProviderScope},
@@ -23,7 +23,7 @@ impl BackGroundService for MemoryCacheBackgroundService {
         }
     }
 }
-impl DependcyInjectableService for MemoryCacheBackgroundService {
+impl DependencyInjectableService for MemoryCacheBackgroundService {
     fn inject(service_scope: &ServiceProviderScope) -> Self {
         let memcache = service_scope.get_service::<MemoryCacheService>();
         MemoryCacheBackgroundService {

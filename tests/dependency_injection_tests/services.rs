@@ -1,14 +1,14 @@
-use std::sync::{Arc, atomic::{AtomicU32, Ordering}};
+use std::sync::atomic::{AtomicU32, Ordering};
 
-use asp_dot_rust_macros::inject_require;
-
+use asp_dot_rust::dependency_injection::Serv;
+use asp_dot_rust_macros::{DependencyInjectableService, inject};
 
 /// A simple service with no dependencies.
 pub struct CounterService {
     pub id: u32,
 }
 
-#[inject_require]
+#[inject]
 impl CounterService {
     pub fn new() -> Self {
         static COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -18,33 +18,27 @@ impl CounterService {
     }
 }
 
-/// A service that depends on `CounterService`
+/// A service that depends on `CounterService`. Every field is a wrapper
+/// type, so `#[derive(DependencyInjectableService)]` builds `inject()` for us
+/// -- no `fn new` needed.
+#[derive(DependencyInjectableService)]
 pub struct WrapperService {
-    pub inner: Arc<CounterService>,
+    pub inner: Serv<CounterService>,
 }
 
-#[inject_require]
-impl WrapperService {
-    pub fn new(inner: Arc<CounterService>) -> Self {
-        WrapperService { inner }
-    }
-}
+pub struct CycleServiceX {}
 
-pub struct CycleServiceX {
-}
-
-#[inject_require]
+#[inject]
 impl CycleServiceX {
-    pub fn new(_: Arc<CycleServiceY>) -> Self {
-        CycleServiceX {  }
+    pub fn new(_: Serv<CycleServiceY>) -> Self {
+        CycleServiceX {}
     }
 }
-pub struct CycleServiceY {
-}
+pub struct CycleServiceY {}
 
-#[inject_require]
+#[inject]
 impl CycleServiceY {
-    pub fn new(_: Arc<CycleServiceX>) -> Self {
-        CycleServiceY { }
+    pub fn new(_: Serv<CycleServiceX>) -> Self {
+        CycleServiceY {}
     }
 }

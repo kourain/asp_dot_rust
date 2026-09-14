@@ -13,7 +13,7 @@ typed Rust structs on demand via `serde`.
 | Raw file store | `ConfigurationService::add_toml_cfg` | Reads and parses a TOML file into a `toml::Table`, keyed internally by its path. Can be called multiple times to load several files. |
 | Section binding | `ConfigurationService::configure::<T>(section)` | Looks up a top-level table named `section` across every loaded file, deserializes it into `T`, and registers `T` in the same `ConfigurationService` used for regular configuration objects. |
 | Typed config object | any `T: DeserializeOwned + Default + Debug + Clone + Send + Sync + 'static` | The Rust struct a section is bound to, e.g. `RateLimitConfiguration`, `JwtAuthConfiguration`, or an app-defined type. |
-| Consumption | `ConfigurationService::get::<T>()` or `Option<Arc<T>>` constructor parameter | Same retrieval path already used for configuration registered with `insert::<T>()` — see `docs/dependency_injection.md`. |
+| Consumption | `ConfigurationService::get::<T>()` or `Cfg<T>` constructor parameter | Same retrieval path already used for configuration registered with `insert::<T>()` — see `docs/dependency_injection.md`. |
 
 ## Loading a TOML file and binding a section
 
@@ -85,20 +85,21 @@ It auto call when ApplicationBuilder creating
 ## Consuming configuration in an injectable service
 
 Once a section has been bound with `configure::<T>()`, it is retrievable
-through the same `Option<Arc<T>>` constructor-parameter mechanism documented
+through the same `Cfg<T>` constructor-parameter mechanism documented
 in `docs/dependency_injection.md`:
 
 ```rust
-use asp_dot_rust::macros::inject_require;
+use asp_dot_rust::dependency_injection::Cfg;
+use asp_dot_rust::macros::inject;
 
 pub struct RateLimiterService {
     config: RateLimitConfiguration,
 }
 
-#[inject_require]
+#[inject]
 impl RateLimiterService {
-    pub fn new(config: Option<Arc<RateLimitConfiguration>>) -> Self {
-        Self { config: config.map(|c| (*c).clone()).unwrap_or_default() }
+    pub fn new(config: Cfg<RateLimitConfiguration>) -> Self {
+        Self { config: config.0.map(|c| (*c).clone()).unwrap_or_default() }
     }
 }
 ```
@@ -108,12 +109,16 @@ impl RateLimiterService {
 - If a section key is not present in any loaded file, `configure::<T>()`
   registers `T::default()` instead of panicking.
 - If the file passed to `add_toml_cfg` cannot be read (e.g. it does not
-  exist), the failure is only logged as a warning; the call does not panic
-  and no table is added for that path. A subsequent `configure::<T>()` call
-  then falls back to `T::default()` for any section that was only expected
-  to come from that file.
-- If a file *is* found but is not valid TOML, `add_toml_cfg` panics
-  immediately with `Failed to parse <path> file <error>`.
+  exist), the call panics immediately with `Failed to read configuration
+  file <path>`. Use `add_optional_toml_cfg` instead when a missing file
+  should be tolerated: it only logs a warning and does not add a table for
+  that path, and a subsequent `configure::<T>()` call then falls back to
+  `T::default()` for any section that was only expected to come from that
+  file.
+- If a file *is* found but is not valid TOML, both `add_toml_cfg` and
+  `add_optional_toml_cfg` panic immediately with `Failed to parse <path>
+  file <error>` — "optional" only tolerates a missing file, not a
+  malformed one.
 - If a section *is* found but does not deserialize into `T`, `configure::<T>()`
   panics with `Failed to parse [<section>] of toml <path> as <type name>`.
 
@@ -137,7 +142,8 @@ impl RateLimiterService {
 
 | Method | On | Description |
 | ------ | -- | ----------- |
-| `add_toml_cfg(path)` | `ConfigurationService` | Read and parse a TOML file, storing it under `path`. Panics if the file exists but fails to parse; logs a warning (does not panic) if the file cannot be read. |
+| `add_toml_cfg(path)` | `ConfigurationService` | Read and parse a TOML file, storing it under `path`. Panics if the file cannot be read, and panics if it exists but fails to parse. |
+| `add_optional_toml_cfg(path)` | `ConfigurationService` | Same as `add_toml_cfg`, except a file that cannot be read is only logged as a warning (no panic, no table added for that path); an existing-but-malformed file still panics. |
 | `load_main_toml()` | `ConfigurationService` | Shortcut for `add_toml_cfg("./appsettings.toml")`. |
 | `configure::<T>(section)` | `ConfigurationService` | Deserialize the `section` table from every loaded file into `T` and register it (falls back to `T::default()` if the section is absent anywhere). Panics if the section exists but does not match `T`. |
 | `insert::<T>(config)` | `ConfigurationService` | Register a configuration value directly, bypassing TOML. Logs a warning if `T` was already registered. |

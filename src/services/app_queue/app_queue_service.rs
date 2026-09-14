@@ -1,4 +1,4 @@
-use crate::{MutexAsync, macros::inject_require};
+use crate::{MutexAsync, macros::inject};
 use dashmap::DashMap;
 use std::{
     any::{Any, TypeId},
@@ -10,7 +10,7 @@ pub struct AppQueueService {
     _queue: DashMap<(TypeId, TypeId), MutexAsync<VecDeque<Box<dyn Any + Send + Sync>>>>,
 }
 
-#[inject_require]
+#[inject]
 impl AppQueueService {
     pub fn new() -> Self {
         AppQueueService::default()
