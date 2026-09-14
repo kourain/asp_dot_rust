@@ -112,12 +112,12 @@ pub struct Ex2Service {
 ```
 
 This expands to the same `impl DependcyInjectableService` (and dependency
-edge registration) that `#[inject_require]` would generate for a `fn new`
+edge registration) that `#[inject]` would generate for a `fn new`
 that just does `Self { ex_service }`. It only supports named-field structs
 (or unit structs) where every field is one of the four wrapper types; a
 field needing custom construction (a computed value, a non-DI default, a
-dependency the constructor needs but doesn't store) is a compile error —
-fall back to `#[inject_require]` on a hand-written `fn new` for those cases.
+dependency the constructor needs but doesn't store) will be Default::default(), if it didn't impl Default trait, you must
+fall back to `#[inject]` on a hand-written `fn new` for those cases.
 
 ## Injecting configuration
 
