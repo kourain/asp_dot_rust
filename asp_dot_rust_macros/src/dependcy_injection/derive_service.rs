@@ -78,13 +78,14 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
             inner_types.push(inner.clone());
             configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
         } else {
-            return create_compiler_error(
-                ty,
-                format!(
-                    "field `{}` must be Serv<T>, Cfg<T>, CfgRequire<T>, or CfgReload<T> to use #[derive(DependcyInjectableService)]; use #[inject] on a hand-written `fn new` if this field needs custom construction",
-                    field_ident
-                ),
-            );
+            field_inits.push(quote! { #field_ident: Default::default() });
+            // return create_compiler_error(
+            //     ty,
+            //     format!(
+            //         "field `{}` must be Serv<T>, Cfg<T>, CfgRequire<T>, or CfgReload<T> to use #[derive(DependcyInjectableService)]; use #[inject] on a hand-written `fn new` if this field needs custom construction",
+            //         field_ident
+            //     ),
+            // );
         }
     }
 
