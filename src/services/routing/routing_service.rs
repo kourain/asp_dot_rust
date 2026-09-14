@@ -12,12 +12,12 @@ use std::{
     future::Future,
     pin::Pin,
     str::FromStr,
+    sync::Arc,
 };
 
 type ControllerInvoke = for<'a> fn(&'a mut HttpContext, &'static str) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 #[derive(Clone, Debug)]
 pub struct ControllerInfo {
-    pub controller_type: TypeId,
     pub controller_name: &'static str,
     pub controller_type_name: &'static str,
     pub action_name: &'static str,
@@ -25,7 +25,7 @@ pub struct ControllerInfo {
 }
 #[derive(Debug)]
 pub struct ResolvedRoute {
-    pub router_info: HashMap<http::Method, ControllerInfo>, // key: http_method, value: ControllerInfo
+    pub router_info: HashMap<http::Method, Arc<ControllerInfo>>, // key: http_method, value: ControllerInfo
     pub path: String,
     pub query_string: String,
     pub path_params: HashMap<String, String>,
@@ -33,7 +33,7 @@ pub struct ResolvedRoute {
 }
 #[derive(Clone, Default, Debug)]
 pub struct RoutingService {
-    _router: Router<HashMap<http::Method, ControllerInfo>>, // key: "route", value: HashMap<http_method, resolved controller action info>
+    _router: Router<HashMap<http::Method, Arc<ControllerInfo>>>, // key: "route", value: HashMap<http_method, resolved controller action info>
     _registered_controllers: HashSet<ControllerCollect>,
 }
 
@@ -86,9 +86,7 @@ impl RoutingService {
     where
         T: DependencyInjectableController + Routing + Send + 'static,
     {
-        let controller_type_id = TypeId::of::<T>();
         let route_info = ControllerInfo {
-            controller_type: controller_type_id,
             controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
             controller_type_name: std::any::type_name::<T>(),
             action_name: action_name,
@@ -106,14 +104,14 @@ impl RoutingService {
             Ok(exist_route) => {
                 for method in methods {
                     // Route already exists, update it
-                    exist_route.value.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
+                    exist_route.value.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), Arc::new(route_info.clone()));
                 }
             }
             Err(_) => {
                 // Route doesn't exist, insert it
                 let mut method_map = HashMap::new();
                 for method in methods {
-                    method_map.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
+                    method_map.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), Arc::new(route_info.clone()));
                 }
                 self._router.insert(&route, method_map).unwrap_or_else(|e| {
                     panic!("Controller {} failed to insert route: {}, error: {:?}", std::any::type_name::<T>(), route, e);
