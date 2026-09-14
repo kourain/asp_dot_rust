@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use asp_dot_rust::dependcy_injection::Serv;
-use asp_dot_rust_macros::inject;
+use asp_dot_rust_macros::{DependcyInjectableService, inject};
 
 /// A simple service with no dependencies.
 pub struct CounterService {
@@ -18,16 +18,12 @@ impl CounterService {
     }
 }
 
-/// A service that depends on `CounterService`
+/// A service that depends on `CounterService`. Every field is a wrapper
+/// type, so `#[derive(DependcyInjectableService)]` builds `inject()` for us
+/// -- no `fn new` needed.
+#[derive(DependcyInjectableService)]
 pub struct WrapperService {
     pub inner: Serv<CounterService>,
-}
-
-#[inject]
-impl WrapperService {
-    pub fn new(inner: Serv<CounterService>) -> Self {
-        WrapperService { inner: inner }
-    }
 }
 
 pub struct CycleServiceX {}

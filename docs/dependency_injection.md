@@ -95,6 +95,30 @@ Both `ExService` and `Ex2Service` must be registered
 (`add_singleton`/`add_scope`/`add_transient`) before `Ex2Service` is
 resolved, or `get_service` panics with `Service <name> not found in scope`.
 
+### Shortcut: `#[derive(DependcyInjectableService)]`
+
+When every dependency a service needs is already a plain struct field typed
+`Serv<T>`, `Cfg<T>`, `CfgRequire<T>`, or `CfgReload<T>`, `fn new` can be
+skipped entirely:
+
+```rust
+use asp_dot_rust::dependcy_injection::Serv;
+use asp_dot_rust_macros::DependcyInjectableService;
+
+#[derive(DependcyInjectableService)]
+pub struct Ex2Service {
+    ex_service: Serv<ExService>,
+}
+```
+
+This expands to the same `impl DependcyInjectableService` (and dependency
+edge registration) that `#[inject_require]` would generate for a `fn new`
+that just does `Self { ex_service }`. It only supports named-field structs
+(or unit structs) where every field is one of the four wrapper types; a
+field needing custom construction (a computed value, a non-DI default, a
+dependency the constructor needs but doesn't store) is a compile error —
+fall back to `#[inject_require]` on a hand-written `fn new` for those cases.
+
 ## Injecting configuration
 
 Configuration is resolved from the application's `ConfigurationService`

@@ -1,7 +1,7 @@
 use crate::{
     dependcy_injection::flags::{HttpInjectType, InjectFlags},
     utils::compiler_error::{create_compiler_error, token_type_to_string},
-    utils::extract_type::get_exact_type,
+    utils::extract_type::{extract_wrapper_inner, get_exact_type},
 };
 use proc_macro::TokenStream;
 use quote::quote;
@@ -30,7 +30,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
 
     //check new is async or not
     if new_fn.sig.asyncness.is_some() {
-        return syn::Error::new_spanned(new_fn, "fn `new` cannot be async").to_compile_error().into();
+        return create_compiler_error(new_fn, "fn `new` cannot be async");
     }
 
     //check new is return type is Self or not
@@ -95,15 +95,13 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                     }
                 }
             } else {
-                return syn::Error::new_spanned(
+                return create_compiler_error(
                     ty,
                     format!(
                         "Field must be Serv<T> (Service), Cfg<T> (optional config), CfgRequire<T> (required config), or CfgReload<T> (reloadable config), found: {}",
                         token_type_to_string(ty)
                     ),
                 )
-                .into_compile_error()
-                .into();
             }
         }
     }
@@ -151,23 +149,6 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
         };
     }
     expanded.into()
-}
-
-/// Extract inner type T from a single-generic-arg wrapper like `Serv<T>`,
-/// `Cfg<T>`, `CfgRequire<T>`, `CfgReload<T>` — matched by ident name only,
-/// so it works regardless of which crate path the wrapper was imported from.
-fn extract_wrapper_inner(ty: &Type, wrapper_name: &str) -> Option<Type> {
-    if let Type::Path(p) = ty {
-        let seg = p.path.segments.last()?;
-        if seg.ident == wrapper_name {
-            if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
-                if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
-                    return Some(inner.clone());
-                }
-            }
-        }
-    }
-    None
 }
 
 fn get_http_inject_type(ty: &Type) -> HttpInjectType {

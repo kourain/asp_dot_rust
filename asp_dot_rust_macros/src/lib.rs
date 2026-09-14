@@ -151,3 +151,23 @@ pub fn controller_inject(args: TokenStream, item: TokenStream) -> TokenStream {
     let flag = InjectFlags::SERVICE | InjectFlags::CONFIG | InjectFlags::INJECT_CONTROLLER;
     dependcy_injection::inject_impliment::inject(args, item, flag)
 }
+
+/// Derive `DependcyInjectableService` directly from struct fields, when
+/// every field is already `Serv<T>`, `Cfg<T>`, `CfgRequire<T>`, or
+/// `CfgReload<T>`. No `fn new` needed. <br>
+/// Example usage:
+///
+/// ```no_run
+/// #[derive(DependcyInjectableService)]
+/// pub struct Ex2Service {
+///     ex_service: Serv<ExService>,
+///     audit_cfg: Cfg<AuditConfiguration>,
+/// }
+/// ```
+///
+/// If a field needs custom construction (not a straight injected value),
+/// use `#[inject]` on a hand-written `fn new` instead.
+#[proc_macro_derive(DependcyInjectableService)]
+pub fn derive_dependcy_injectable_service(item: TokenStream) -> TokenStream {
+    dependcy_injection::derive_service::derive_injectable_service(item)
+}
