@@ -1,17 +1,10 @@
-use crate::{
-    controller::{ActionRoute, Routing},
-    dependency_injection::{DependencyInjectableController, DependencyInjectableService},
-    http_context::HttpContext,
-    services::routing::ControllerCollect,
-};
+use crate::{dependency_injection::DependencyInjectableService, http_context::HttpContext};
 use matchit::Router;
 use std::{
-    any::TypeId,
     collections::{HashMap, HashSet},
     fmt::Debug,
     future::Future,
     pin::Pin,
-    str::FromStr,
     sync::Arc,
 };
 
@@ -25,7 +18,8 @@ pub struct ControllerInfo {
 }
 #[derive(Debug)]
 pub struct ResolvedRoute {
-    pub router_info: HashMap<http::Method, Arc<ControllerInfo>>, // key: http_method, value: ControllerInfo
+    /// key: http_method, value: ControllerInfo
+    pub router_info: Arc<HashMap<http::Method, Arc<ControllerInfo>>>,
     pub path: String,
     pub query_string: String,
     pub path_params: HashMap<String, String>,
@@ -33,8 +27,8 @@ pub struct ResolvedRoute {
 }
 #[derive(Clone, Default, Debug)]
 pub struct RoutingService {
-    _router: Router<HashMap<http::Method, Arc<ControllerInfo>>>, // key: "route", value: HashMap<http_method, resolved controller action info>
-    _registered_controllers: HashSet<ControllerCollect>,
+    /// key: "route", value: HashMap<http_method, resolved controller action info>
+    pub(crate) _router: Router<Arc<HashMap<http::Method, Arc<ControllerInfo>>>>,
 }
 
 impl DependencyInjectableService for RoutingService {
@@ -46,79 +40,6 @@ impl DependencyInjectableService for RoutingService {
     }
 }
 impl RoutingService {
-    pub fn register_controller<T: 'static>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
-    where
-        T: DependencyInjectableController + Routing + Send + 'static,
-    {
-        for action in action_routes {
-            let route = Self::join_route(root_route, action.route);
-            self.add_route::<T>(route, action.method, action.action_name);
-        }
-        let controller_collect = ControllerCollect {
-            type_id: TypeId::of::<T>(),
-            type_name: std::any::type_name::<T>(),
-            controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
-        };
-        self._registered_controllers.insert(controller_collect.clone());
-        controller_collect
-    }
-
-    fn join_route(root_route: &str, action_route: &str) -> String {
-        let root = root_route.trim_matches('/');
-        let action = action_route.trim_matches('/');
-
-        if root.is_empty() && action.is_empty() {
-            return "/".into();
-        }
-
-        if root.is_empty() {
-            return format!("/{action}");
-        }
-
-        if action.is_empty() {
-            return format!("/{root}");
-        }
-
-        format!("/{root}/{action}")
-    }
-
-    pub fn add_route<T: 'static>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str)
-    where
-        T: DependencyInjectableController + Routing + Send + 'static,
-    {
-        let route_info = ControllerInfo {
-            controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
-            controller_type_name: std::any::type_name::<T>(),
-            action_name: action_name,
-            invoke_async: |http_context, action_name| {
-                Box::pin(async move {
-                    let is_valid = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-                    let mut controller = T::inject(http_context, is_valid.clone());
-                    controller.routing(action_name).await;
-                    is_valid.store(false, std::sync::atomic::Ordering::Release);
-                })
-            },
-        };
-
-        match self._router.at_mut(&route) {
-            Ok(exist_route) => {
-                for method in methods {
-                    // Route already exists, update it
-                    exist_route.value.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), Arc::new(route_info.clone()));
-                }
-            }
-            Err(_) => {
-                // Route doesn't exist, insert it
-                let mut method_map = HashMap::new();
-                for method in methods {
-                    method_map.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), Arc::new(route_info.clone()));
-                }
-                self._router.insert(&route, method_map).unwrap_or_else(|e| {
-                    panic!("Controller {} failed to insert route: {}, error: {:?}", std::any::type_name::<T>(), route, e);
-                });
-            }
-        }
-    }
     pub fn resolve(&self, full_path: &str) -> Option<ResolvedRoute> {
         let query_pos = full_path.find('?').unwrap_or(full_path.len());
         let path = &full_path[..query_pos];

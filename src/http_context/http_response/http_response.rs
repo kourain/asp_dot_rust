@@ -23,9 +23,11 @@ pub struct HttpResponse {
 
 impl HttpResponse {
     pub(crate) fn new_in_memory() -> Self {
+        let mut headers = HeaderMap::new();
+        headers.insert("server", "ASP.RS".parse().unwrap());
         Self {
             status_code: http::StatusCode::NO_CONTENT,
-            headers: HeaderMap::new(),
+            headers: headers,
             body: Vec::new(),
             version: http::Version::HTTP_11,
             written_phase: WritenPhase::NONE,
