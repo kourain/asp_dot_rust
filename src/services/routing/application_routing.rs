@@ -5,10 +5,10 @@ use crate::{
     controller::ActionRoute,
     dependency_injection::DependencyInjectableController,
     logging::LOGGER,
-    services::{routing::RoutingService, service_provider::ServiceType},
+    services::{routing::RoutingServiceBuilder, service_provider::ServiceType},
 };
 
-pub(crate) static CONTROLLER_REGISTRY: LazyLock<Mutex<RoutingService>> = LazyLock::new(|| Mutex::new(RoutingService::default()));
+pub(crate) static CONTROLLER_REGISTRY: LazyLock<Mutex<RoutingServiceBuilder>> = LazyLock::new(|| Mutex::new(RoutingServiceBuilder::default()));
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct ControllerCollect {
     pub(crate) type_id: std::any::TypeId,
@@ -41,9 +41,9 @@ impl ApplicationBuilder {
     pub fn add_controllers(&mut self) -> &mut Self {
         LOGGER::info("Registering controllers...");
         bootstrap_registered_controllers();
-        let routing_snapshot: RoutingService = std::mem::take(&mut *CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry"));
+        let routing_snapshot: RoutingServiceBuilder = std::mem::take(&mut *CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry"));
         LOGGER::debug(format!("{:#?}", routing_snapshot));
-        self.service.add_instance(Arc::new(routing_snapshot), ServiceType::Singleton);
+        self.service.add_instance(Arc::new(routing_snapshot.build()), ServiceType::Singleton);
         self
     }
 }
