@@ -55,7 +55,7 @@ impl RoutingService {
                     router_info: matched.value.clone(),
                     query_string: query_string.into(),
                     query_params: HashMap::from_iter(query_string.split('&').filter_map(|pair| {
-                        let mut parts = pair.split('=');
+                        let mut parts = pair.splitn(2, '=');
                         let key = parts.next()?.into();
                         let value = urlencoding::decode(parts.next()?).ok()?.into();
                         Some((key, value))
