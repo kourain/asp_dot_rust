@@ -1,7 +1,32 @@
-use crate::utils::{compiler_error::create_compiler_error, extract_type::extract_wrapper_inner};
+use crate::{
+    dependency_injection::flags::DIPropOption,
+    utils::{compiler_error::create_compiler_error, extract_type::extract_wrapper_inner},
+};
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, parse_macro_input};
+
+/// Returns `Ok(true)` when the field carries `#[di(default)]`, `Ok(false)`
+/// when it carries no `#[di(..)]` attribute at all, and `Err(..)` for a
+/// malformed one (`#[di]`, `#[di(typo)]`) so a mistyped opt-in is a compile
+/// error rather than a silently ignored attribute.
+fn extract_di_options(field: &syn::Field) -> DIPropOption {
+    let mut result = DIPropOption::empty();
+    for attr in &field.attrs {
+        if !attr.path().is_ident("di") {
+            continue;
+        }
+
+        _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("default") {
+                result.insert(DIPropOption::DEFAULT);
+            }
+            Ok(())
+        });
+    }
+
+    result
+}
 
 /// `#[derive(DependencyInjectableService)]` — for the common case where every
 /// dependency a service needs is already a struct field typed `Serv<T>`,
@@ -12,10 +37,12 @@ use syn::{Data, DeriveInput, Fields, parse_macro_input};
 /// Any field that is NOT one of the four wrapper types falls back to
 /// `Default::default()` (a hard compile error if the field's type does not
 /// implement `Default`), and emits a `deprecated`-style compiler **warning**
-/// at the field's call site so the fallback is never silent. Prefer
-/// `#[inject]` on a hand-written `fn new` instead if the service needs real
-/// custom construction logic (computed fields, a dependency the constructor
-/// needs but doesn't store, etc).
+/// at the field's call site so the fallback is never silent. Mark such a
+/// field `#[di(default)]` to say the fallback is intentional and silence
+/// that warning for that field only. Prefer `#[inject]` on a hand-written
+/// `fn new` instead if the service needs real custom construction logic
+/// (computed fields, a dependency the constructor needs but doesn't store,
+/// etc).
 pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
     let main_crate_path = crate::utils::find_crate::asp_dot_rust_crate_path();
     let input = parse_macro_input!(item as DeriveInput);
@@ -24,9 +51,7 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
 
     let data = match &input.data {
         Data::Struct(s) => s,
-        _ => {
-            return create_compiler_error(&input, "#[derive(DependencyInjectableService)] only supports structs")
-        }
+        _ => return create_compiler_error(&input, "#[derive(DependencyInjectableService)] only supports structs"),
     };
 
     let named = match &data.fields {
@@ -66,6 +91,8 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
         let field_ident = field.ident.as_ref().unwrap();
         let ty = &field.ty;
 
+        let di_default = extract_di_options(field);
+
         if let Some(inner) = extract_wrapper_inner(ty, "Serv") {
             field_inits.push(quote! { #field_ident: #main_crate_path::dependency_injection::Serv(service_scope.get_service::<#inner>()) });
             inner_types.push(inner);
@@ -84,23 +111,24 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
             configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
         } else {
             field_inits.push(quote! { #field_ident: Default::default() });
-
-            // Not a compile error: emit a `deprecated`-style compiler
-            // *warning* instead, so silently defaulting a field is never
-            // truly silent. The nested fn only exists to be `#[deprecated]`;
-            // calling it does nothing at runtime.
-            let marker_name = syn::Ident::new(&format!("__di_default_field_marker_{}_{}", ident_str, field_index), field_ident.span());
-            let warning_msg = format!(
-                "field `{}` on `{}` is not Serv<T>, Cfg<T>, CfgRequire<T>, or CfgReload<T>; #[derive(DependencyInjectableService)] defaulted it via `Default::default()`. \
-                 Use #[inject] on a hand-written `fn new` instead if this field needs real construction.",
-                field_ident, ident_str
-            );
-            field_warnings.push(quote! {
-                #[deprecated(note = #warning_msg)]
-                #[allow(dead_code, non_snake_case)]
-                fn #marker_name() {}
-                #marker_name();
-            });
+            if !di_default.contains(DIPropOption::DEFAULT) {
+                // Not a compile error: emit a `deprecated`-style compiler
+                // *warning* instead, so silently defaulting a field is never
+                // truly silent. The nested fn only exists to be `#[deprecated]`;
+                // calling it does nothing at runtime.
+                let marker_name = syn::Ident::new(&format!("__di_default_field_marker_{}_{}", ident_str, field_index), field_ident.span());
+                let warning_msg = format!(
+                    "field `{}` on `{}` is not Serv<T>, Cfg<T>, CfgRequire<T>, or CfgReload<T>; #[derive(DependencyInjectableService)] defaulted it via `Default::default()`. \
+                    Mark it `#[di(default)]` if that is intended, or use #[inject] on a hand-written `fn new` if this field needs real construction.",
+                    field_ident, ident_str
+                );
+                field_warnings.push(quote! {
+                    #[deprecated(note = #warning_msg)]
+                    #[allow(dead_code, non_snake_case)]
+                    fn #marker_name() {}
+                    #marker_name();
+                });
+            }
         }
     }
 

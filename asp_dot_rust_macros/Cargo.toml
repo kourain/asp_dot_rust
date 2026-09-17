@@ -1,6 +1,6 @@
 [package]
 name = "asp_dot_rust_macros"
-version = "0.2.1"
+version = "0.2.3"
 edition = "2024"
 
 [lib]
@@ -11,5 +11,5 @@ macro_rule = true
 proc-macro-crate = "3.5.0"
 proc-macro2 = "1.0.107"
 quote = "1.0.47"
-syn = { version = "3.0.5", features = ["full"] }
+syn = { version = "3.0.6", features = ["full"] }
 bitflags = "2.13.2"

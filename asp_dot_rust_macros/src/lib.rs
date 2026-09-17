@@ -167,7 +167,20 @@ pub fn controller_inject(args: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// If a field needs custom construction (not a straight injected value),
 /// use `#[inject]` on a hand-written `fn new` instead.
-#[proc_macro_derive(DependencyInjectableService)]
+///
+/// A field that is intentionally not injected can be marked `#[di(default)]`
+/// to build it with `Default::default()` without the compiler warning that
+/// an unmarked non-wrapper field would produce:
+///
+/// ```ignore
+/// #[derive(DependencyInjectableService)]
+/// pub struct Ex3Service {
+///     ex_service: Serv<ExService>,
+///     #[di(default)]
+///     call_count: u32,
+/// }
+/// ```
+#[proc_macro_derive(DependencyInjectableService, attributes(di))]
 pub fn derive_dependency_injectable_service(item: TokenStream) -> TokenStream {
     dependency_injection::derive_service::derive_injectable_service(item)
 }

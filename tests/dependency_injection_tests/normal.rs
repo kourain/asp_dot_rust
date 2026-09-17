@@ -59,6 +59,23 @@ async fn nested_dependency_resolves_through_the_same_scope() {
 }
 
 #[tokio::test]
+async fn di_default_fields_are_defaulted_while_dependencies_still_inject() {
+    let mut builder = ApplicationBuilder::new("TestDiDefault");
+    builder.service.add_singleton::<CounterService>();
+    builder.service.add_singleton::<DiDefaultService>();
+
+    let service = builder.service.get_service::<DiDefaultService>();
+    let direct = builder.service.get_service::<CounterService>();
+
+    assert_eq!(service.label, String::default(), "A #[di(default)] field must be built with Default::default()");
+    assert_eq!(service.call_count, u32::default(), "A #[di(default)] field must be built with Default::default()");
+    assert!(
+        Arc::ptr_eq(&service.inner, &direct),
+        "Marking other fields #[di(default)] must not stop the wrapper fields from being injected normally"
+    );
+}
+
+#[tokio::test]
 async fn contains_service_reflects_registration_state() {
     let mut builder = ApplicationBuilder::new("TestContainsService");
 

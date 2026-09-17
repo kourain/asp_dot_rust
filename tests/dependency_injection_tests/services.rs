@@ -26,6 +26,19 @@ pub struct WrapperService {
     pub inner: Serv<CounterService>,
 }
 
+/// A service mixing an injected dependency with a field that is
+/// intentionally not injected. `#[di(default)]` marks the opt-in so the
+/// derive builds it with `Default::default()` without emitting the
+/// "silently defaulted" warning.
+#[derive(DependencyInjectableService)]
+pub struct DiDefaultService {
+    pub inner: Serv<CounterService>,
+    #[di(default)]
+    pub label: String,
+    #[di(default)]
+    pub call_count: u32,
+}
+
 pub struct CycleServiceX {}
 
 #[inject]

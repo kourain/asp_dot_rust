@@ -119,16 +119,47 @@ non-DI default, a dependency the constructor needs but doesn't store) is not
 one of the four wrapper types, so it is built with `Default::default()`
 instead — a compile error if the field's type doesn't implement `Default`.
 
-This fallback is never silent: every field defaulted this way emits a
-compiler **warning** (via the `deprecated` lint) pointing at the field, e.g.:
+This fallback is never silent: every unmarked field defaulted this way emits
+a compiler **warning** (via the `deprecated` lint) pointing at the field:
 
 ```text
-warning: use of deprecated function `Ex2Service::__di_default_field_marker_Ex2Service_1`: field `note` on `Ex2Service` is not Serv<T>, Cfg<T>, CfgRequire<T>, or CfgReload<T>; #[derive(DependencyInjectableService)] defaulted it via `Default::default()`. Use #[inject] on a hand-written `fn new` instead if this field needs real construction.
+warning: use of deprecated function `Ex2Service::__di_default_field_marker_Ex2Service_1`: field `note` on `Ex2Service` is not Serv<T>, Cfg<T>, CfgRequire<T>, or CfgReload<T>; #[derive(DependencyInjectableService)] defaulted it via `Default::default()`. Mark it `#[di(default)]` if that is intended, or use #[inject] on a hand-written `fn new` if this field needs real construction.
 ```
 
 Treat that warning as a prompt to double-check the field is intentionally
-non-DI (and not, say, a typo'd `Serve<T>`) — fall back to `#[inject]` on a
-hand-written `fn new` if it needs real construction logic.
+non-DI (and not, say, a typo'd `Serve<T>`).
+
+### Opting in with `#[di(default)]`
+
+When a field is *meant* to be built with `Default::default()`, mark it
+`#[di(default)]`. The field is still defaulted, but the warning is silenced
+for that field only — unlike `#[allow(deprecated)]`, which would have to be
+applied at module or crate level and would also hide genuine deprecation
+warnings:
+
+```rust
+#[derive(DependencyInjectableService)]
+pub struct Ex3Service {
+    ex_service: Serv<ExService>,
+    #[di(default)]
+    call_count: u32,     // intentionally not injected, no warning
+}
+```
+
+Misuse of the attribute is a compile error rather than a silent no-op:
+
+| Written | Result |
+| --- | --- |
+| `#[di(default)]` on a non-wrapper field | defaulted, no warning |
+| `#[di(default)]` on `Serv<T>` / `Cfg<T>` / `CfgRequire<T>` / `CfgReload<T>` | **error** — it would replace a real dependency with `Default::default()` |
+| `#[di]` or `#[di()]` | **error** — the option is missing |
+| `#[di(defualt)]` and other unknown options | **error** — unknown `di` option |
+
+A `#[di(default)]` field registers no dependency edge, so it is ignored by
+the startup cycle check.
+
+If the field needs real construction logic rather than just a default, use
+`#[inject]` on a hand-written `fn new` instead.
 
 ## Injecting configuration
 
