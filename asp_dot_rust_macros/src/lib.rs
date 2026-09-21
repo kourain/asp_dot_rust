@@ -129,8 +129,7 @@ pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
-    let flag = InjectFlags::CONFIG | InjectFlags::SERVICE;
-    dependency_injection::inject_impliment::inject(args, item, flag)
+    dependency_injection::inject_impliment::inject(args, item, InjectFlags::NONE)
 }
 
 /// inject httpcontext service and config <br>
@@ -148,8 +147,7 @@ pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn controller_inject(args: TokenStream, item: TokenStream) -> TokenStream {
-    let flag = InjectFlags::SERVICE | InjectFlags::CONFIG | InjectFlags::INJECT_CONTROLLER;
-    dependency_injection::inject_impliment::inject(args, item, flag)
+    dependency_injection::inject_impliment::inject(args, item, InjectFlags::INJECT_CONTROLLER)
 }
 
 /// Derive `DependencyInjectableService` directly from struct fields, when

@@ -191,7 +191,7 @@ impl Ex2Service {
 
 `CfgReload<T>` gives a `Serv`/`Cfg`-style wrapper around `Arc<ArcSwap<T>>`,
 for configuration that can change while the application is running (see
-[`appsetting.md`](./appsetting.md) for `configure_reload::<T>()` /
+[`appsettings.md`](./appsettings.md) for `configure::<T>()` /
 `reload_all()`).
 
 ## Injecting into a controller

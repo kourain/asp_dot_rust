@@ -101,7 +101,7 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
             inner_types.push(inner.clone());
             configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
         } else if let Some(inner) = extract_wrapper_inner(ty, "CfgReload") {
-            let missing_msg = format!("CfgReload<{}> was never registered via configure_reload::<{}>(...)", quote!(#inner), quote!(#inner));
+            let missing_msg = format!("CfgReload<{}> was never registered via configure::<{}>(...)", quote!(#inner), quote!(#inner));
             field_inits.push(quote! { #field_ident: #main_crate_path::dependency_injection::CfgReload(configuration_service.get_reload::<#inner>().expect(#missing_msg)) });
             inner_types.push(inner.clone());
             configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };

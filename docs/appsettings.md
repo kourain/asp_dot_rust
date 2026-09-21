@@ -78,9 +78,9 @@ let settings = builder.configuration.get::<AppSettings>().unwrap();
 `load_main_toml()` is a shortcut that loads a fixed, hard-coded path:
 It auto call when ApplicationBuilder creating
 
-- default: appsetting.toml
+- default: appsettings.toml
 - env: custom by env `ASP_RS_ENVIRONMENT=dev` or startup args `--env=dev`
-=> load appsetting.dev.toml
+=> load appsettings.dev.toml
 
 ## Consuming configuration in an injectable service
 
