@@ -20,8 +20,8 @@ pub struct Logger {
     pub use_request_id: bool,
     pub use_connection_id: bool,
 }
-impl Logger {
-    pub fn new() -> Self {
+impl Default for Logger {
+    fn default() -> Self {
         let mut log = Logger {
             level: LogLevel::Info,
             enable: true,
@@ -35,6 +35,12 @@ impl Logger {
         };
         log.format_parts = Self::parse_format(&log.log_format);
         log
+    }
+}
+
+impl Logger {
+    pub fn new() -> Self {
+        Self::default()
     }
     /// write a log message
     pub async fn write_log(&mut self, log_info: &LogInfo) {
@@ -75,21 +81,21 @@ impl Logger {
             }
             let rest = &remaining[pos..];
 
-            if rest.starts_with("{level}") {
+            if let Some(stripped) = rest.strip_prefix("{level}") {
                 parts.push(FormatPart::Level);
-                remaining = &rest["{level}".len()..];
-            } else if rest.starts_with("{timestamp}") {
+                remaining = stripped;
+            } else if let Some(stripped) = rest.strip_prefix("{timestamp}") {
                 parts.push(FormatPart::Timestamp);
-                remaining = &rest["{timestamp}".len()..];
-            } else if rest.starts_with("{message}") {
+                remaining = stripped;
+            } else if let Some(stripped) = rest.strip_prefix("{message}") {
                 parts.push(FormatPart::Message);
-                remaining = &rest["{message}".len()..];
-            } else if rest.starts_with("{requestid}") {
+                remaining = stripped;
+            } else if let Some(stripped) = rest.strip_prefix("{requestid}") {
                 parts.push(FormatPart::RequestID);
-                remaining = &rest["{requestid}".len()..];
-            } else if rest.starts_with("{connectionid}") {
+                remaining = stripped;
+            } else if let Some(stripped) = rest.strip_prefix("{connectionid}") {
                 parts.push(FormatPart::ConnectionID);
-                remaining = &rest["{connectionid}".len()..];
+                remaining = stripped;
             } else {
                 parts.push(FormatPart::Literal("{".to_string()));
                 remaining = &rest[1..];

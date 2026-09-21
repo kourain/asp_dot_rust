@@ -23,12 +23,12 @@ impl ServiceProviderScope {
         match self._inner_map.get(&type_id) {
             Some(instance) => match instance.service_type {
                 ServiceType::Singleton | ServiceType::Scope => {
-                    return instance
+                    instance
                         .instance
                         .get_or_init(|| Arc::new(T::inject(self)))
                         .clone()
                         .downcast::<T>()
-                        .expect("Type mismatch when downcasting service");
+                        .expect("Type mismatch when downcasting service")
                 }
                 ServiceType::Transient => Arc::new(T::inject(self)),
             },
@@ -52,7 +52,7 @@ impl ServiceProviderScope {
         }
         let instance: Arc<OnceLock<Arc<dyn Any + Send + Sync>>> = Arc::new(OnceLock::new());
         _ = instance.set(service);
-        self._inner_map.insert(type_id, ServiceInstance { service_type, instance: instance });
+        self._inner_map.insert(type_id, ServiceInstance { service_type, instance });
     }
     pub fn add_singleton<T>(&mut self)
     where

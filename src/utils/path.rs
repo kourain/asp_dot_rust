@@ -18,18 +18,10 @@ pub fn is_path_in_folder(path: impl AsRef<str>, folder: impl AsRef<str>) -> bool
     let folder = std::path::Path::new(folder);
     match std::fs::canonicalize(path) {
         Ok(p) => {
-            if p.starts_with(folder) {
-                true
-            } else {
-                false
-            }
+            p.starts_with(folder)
         }
         Err(_) => {
-            if path.starts_with(folder) {
-                true
-            } else {
-                false
-            }
+            path.starts_with(folder)
         }
     }
 }

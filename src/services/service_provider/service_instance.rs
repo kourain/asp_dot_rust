@@ -22,7 +22,7 @@ impl Clone for ServiceInstance {
             };
         }
         ServiceInstance {
-            service_type: self.service_type.clone(),
+            service_type: self.service_type,
             instance: Arc::new(OnceLock::new()),
         }
     }

@@ -17,7 +17,7 @@ pub struct CorsMiddleware {
 impl CorsMiddleware {
     pub fn new(routing_service: Serv<crate::services::routing::RoutingService>, configuration: Cfg<CorsConfiguration>) -> Self {
         Self {
-            routing_service: routing_service,
+            routing_service,
             configuration: configuration.unwrap_or_default(),
         }
     }

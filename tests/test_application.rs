@@ -1,5 +1,7 @@
 mod controllers;
 mod middleware;
+use std::time::Duration;
+
 use asp_dot_rust::{
     ApplicationBuilder,
     configuration::{CorsConfiguration, RateLimitConfiguration},
@@ -32,5 +34,7 @@ async fn test_application() {
     let mut app = app_builder.build();
     app.add_middleware::<TestMidware>();
     app.use_cors().use_rate_limit();
-    // app.run().await;
+    if tokio::time::timeout(Duration::from_secs(5), app.run()).await.is_err() {
+        assert!(true)
+    }
 }

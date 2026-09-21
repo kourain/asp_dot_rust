@@ -18,7 +18,7 @@ impl Middleware for RequestTimeoutMiddleware {
     async fn invoke_async(&self, http_context: &mut HttpContext, next: crate::middleware::MiddlewareNext) {
         LOGGER::debug("RequestTimeoutMiddleware: Checking request timeout");
         let timeout = std::time::Duration::from_secs(self.request_timeout_config.timeout_seconds);
-        if let Err(_) = tokio::time::timeout(timeout, next(http_context)).await {
+        if tokio::time::timeout(timeout, next(http_context)).await.is_err() {
             LOGGER::warn("Request timed out");
             http_context.response.status_code = http::StatusCode::REQUEST_TIMEOUT;
             http_context

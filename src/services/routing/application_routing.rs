@@ -29,7 +29,7 @@ pub(crate) fn bootstrap_registered_controllers() {
     }
 }
 
-pub fn register_controller<T: 'static>(root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
+pub fn register_controller<T>(root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
 where
     T: DependencyInjectableController + crate::controller::Routing + Send + 'static,
 {
@@ -41,7 +41,7 @@ impl ApplicationBuilder {
     pub fn add_controllers(&mut self) -> &mut Self {
         LOGGER::info("Registering controllers...");
         bootstrap_registered_controllers();
-        let routing_snapshot: RoutingService = std::mem::replace(&mut *CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry"), RoutingService::default());
+        let routing_snapshot: RoutingService = std::mem::take(&mut *CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry"));
         LOGGER::debug(format!("{:#?}", routing_snapshot));
         self.service.add_instance(Arc::new(routing_snapshot), ServiceType::Singleton);
         self

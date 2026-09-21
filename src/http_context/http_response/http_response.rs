@@ -9,7 +9,7 @@ pub enum WritenPhase {
     NONE = 0,
     HTTP_HEADERS = 1,
     HTTP_BODY = 2,
-    END = 255,
+    END = 255
 }
 pub struct HttpResponse {
     pub status_code: http::StatusCode,
@@ -59,7 +59,7 @@ impl HttpResponse {
         self
     }
     pub async fn write_body_async(&mut self) {
-        let body = std::mem::replace(&mut self.body, Vec::new());
+        let body = std::mem::take(&mut self.body);
         self.write_async(body.as_slice()).await;
         self.written_phase = WritenPhase::HTTP_BODY;
     }

@@ -98,5 +98,5 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
     let builder = auto_conn::Builder::new(hyper_util::rt::TokioExecutor::new());
     // wrap the tokio TcpStream so hyper-util can use hyper RT traits
     let io = TokioIo::new(stream);
-    builder.serve_connection(io, service).await.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+    builder.serve_connection(io, service).await.map_err(std::io::Error::other)
 }

@@ -31,6 +31,12 @@ impl DependencyInjectableService for ConfigurationService {
         Self::new()
     }
 }
+impl Default for ConfigurationService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConfigurationService {
     pub fn new() -> Self {
         Self {
@@ -41,12 +47,15 @@ impl ConfigurationService {
     }
 
     /// check if the configuration of type T exists
-    pub fn contains<T: 'static + Send + Sync>(&self) -> bool {
+    pub fn contains<T>(&self) -> bool
+    where
+        T: 'static + Send + Sync,
+    {
         self._inner.contains_key(&TypeId::of::<T>())
     }
 
     /// insert a configuration of type T, if the configuration of type T already exists, it will be replaced
-    pub fn insert<T: 'static + Send + Sync>(&mut self, config: T)
+    pub fn insert<T>(&mut self, config: T)
     where
         T: Clone + Send + Sync + 'static,
     {
@@ -57,7 +66,7 @@ impl ConfigurationService {
     }
 
     /// get a configuration of type T, if the configuration of type T does not exist, return None
-    pub fn get<T: 'static + Send + Sync>(&self) -> Option<Arc<T>>
+    pub fn get<T>(&self) -> Option<Arc<T>>
     where
         T: Clone + Send + Sync + 'static,
     {
@@ -69,7 +78,10 @@ impl ConfigurationService {
 
     /// get a configuration of type T, panic if it was never registered
     /// (via `insert`, `configure`, or `configure_optional`)
-    pub fn require<T: 'static + Send + Sync + Clone>(&self) -> Arc<T> {
+    pub fn require<T>(&self) -> Arc<T>
+    where
+        T: 'static + Send + Sync + Clone,
+    {
         self.get::<T>()
             .unwrap_or_else(|| panic!("Configuration of type {} is required but was never registered", std::any::type_name::<T>()))
     }

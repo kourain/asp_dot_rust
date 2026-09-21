@@ -14,7 +14,7 @@ impl HttpContext {
             request,
             response,
             routing_info: None,
-            service_provider: service_provider,
+            service_provider,
         }
     }
 }

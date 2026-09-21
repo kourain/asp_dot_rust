@@ -46,7 +46,7 @@ impl DependencyInjectableService for RoutingService {
     }
 }
 impl RoutingService {
-    pub fn register_controller<T: 'static>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
+    pub fn register_controller<T>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
     where
         T: DependencyInjectableController + Routing + Send + 'static,
     {
@@ -82,7 +82,7 @@ impl RoutingService {
         format!("/{root}/{action}")
     }
 
-    pub fn add_route<T: 'static>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str)
+    pub fn add_route<T>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str)
     where
         T: DependencyInjectableController + Routing + Send + 'static,
     {
@@ -91,7 +91,7 @@ impl RoutingService {
             controller_type: controller_type_id,
             controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
             controller_type_name: std::any::type_name::<T>(),
-            action_name: action_name,
+            action_name,
             invoke_async: |http_context, action_name| {
                 Box::pin(async move {
                     let is_valid = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
@@ -130,7 +130,7 @@ impl RoutingService {
             Err(_) => None,
             Ok(matched) => {
                 let params = HashMap::from_iter(matched.params.iter().map(|(k, v)| (k.into(), v.into())));
-                return Some(ResolvedRoute {
+                Some(ResolvedRoute {
                     path: path.into(),
                     path_params: params,
                     router_info: matched.value.clone(),
@@ -141,7 +141,7 @@ impl RoutingService {
                         let value = urlencoding::decode(parts.next()?).ok()?.into();
                         Some((key, value))
                     })),
-                });
+                })
             }
         }
     }

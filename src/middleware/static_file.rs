@@ -37,33 +37,30 @@ impl Middleware for StaticFileMiddleware {
         let fpath = std::path::Path::new(&static_file_path);
 
         if !fpath.exists() {
-            if utils::path::is_path_in_folder(fpath.canonicalize().unwrap().to_str().unwrap(), self.static_dir_path.canonicalize().unwrap().to_str().unwrap()) == false {
+            if !utils::path::is_path_in_folder(fpath.canonicalize().unwrap().to_str().unwrap(), self.static_dir_path.canonicalize().unwrap().to_str().unwrap()) {
                 http_context.response.status_code = http::StatusCode::FORBIDDEN;
                 http_context.response.body = http::StatusCode::FORBIDDEN.canonical_reason().unwrap_or("Forbidden").as_bytes().to_vec();
                 return;
             }
 
-            match std::fs::read(&static_file_path) {
-                Ok(file_content) => {
-                    http_context.response.body = file_content;
-                    if let Some(extension) = fpath.extension() {
-                        let content_type = match extension.to_str().unwrap_or("") {
-                            "html" => "text/html",
-                            "css" => "text/css",
-                            "js" => "application/javascript",
-                            "png" => "image/png",
-                            "jpg" | "jpeg" => "image/jpeg",
-                            "gif" => "image/gif",
-                            "json" => "application/json",
-                            "mp3" => "audio/mpeg",
-                            "mp4" => "video/mp4",
-                            "opus" => "audio/opus",
-                            _ => "application/octet-stream",
-                        };
-                        http_context.response.headers.insert_str("Content-Type", content_type);
-                    }
+            if let Ok(file_content) = std::fs::read(&static_file_path) {
+                http_context.response.body = file_content;
+                if let Some(extension) = fpath.extension() {
+                    let content_type = match extension.to_str().unwrap_or("") {
+                        "html" => "text/html",
+                        "css" => "text/css",
+                        "js" => "application/javascript",
+                        "png" => "image/png",
+                        "jpg" | "jpeg" => "image/jpeg",
+                        "gif" => "image/gif",
+                        "json" => "application/json",
+                        "mp3" => "audio/mpeg",
+                        "mp4" => "video/mp4",
+                        "opus" => "audio/opus",
+                        _ => "application/octet-stream",
+                    };
+                    http_context.response.headers.insert_str("Content-Type", content_type);
                 }
-                Err(_) => {}
             }
         } else {
             next(http_context).await;

@@ -4,10 +4,10 @@ use std::{
     any::{Any, TypeId},
     collections::VecDeque,
 };
-
+type BoxAny = Box<dyn Any + Send + Sync>;
 #[derive(Default)]
 pub struct AppQueueService {
-    _queue: DashMap<(TypeId, TypeId), MutexAsync<VecDeque<Box<dyn Any + Send + Sync>>>>,
+    _queue: DashMap<(TypeId, TypeId), MutexAsync<VecDeque<BoxAny>>>,
 }
 
 #[inject]
@@ -58,6 +58,6 @@ impl AppQueueService {
                 }
             }
         }
-        return result;
+        result
     }
 }

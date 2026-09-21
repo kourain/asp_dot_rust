@@ -24,7 +24,7 @@ impl Default for CorsConfiguration {
 impl CorsConfiguration {
     pub fn is_origin_allowed(&self, origin: impl Into<String>) -> bool {
         let origin = origin.into();
-        self.allowed_origins.get(&origin).is_some() || self.allowed_origins.contains("*")
+        self.allowed_origins.contains(&origin) || self.allowed_origins.contains("*")
     }
     pub fn allow_origin(&mut self, origin: impl Into<String>) -> &Self {
         let o = origin.into();

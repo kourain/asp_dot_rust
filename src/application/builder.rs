@@ -89,7 +89,7 @@ impl ApplicationBuilder {
             https_port: self.https_port,
             service_provider: service,
             _middlewares: ApplicationMiddlewares::new(),
-            _hosted_services: Vec::new(),
+            _hosted_services: self.hosted_services,
             runner_id: uuid::Uuid::now_v7(),
         }
     }

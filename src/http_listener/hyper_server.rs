@@ -4,8 +4,8 @@ use tokio::net::TcpListener;
 
 pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> {
     futures::future::try_join_all(app.ip.iter().zip(app.http_port.iter()).map(|(ip, port)| {
-        let ip = ip.clone();
-        let port = port.clone();
+        let ip = *ip;
+        let port = *port;
         async move {
             let listener = TcpListener::bind((ip, port)).await?;
             LOGGER::info(format!("HTTP server listening on {}:{}", ip, port));

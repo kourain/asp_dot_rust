@@ -10,12 +10,12 @@ pub struct MemoryCacheService {
     _inner: dashmap::DashMap<std::any::TypeId, dashmap::DashMap<String, CacheItem>>,
 }
 impl MemoryCacheService {
-    pub fn set<T: 'static + Send + Sync>(&self, key: &str, value: T, exp_seconds: Option<u64>)
+    pub fn set<T>(&self, key: &str, value: T, exp_seconds: Option<u64>)
     where
         T: 'static + Send + Sync + Clone + Sized,
     {
         let type_id = std::any::TypeId::of::<T>();
-        let type_map = self._inner.entry(type_id).or_insert_with(dashmap::DashMap::new);
+        let type_map = self._inner.entry(type_id).or_default();
         let mut cacheval = CacheItem {
             value: Box::new(value.clone()),
             expiration: None,
@@ -25,48 +25,54 @@ impl MemoryCacheService {
         }
         type_map.insert(key.to_string(), cacheval);
     }
-    pub fn get<T: 'static + Send + Sync>(&self, key: &str) -> Option<T>
+    pub fn get<T>(&self, key: &str) -> Option<T>
     where
-        T: Clone,
+        T: 'static + Send + Sync + Clone,
     {
         let type_id = std::any::TypeId::of::<T>();
-        if let Some(type_map) = self._inner.get(&type_id) {
-            if let Some(value) = type_map.get(key) {
-                return value.value.downcast_ref::<T>().cloned();
-            }
+        if let Some(type_map) = self._inner.get(&type_id)
+            && let Some(value) = type_map.get(key)
+        {
+            return value.value.downcast_ref::<T>().cloned();
         }
         None
     }
-    pub fn remove<T: 'static + Send + Sync>(&self, key: &str) {
+    pub fn remove<T>(&self, key: &str)
+    where
+        T: 'static + Send + Sync,
+    {
         let type_id = std::any::TypeId::of::<T>();
         if let Some(type_map) = self._inner.get(&type_id) {
             type_map.remove(key);
         }
     }
-    pub fn clear<T: 'static + Send + Sync>(&self) {
+    pub fn clear<T>(&self)
+    where T: 'static + Send + Sync {
         let type_id = std::any::TypeId::of::<T>();
         if let Some(type_map) = self._inner.get(&type_id) {
             type_map.clear();
         }
     }
-    pub fn get_or_update<T: 'static + Send + Sync, F: FnOnce() -> T>(&self, key: &str, value_factory: F, exp_seconds: Option<u64>) -> T
+    pub fn get_or_update<T, F>(&self, key: &str, value_factory: F, exp_seconds: Option<u64>) -> T
     where
-        T: Clone,
+        T: 'static + Send + Sync + Clone,
+        F: FnOnce() -> T
     {
         let type_id = std::any::TypeId::of::<T>();
-        let type_map = self._inner.entry(type_id).or_insert_with(dashmap::DashMap::new);
+        let type_map = self._inner.entry(type_id).or_default();
         let entry = type_map.entry(key.to_string()).or_insert_with(|| CacheItem {
             value: Box::new(value_factory()),
             expiration: exp_seconds.map(|s| std::time::Instant::now() + std::time::Duration::from_secs(s)),
         });
         entry.value.downcast_ref::<T>().cloned().unwrap()
     }
-    pub async fn get_or_update_async<T: 'static + Send + Sync, F: AsyncFnOnce() -> T>(&self, key: &str, value_factory: F, exp_seconds: Option<u64>) -> Option<T>
+    pub async fn get_or_update_async<T, F>(&self, key: &str, value_factory: F, exp_seconds: Option<u64>) -> Option<T>
     where
-        T: Clone,
+        T: 'static + Send + Sync + Clone,
+        F: AsyncFnOnce() -> T,
     {
         let type_id = std::any::TypeId::of::<T>();
-        let type_map = self._inner.entry(type_id).or_insert_with(dashmap::DashMap::new);
+        let type_map = self._inner.entry(type_id).or_default();
         if !type_map.contains_key(key) {
             let value = value_factory().await;
             type_map.insert(
@@ -87,10 +93,10 @@ impl MemoryCacheService {
                 .iter()
                 .filter_map(|entry| {
                     let cache_item = entry.value();
-                    if let Some(expiration) = cache_item.expiration {
-                        if expiration <= std::time::Instant::now() {
-                            return Some(entry.key().clone());
-                        }
+                    if let Some(expiration) = cache_item.expiration
+                        && expiration <= std::time::Instant::now()
+                    {
+                        return Some(entry.key().clone());
                     }
                     None
                 })

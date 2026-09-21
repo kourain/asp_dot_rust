@@ -36,12 +36,11 @@ impl ServiceProviderScope {
         let mut path = Vec::new();
 
         for &start in graph.keys() {
-            if !visited.contains(&start) {
-                if let Some(cycle) = Self::dfs_detect(start, &graph, &mut visited, &mut stack, &mut path) {
+            if !visited.contains(&start)
+                && let Some(cycle) = Self::dfs_detect(start, &graph, &mut visited, &mut stack, &mut path) {
                     let dependency_path = cycle.iter().map(|id| graph.get(id).map(|(n, _)| *n).unwrap_or("?")).collect::<Vec<_>>().join(" -> ");
                     panic!("Found circular dependency: {}", dependency_path);
                 }
-            }
         }
     }
     fn dfs_detect(node: TypeId, graph: &HashMap<TypeId, (&'static str, Vec<TypeId>)>, visited: &mut HashSet<TypeId>, stack: &mut HashSet<TypeId>, path: &mut Vec<TypeId>) -> Option<Vec<TypeId>> {
@@ -58,11 +57,10 @@ impl ServiceProviderScope {
                     cycle.push(dep);
                     return Some(cycle);
                 }
-                if !visited.contains(&dep) {
-                    if let Some(cycle) = Self::dfs_detect(dep, graph, visited, stack, path) {
+                if !visited.contains(&dep)
+                    && let Some(cycle) = Self::dfs_detect(dep, graph, visited, stack, path) {
                         return Some(cycle);
                     }
-                }
             }
         }
 

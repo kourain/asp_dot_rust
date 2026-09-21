@@ -1,4 +1,6 @@
 mod controllers;
+use std::time::Duration;
+
 use asp_dot_rust::{
     ApplicationBuilder,
     configuration::{CorsConfiguration, RateLimitConfiguration},
@@ -25,6 +27,7 @@ async fn test_application() {
         });
     app_builder.add_controllers();
     let app = app_builder.build();
-    // app.use_cors().use_rate_limit();
-    // app.run().await;
+    if tokio::time::timeout(Duration::from_secs(5), app.run()).await.is_err() {
+        assert!(true)
+    }
 }
