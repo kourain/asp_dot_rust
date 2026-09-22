@@ -1,4 +1,6 @@
 mod controllers;
+use std::time::Duration;
+
 use asp_dot_rust::{
     ApplicationBuilder,
     configuration::{CorsConfiguration, RateLimitConfiguration},
@@ -14,9 +16,9 @@ async fn test_application() {
     app_builder.with_any_ip().with_http_port(8080);
     app_builder
         .add_custom_configuration(|config: &mut CorsConfiguration| {
-            config.allowed_origins = ["*"].into();
+            config.allowed_origins = ["*".into()].into();
             config.allowed_methods = [http::Method::GET, http::Method::POST].into();
-            config.allowed_headers = ["Content-Type"].into();
+            config.allowed_headers = ["Content-Type".into()].into();
         })
         .add_custom_configuration(|cfg: &mut RateLimitConfiguration| {
             cfg.max_requests = 5000000000;
@@ -24,7 +26,8 @@ async fn test_application() {
             cfg.block_duration_seconds = 60;
         });
     app_builder.add_controllers();
-    let mut app = app_builder.build();
-    // app.use_cors().use_rate_limit();
-    let _ = app.run().await;
+    let app = app_builder.build();
+    if tokio::time::timeout(Duration::from_secs(5), app.run()).await.is_err() {
+        assert!(true)
+    }
 }

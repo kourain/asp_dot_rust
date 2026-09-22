@@ -1,33 +1,24 @@
-use crate::{configuration::RequestTimeoutConfiguration, http_context::HttpContext, logging::LOGGER, middleware::Middleware};
+use crate::{Application, configuration::RequestTimeoutConfiguration, dependency_injection::CfgRequire, http_context::HttpContext, logging::LOGGER, macros::inject, middleware::Middleware};
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct RequestTimeoutMiddleware {
-    timeout_seconds: u64,
+    request_timeout_config: Arc<RequestTimeoutConfiguration>,
 }
-impl Default for RequestTimeoutMiddleware {
-    fn default() -> Self {
+#[inject]
+impl RequestTimeoutMiddleware {
+    fn new(request_timeout_cfg: CfgRequire<RequestTimeoutConfiguration>) -> RequestTimeoutMiddleware {
         Self {
-            timeout_seconds: 30, // default to 30 seconds
+            request_timeout_config: request_timeout_cfg.unwrap(),
         }
     }
 }
 #[async_trait::async_trait]
 impl Middleware for RequestTimeoutMiddleware {
-    fn with_application(&mut self, app: &crate::application::Application) {
-        match app.try_get_configuration::<RequestTimeoutConfiguration>() {
-            Some(config) => {
-                self.timeout_seconds = config.timeout_seconds;
-                LOGGER::info(format!("RequestTimeoutMiddleware configured with timeout_seconds: {}", self.timeout_seconds));
-            }
-            None => {
-                LOGGER::warn(format!("RequestTimeoutConfiguration not found, using default timeout_seconds: {}", self.timeout_seconds));
-            }
-        };
-    }
-    async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: crate::middleware::MiddlewareNext) {
+    async fn invoke_async(&self, http_context: &mut HttpContext, next: crate::middleware::MiddlewareNext) {
         LOGGER::debug("RequestTimeoutMiddleware: Checking request timeout");
-        let timeout = std::time::Duration::from_secs(self.timeout_seconds);
-        if let Err(_) = tokio::time::timeout(timeout, next(http_context)).await {
+        let timeout = std::time::Duration::from_secs(self.request_timeout_config.timeout_seconds);
+        if tokio::time::timeout(timeout, next(http_context)).await.is_err() {
             LOGGER::warn("Request timed out");
             http_context.response.status_code = http::StatusCode::REQUEST_TIMEOUT;
             http_context
@@ -37,5 +28,11 @@ impl Middleware for RequestTimeoutMiddleware {
         } else {
             // Request completed within the timeout
         }
+    }
+}
+impl Application {
+    pub fn use_request_timeout(&mut self) -> &mut Self {
+        self.add_middleware::<RequestTimeoutMiddleware>();
+        self
     }
 }

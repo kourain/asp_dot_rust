@@ -1,21 +1,20 @@
+use crate::{MutexAsync, macros::inject};
 use dashmap::DashMap;
-
-use crate::{MutexAsync, services::Service};
 use std::{
     any::{Any, TypeId},
     collections::VecDeque,
 };
-
+type BoxAny = Box<dyn Any + Send + Sync>;
 #[derive(Default)]
 pub struct AppQueueService {
-    _queue: DashMap<(TypeId, TypeId), MutexAsync<VecDeque<Box<dyn Any + Send + Sync>>>>,
+    _queue: DashMap<(TypeId, TypeId), MutexAsync<VecDeque<BoxAny>>>,
 }
-impl Service for AppQueueService {
-    fn name(&self) -> &'static str {
-        "App Queue"
-    }
-}
+
+#[inject]
 impl AppQueueService {
+    pub fn new() -> Self {
+        AppQueueService::default()
+    }
     pub async fn add_queue_async<S, V>(self, value: V)
     where
         S: 'static,
@@ -59,6 +58,6 @@ impl AppQueueService {
                 }
             }
         }
-        return result;
+        result
     }
 }

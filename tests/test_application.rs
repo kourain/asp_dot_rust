@@ -1,23 +1,28 @@
 mod controllers;
+mod middleware;
+use std::time::Duration;
+
 use asp_dot_rust::{
     ApplicationBuilder,
     configuration::{CorsConfiguration, RateLimitConfiguration},
     logging::LOGGER,
 };
 
+use crate::middleware::TestMidware;
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
 async fn test_application() {
     LOGGER::with_color_output(true);
-    LOGGER::with_level(asp_dot_rust::logging::LogLevel::None);
+    LOGGER::with_level(asp_dot_rust::logging::LogLevel::Verbose);
     // LOGGER::with_chrono_time_format("%Y-%m-%d %H:%M:%S%.9f");
     // LOGGER::with_request_id(true);
     let mut app_builder = ApplicationBuilder::new("TestApp");
     app_builder.with_any_ip().with_http_port(8080);
     app_builder
         .add_custom_configuration(|config: &mut CorsConfiguration| {
-            config.allowed_origins = ["*"].into();
+            config.allowed_origins = ["*".into()].into();
             config.allowed_methods = [http::Method::GET, http::Method::POST].into();
-            config.allowed_headers = ["Content-Type"].into();
+            config.allowed_headers = ["Content-Type".into()].into();
         })
         .add_custom_configuration::<RateLimitConfiguration>(|cfg| {
             cfg.max_requests = 5000000000;
@@ -27,6 +32,9 @@ async fn test_application() {
     app_builder.add_controllers();
     // app_builder.add_memory_cache();
     let mut app = app_builder.build();
-    //app.use_cors();//.use_rate_limit();
-    let _ = app.run().await;
+    app.add_middleware::<TestMidware>();
+    app.use_cors().use_rate_limit();
+    if tokio::time::timeout(Duration::from_secs(5), app.run()).await.is_err() {
+        assert!(true)
+    }
 }

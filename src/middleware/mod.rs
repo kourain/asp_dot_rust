@@ -5,18 +5,17 @@ pub(crate) mod cors;
 pub(crate) mod rate_limit;
 pub(crate) mod request_timeout;
 pub(crate) mod static_file;
-use crate::http_context::http_context::HttpContext;
+use crate::dependency_injection::DependencyInjectableService;
+use crate::http_context::HttpContext;
 use async_trait::async_trait;
 use core::any::type_name;
 use core::{future::Future, pin::Pin};
 use std::sync::Arc;
-pub type MiddlewareFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 
 pub type MiddlewareNext = Arc<dyn for<'a> Fn(&'a mut HttpContext) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> + Send + Sync>;
 #[async_trait]
-pub trait Middleware: Send + Sync {
-    async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: MiddlewareNext);
-    fn with_application(&mut self, application: &crate::application::Application);
+pub trait Middleware: DependencyInjectableService + Send + Sync {
+    async fn invoke_async(&self, http_context: &mut HttpContext, next: MiddlewareNext);
     fn type_name(&self) -> &'static str {
         type_name::<Self>()
     }
@@ -30,14 +29,18 @@ macro_rules! middleware {
 
         #[async_trait::async_trait]
         impl $crate::middleware::Middleware for $name {
-            fn with_application(&mut self, _: &crate::application::Application) {
-                // Default implementation does nothing, but can be overridden if needed
-            }
             async fn invoke_async<'a>(
                 &self,
                 $ctx: &'a mut $crate::http_context::HttpContext,
                 $next: $crate::middleware::MiddlewareNext,
             ) $body
+        }
+        impl $crate::dependency_injection::DependencyInjectableService for $name {
+            fn inject(
+                _service_scope: &$crate::services::service_provider::service_provider_scope::ServiceProviderScope,
+            ) -> Self {
+                Self
+            }
         }
     };
 }

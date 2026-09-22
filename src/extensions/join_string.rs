@@ -1,4 +1,4 @@
 
 pub trait JoinString {
-    fn join(&self, separator: &str) -> String;
+    fn join_string(&self, separator: &str) -> String;
 }

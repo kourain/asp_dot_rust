@@ -1,3 +1,6 @@
+use serde::Deserialize;
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct JwtAuthConfiguration {
     pub secret_key: String,
     pub token_expiration_seconds: u64,

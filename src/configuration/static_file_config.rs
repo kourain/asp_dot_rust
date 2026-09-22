@@ -1,4 +1,6 @@
-#[derive(Clone)]
+use serde::Deserialize;
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct StaticFileConfiguration {
     pub static_files_directory: String,
 }

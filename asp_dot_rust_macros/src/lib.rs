@@ -1,8 +1,13 @@
 mod controller;
+mod dependency_injection;
+mod utils;
+
 use proc_macro::TokenStream;
 
+use crate::dependency_injection::flags::InjectFlags;
+
 /// using the controller_route attribute to define a controller and its routes
-/// 
+///
 ///```no_run
 ///#[controller_route("")]
 ///impl HomeController {
@@ -17,17 +22,23 @@ pub fn controller_route(args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::controller_route(args, item)
 }
 
-/// registers a function as a route handler for the specified HTTP method(s)
+/// registers a function as a route handler for the specified HTTP method(s) <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[route(["GET", "POST"], "/health")]
+/// ```
+/// this ignore case you can use any case for the HTTP methods, such as "get", "POST", "Put", etc.
+/// ```no_run
+/// #[route(["get", "post"], "/health")]
 /// ```
 #[proc_macro_attribute]
 pub fn route(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "")
 }
 
-/// registers a function as a GET route handler
+/// registers a function as a GET route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[get("/health")]
@@ -37,7 +48,8 @@ pub fn get(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "GET")
 }
 
-/// registers a function as a POST route handler
+/// registers a function as a POST route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[post("/health")]
@@ -46,8 +58,9 @@ pub fn get(_args: TokenStream, item: TokenStream) -> TokenStream {
 pub fn post(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "POST")
 }
-    
-/// registers a function as a PUT route handler
+
+/// registers a function as a PUT route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[put("/health")]
@@ -57,7 +70,8 @@ pub fn put(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "PUT")
 }
 
-/// registers a function as a DELETE route handler
+/// registers a function as a DELETE route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[delete("/health")]
@@ -67,7 +81,8 @@ pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "DELETE")
 }
 
-/// registers a function as a PATCH route handler
+/// registers a function as a PATCH route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[patch("/health")]
@@ -77,7 +92,8 @@ pub fn patch(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "PATCH")
 }
 
-/// registers a function as an OPTIONS route handler
+/// registers a function as an OPTIONS route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[options("/health")]
@@ -87,7 +103,8 @@ pub fn options(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "OPTIONS")
 }
 
-/// registers a function as a HEAD route handler
+/// registers a function as a HEAD route handler <br>
+/// Example usage:
 ///
 /// ```no_run
 /// #[head("/health")]
@@ -95,4 +112,73 @@ pub fn options(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "HEAD")
+}
+
+/// inject service and config <br>
+/// Example usage:
+///
+/// ```no_run
+/// #[injectable_service]
+/// impl ExampleService1 {
+///     fn new(service2: Serv<Service2>, service3: Serv<Service3>, configuration1: Cfg<Configuration1>) -> Self
+///     {
+///         //your logic to create ExampleService1
+///     }
+///     //other impl
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
+    dependency_injection::inject_impliment::inject(args, item, InjectFlags::NONE)
+}
+
+/// inject httpcontext service and config <br>
+/// Example usage:
+///
+/// ```no_run
+/// #[controller_route("")]
+/// impl Controller1 {
+///     fn new(http_context: HttpContextRef,service2: Serv<Service2>, service3: Serv<Service3>, configuration1: Cfg<Configuration1>) -> Self
+///     {
+///         //your logic to create Controller1
+///     }
+///     //other impl
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn controller_inject(args: TokenStream, item: TokenStream) -> TokenStream {
+    dependency_injection::inject_impliment::inject(args, item, InjectFlags::INJECT_CONTROLLER)
+}
+
+/// Derive `DependencyInjectableService` directly from struct fields, when
+/// every field is already `Serv<T>`, `Cfg<T>`, `CfgRequire<T>`, or
+/// `CfgReload<T>`. No `fn new` needed. <br>
+/// Example usage:
+///
+/// ```no_run
+/// #[derive(DependencyInjectableService)]
+/// pub struct Ex2Service {
+///     ex_service: Serv<ExService>,
+///     audit_cfg: Cfg<AuditConfiguration>,
+/// }
+/// ```
+///
+/// If a field needs custom construction (not a straight injected value),
+/// use `#[inject]` on a hand-written `fn new` instead.
+///
+/// A field that is intentionally not injected can be marked `#[di(default)]`
+/// to build it with `Default::default()` without the compiler warning that
+/// an unmarked non-wrapper field would produce:
+///
+/// ```ignore
+/// #[derive(DependencyInjectableService)]
+/// pub struct Ex3Service {
+///     ex_service: Serv<ExService>,
+///     #[di(default)]
+///     call_count: u32,
+/// }
+/// ```
+#[proc_macro_derive(DependencyInjectableService, attributes(di))]
+pub fn derive_dependency_injectable_service(item: TokenStream) -> TokenStream {
+    dependency_injection::derive_service::derive_injectable_service(item)
 }

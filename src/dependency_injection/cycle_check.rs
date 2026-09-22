@@ -1,0 +1,71 @@
+use std::{
+    any::TypeId,
+    collections::{HashMap, HashSet},
+};
+
+use crate::{dependency_injection::edge::DependencyEdge, logging::LOGGER, services::service_provider::ServiceProviderScope};
+
+impl ServiceProviderScope {
+    pub fn check_dependency_cycles(self: &ServiceProviderScope) {
+        let mut graph: HashMap<TypeId, (&'static str, Vec<TypeId>)> = HashMap::new();
+
+        for edge in inventory::iter::<DependencyEdge> {
+            let owner = (edge.owner)();
+            if !self.contains_type_id(&owner) {
+                continue;
+            }
+
+            let deps = (edge.dependencies)();
+            let mut filtered_deps = Vec::new();
+
+            for (dep_id, dep_name) in &deps {
+                if self.contains_type_id(dep_id) {
+                    filtered_deps.push(*dep_id);
+                } else {
+                    // owner registered but dependency of it has not been registered —
+                    // this is almost certainly a DI configuration error
+                    LOGGER::warn(format!("Service {} require {} but it has not been registered in ServiceProviderScope", edge.owner_name, dep_name));
+                }
+            }
+
+            graph.entry(owner).or_insert((edge.owner_name, Vec::new())).1.extend(filtered_deps);
+        }
+
+        let mut visited = HashSet::new();
+        let mut stack = HashSet::new();
+        let mut path = Vec::new();
+
+        for &start in graph.keys() {
+            if !visited.contains(&start)
+                && let Some(cycle) = Self::dfs_detect(start, &graph, &mut visited, &mut stack, &mut path) {
+                    let dependency_path = cycle.iter().map(|id| graph.get(id).map(|(n, _)| *n).unwrap_or("?")).collect::<Vec<_>>().join(" -> ");
+                    panic!("Found circular dependency: {}", dependency_path);
+                }
+        }
+    }
+    fn dfs_detect(node: TypeId, graph: &HashMap<TypeId, (&'static str, Vec<TypeId>)>, visited: &mut HashSet<TypeId>, stack: &mut HashSet<TypeId>, path: &mut Vec<TypeId>) -> Option<Vec<TypeId>> {
+        visited.insert(node);
+        stack.insert(node);
+        path.push(node);
+
+        if let Some((_, deps)) = graph.get(&node) {
+            for &dep in deps {
+                if stack.contains(&dep) {
+                    // found loop, return the cycle path
+                    let start_idx = path.iter().position(|&n| n == dep).unwrap();
+                    let mut cycle = path[start_idx..].to_vec();
+                    cycle.push(dep);
+                    return Some(cycle);
+                }
+                if !visited.contains(&dep)
+                    && let Some(cycle) = Self::dfs_detect(dep, graph, visited, stack, path) {
+                        return Some(cycle);
+                    }
+            }
+        }
+
+        stack.remove(&node);
+        path.pop();
+        None
+    }
+}

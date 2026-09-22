@@ -1,26 +1,29 @@
 use crate::{
-    Application, http_context::HttpContext, middleware::{Middleware, MiddlewareNext}
+    Application,
+    dependency_injection::DependencyInjectableService,
+    http_context::{HttpContext, http_header::AspDotRustHttpHeader},
+    middleware::{Middleware, MiddlewareNext},
 };
 #[derive(Default)]
 pub(crate) struct AuthorizeMiddleware {
     schema: String,
 }
+impl DependencyInjectableService for AuthorizeMiddleware {
+    fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+        AuthorizeMiddleware::default()
+    }
+}
 #[async_trait::async_trait]
 impl Middleware for AuthorizeMiddleware {
-    fn with_application(&mut self, _: &crate::application::Application) {
-        // Default implementation does nothing, but can be overridden if needed
-    }
-    async fn invoke_async<'a>(&self, http_context: &'a mut HttpContext, next: MiddlewareNext) {
-        let auth_header: Option<String> = {
-            http_context.request.headers.authorization().map(|value: &String| value.to_string())
-        };
+    async fn invoke_async(&self, http_context: &mut HttpContext, next: MiddlewareNext) {
+        let auth_header: Option<String> = http_context.request.headers.authorization();
         if let Some(auth_header) = auth_header {
             let split_token: Vec<&str> = auth_header.trim().split(" ").collect::<Vec<&str>>();
-            if let Some(schema) = split_token.get(0) {
-                if *schema == self.schema {
-                    next(http_context).await;
-                    return;
-                }
+            if let Some(schema) = split_token.first()
+                && *schema == self.schema
+            {
+                next(http_context).await;
+                return;
             }
         }
         // No Authorization header present
@@ -29,26 +32,18 @@ impl Middleware for AuthorizeMiddleware {
     }
 }
 impl Application {
-    pub fn use_authorize(&mut self) -> &mut Self {
-        self.add_middleware::<AuthorizeMiddleware>();
+    pub fn use_authorize(&mut self, schema: impl Into<String>) -> &mut Self {
+        let middleware = AuthorizeMiddleware { schema: schema.into() };
+        self.add_middleware_instance(middleware);
         self
     }
     pub fn use_authorize_bearer(&mut self) -> &mut Self {
-        let mut middleware = AuthorizeMiddleware::default();
-        middleware.schema = "Bearer".to_string();
-        self.add_middleware_instance(middleware);
-        self
+        self.use_authorize("Bearer")
     }
     pub fn use_authorize_basic(&mut self) -> &mut Self {
-        let mut middleware = AuthorizeMiddleware::default();
-        middleware.schema = "Basic".to_string();
-        self.add_middleware_instance(middleware);
-        self
+        self.use_authorize("Basic")
     }
     pub fn use_authorize_badge(&mut self) -> &mut Self {
-        let mut middleware = AuthorizeMiddleware::default();
-        middleware.schema = "Badge".to_string();
-        self.add_middleware_instance(middleware);
-        self
+        self.use_authorize("Badge")
     }
 }

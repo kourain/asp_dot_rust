@@ -1,12 +1,15 @@
-use std::{
-    collections::{HashMap, HashSet},
-    net::IpAddr,
-    sync::Arc,
-};
+use std::{collections::HashSet, net::IpAddr, sync::Arc};
 
 use crate::{
-    Application, hosted_service::ApplicationHostedService, logging::LOGGER, middleware::app_middlewares::ApplicationMiddlewares, services::configuration::ConfigurationService,
-    services::service_provider::application_scope::ServiceProvider,
+    Application,
+    hosted_service::ApplicationHostedService,
+    logging::LOGGER,
+    middleware::app_middlewares::ApplicationMiddlewares,
+    services::{
+        configuration::ConfigurationService,
+        service_provider::{ServiceType, service_provider_scope::ServiceProviderScope},
+    },
+    utils::build_info,
 };
 
 pub struct ApplicationBuilder {
@@ -14,62 +17,79 @@ pub struct ApplicationBuilder {
     pub ip: HashSet<IpAddr>,
     pub http_port: HashSet<u16>,
     pub https_port: HashSet<u16>,
-    pub service_provider: ServiceProvider,
-    pub(crate) config: ConfigurationService,
+    pub configuration: ConfigurationService,
+    pub service: ServiceProviderScope,
     pub(crate) hosted_services: ApplicationHostedService,
 }
 
 impl ApplicationBuilder {
     pub fn new(name: &str) -> Self {
-        LOGGER::verbose(format!("build at: {}", env!("BUILD_TIME")));
-        LOGGER::info(format!("Initializing application builder: {}", name));
-        Self {
+        let mut app = Self {
             name: name.to_string(),
             ip: HashSet::new(),
             http_port: HashSet::new(),
             https_port: HashSet::new(),
-            service_provider: ServiceProvider::new(),
-            config: HashMap::new(),
+            configuration: ConfigurationService::new(),
+            service: ServiceProviderScope::new(),
             hosted_services: Vec::new(),
-        }
+        };
+        app.configuration.load_default_toml();
+        app.with_args();
+        LOGGER::verbose(format!("build at: {}", build_info::get_build_time_utc()));
+        LOGGER::info(format!("Initializing application builder: {}", name));
+        app
     }
 
     pub fn with_ip(&mut self, ip: impl Into<String>) -> &mut Self {
+        if self.ip.contains(&"0.0.0.0".parse().unwrap()) || self.ip.contains(&"::".parse().unwrap()) {
+            self.ip.clear();
+        }
         self.ip.insert(ip.into().parse::<std::net::IpAddr>().expect("Invalid IP address format"));
         self
     }
 
     pub fn with_loopback_ip(&mut self) -> &mut Self {
+        if self.ip.contains(&"0.0.0.0".parse().unwrap()) || self.ip.contains(&"::".parse().unwrap()) {
+            self.ip.clear();
+        }
         self.ip.insert("127.0.0.1".parse().unwrap());
         self
     }
     /// Binds the application to all available network interfaces
     pub fn with_any_ip(&mut self) -> &mut Self {
+        self.ip.clear();
         self.ip.insert("0.0.0.0".parse().unwrap());
         self.ip.insert("::".parse().unwrap());
         self
     }
     pub fn with_http_port(&mut self, port: u16) -> &mut Self {
+        if self.https_port.contains(&port) {
+            panic!("Port {} is already in use by HTTPS. Please choose a different port for HTTP.", port);
+        }
         self.http_port.insert(port);
         self
     }
 
     pub fn with_https_port(&mut self, port: u16) -> &mut Self {
+        if self.http_port.contains(&port) {
+            panic!("Port {} is already in use by HTTP. Please choose a different port for HTTPS.", port);
+        }
         self.https_port.insert(port);
         todo!("ADD SSL SUPPORT");
-        self
     }
 
     pub fn build(self) -> Application {
+        let mut service = self.service;
+        service.add_instance::<ConfigurationService>(Arc::new(self.configuration), ServiceType::Singleton);
+        service.check_dependency_cycles();
         Application {
             name: self.name,
             ip: self.ip,
             http_port: self.http_port,
             https_port: self.https_port,
-            service: Arc::new(self.service_provider),
-            _config: Arc::new(self.config),
+            service_provider: service,
             _middlewares: ApplicationMiddlewares::new(),
-            _hosted_services: Vec::new(),
+            _hosted_services: self.hosted_services,
             runner_id: uuid::Uuid::now_v7(),
         }
     }

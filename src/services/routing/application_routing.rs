@@ -1,8 +1,14 @@
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
-use crate::{ApplicationBuilder, controller::ActionRoute, logging::LOGGER, services::routing::RoutingService};
+use crate::{
+    ApplicationBuilder,
+    controller::ActionRoute,
+    dependency_injection::DependencyInjectableController,
+    logging::LOGGER,
+    services::{routing::RoutingService, service_provider::ServiceType},
+};
 
-pub static CONTROLLER_REGISTRY: LazyLock<Mutex<RoutingService>> = LazyLock::new(|| Mutex::new(RoutingService::default()));
+pub(crate) static CONTROLLER_REGISTRY: LazyLock<Mutex<RoutingService>> = LazyLock::new(|| Mutex::new(RoutingService::default()));
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct ControllerCollect {
     pub(crate) type_id: std::any::TypeId,
@@ -23,9 +29,9 @@ pub(crate) fn bootstrap_registered_controllers() {
     }
 }
 
-pub fn register_controller<T: 'static>(root_route: &str, action_routes: Vec<ActionRoute>) -> ControllerCollect
+pub fn register_controller<T>(root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
 where
-    T: crate::controller::WithHttpContext + crate::controller::Routing + Send + 'static,
+    T: DependencyInjectableController + crate::controller::Routing + Send + 'static,
 {
     let mut registry = CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry");
     registry.register_controller::<T>(root_route, action_routes)
@@ -35,9 +41,9 @@ impl ApplicationBuilder {
     pub fn add_controllers(&mut self) -> &mut Self {
         LOGGER::info("Registering controllers...");
         bootstrap_registered_controllers();
-        let routing_snapshot = CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry").clone();
+        let routing_snapshot: RoutingService = std::mem::take(&mut *CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry"));
         LOGGER::debug(format!("{:#?}", routing_snapshot));
-        self.service_provider.add_singleton::<RoutingService>(routing_snapshot);
+        self.service.add_instance(Arc::new(routing_snapshot), ServiceType::Singleton);
         self
     }
 }

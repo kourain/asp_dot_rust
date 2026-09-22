@@ -1,12 +1,20 @@
 [package]
 name = "asp_dot_rust_macros"
-version = "0.1.0"
+version = "0.2.4"
 edition = "2024"
+authors = ["kourain <maiquyen16503@gmail.com>"]
+license = "MIT OR GPL-3.0"
+description = "macro helper for asp_dot_rust"
+homepage = "https://github.com/kourain/asp_dot_rust"
+repository = "https://github.com/kourain/asp_dot_rust"
 
 [lib]
 proc-macro = true
 macro_rule = true
+
 [dependencies]
-proc-macro2 = "1.0"
-quote = "1.0"
-syn = { version = "2.0", features = ["full"] }
+proc-macro-crate = "3.5.0"
+proc-macro2 = "1.0.107"
+quote = "1.0.47"
+syn = { version = "3.0.6", features = ["full"] }
+bitflags = "2.13.2"
