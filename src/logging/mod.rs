@@ -15,20 +15,22 @@ pub type LogReceiver = broadcast::Receiver<LogCommand>;
 
 static LOG_SENDER: OnceLock<LogSender> = OnceLock::new();
 static LOG_RUNNING: AtomicBool = AtomicBool::new(false);
-
-fn initialize_logging(mut rx: LogReceiver) {
-    if LOG_RUNNING.swap(true, Ordering::SeqCst) {
+static DEFAULT_LOG_ENABLE: AtomicBool = AtomicBool::new(false);
+static DEFAULT_LOG_RUNNING: AtomicBool = AtomicBool::new(false);
+fn start_default_logger(mut _rx: Option<LogReceiver>) {
+    if !LOG_RUNNING.load(Ordering::Relaxed) || !DEFAULT_LOG_ENABLE.load(Ordering::Relaxed) || DEFAULT_LOG_RUNNING.swap(true, Ordering::SeqCst){
         return; // Already initialized
     }
+    let mut rx;
+    if let Some(_rx) = _rx {
+        rx = _rx;
+    } else {
+        rx = get_sender().subscribe();
+    }
     // Spawn background logging task
-    // #![cfg(feature = "tokio-runtime")]
     tokio::spawn(async move {
         let mut logger = Logger::new();
-        loop {
-            if !logger.enable {
-                rx.recv().await.ok(); // Wait for a command to enable logging
-                break;
-            }
+        while DEFAULT_LOG_ENABLE.load(Ordering::Relaxed) {
             match rx.recv().await {
                 Ok(command) => match command {
                     LogCommand::Log(log_info) => {
@@ -43,11 +45,11 @@ fn initialize_logging(mut rx: LogReceiver) {
                     LogCommand::SetLogLevel(level) => {
                         logger.level = level;
                     }
-                    LogCommand::SetEnable(enable) => {
-                        logger.enable = enable;
-                    }
-                    LogCommand::SetUseTime(enable) => {
-                        logger.use_time = enable;
+                    LogCommand::SetEnable(enable) | LogCommand::SetDefaultLogger(enable) => {
+                        if !enable {
+                            DEFAULT_LOG_ENABLE.store(false, Ordering::Release);
+                            break;
+                        }
                     }
                     LogCommand::SetUseColorOutput(enable) => {
                         logger.use_color_output = enable;
@@ -73,6 +75,7 @@ fn initialize_logging(mut rx: LogReceiver) {
                 }
             }
         }
+        DEFAULT_LOG_RUNNING.store(false, Ordering::Release);
     });
 }
 
@@ -80,7 +83,7 @@ fn get_sender() -> &'static LogSender {
     LOG_SENDER.get_or_init(|| {
         // Fallback if not initialized (shouldn't happen in normal usage)
         let (tx, rx) = broadcast::channel::<LogCommand>(1_000_000);
-        initialize_logging(rx);
+        start_default_logger(Some(rx));
         tx
     })
 }
@@ -91,23 +94,20 @@ pub struct LOGGER;
 impl LOGGER {
     /// Log a message (non-blocking, sends through channel)
     pub fn log(level: LogLevel, message: impl Into<String>) {
-        let log_info = LogInfo {
-            timestamp: Some(chrono::Utc::now()),
-            level,
-            message: message.into(),
-        };
+        if LOG_RUNNING.load(Ordering::Relaxed) {
+            let log_info = LogInfo {
+                timestamp: Some(chrono::Utc::now()),
+                level,
+                message: message.into(),
+            };
 
-        _ = get_sender().send(LogCommand::Log(log_info));
+            _ = get_sender().send(LogCommand::Log(log_info));
+        }
     }
 
     /// set format of log output, e.g. "[{level}] {requestid} {timestamp} {message}"
     pub fn with_format(format: impl Into<String>) {
         _ = get_sender().send(LogCommand::SetLogFormat(format.into()));
-    }
-
-    /// set whether to use UTC time for timestamps
-    pub fn with_time(true_or_false: bool) {
-        _ = get_sender().send(LogCommand::SetUseTime(true_or_false));
     }
 
     /// set whether to use UTC time for timestamps
@@ -137,7 +137,17 @@ impl LOGGER {
 
     /// set whether to log to console
     pub fn set_enable(true_or_false: bool) {
+        LOG_RUNNING.store(false, Ordering::Release);
         _ = get_sender().send(LogCommand::SetEnable(true_or_false));
+    }
+
+    pub fn use_default_logger(true_or_false: bool) {
+        if true_or_false {
+            DEFAULT_LOG_ENABLE.store(true, Ordering::Release);
+            start_default_logger(None)
+        } else {
+            DEFAULT_LOG_ENABLE.store(false, Ordering::Release);
+        }
     }
 
     pub fn trace(message: impl Into<String>) {

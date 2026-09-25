@@ -11,27 +11,27 @@ enum FormatPart {
 }
 pub struct Logger {
     pub level: LogLevel,
-    pub enable: bool,
     log_format: String,
     date_time_format: String,
     format_parts: Vec<FormatPart>,
-    pub use_time: bool,
     pub use_color_output: bool,
     pub use_request_id: bool,
     pub use_connection_id: bool,
+    stdout: tokio::io::Stdout,
+    stderr: tokio::io::Stderr,
 }
 impl Default for Logger {
     fn default() -> Self {
         let mut log = Logger {
             level: LogLevel::Info,
-            enable: true,
             log_format: "[{level}] {timestamp} {connectionid} {requestid} {message}".to_string(),
             date_time_format: "%Y-%m-%d %H:%M:%S".to_string(),
             format_parts: Vec::new(),
-            use_time: true,
             use_color_output: true,
             use_request_id: false,
             use_connection_id: false,
+            stdout: tokio::io::stdout(),
+            stderr: tokio::io::stderr(),
         };
         log.format_parts = Self::parse_format(&log.log_format);
         log
@@ -44,7 +44,7 @@ impl Logger {
     }
     /// write a log message
     pub async fn write_log(&mut self, log_info: &LogInfo) {
-        if self.enable && self.should_log(log_info.level) {
+        if self.should_log(log_info.level) {
             self.output_log_aysnc(log_info).await;
         }
     }
@@ -58,10 +58,7 @@ impl Logger {
     }
     /// get the current timestamp as a string
     fn get_timestamp(&self, log_info: &LogInfo) -> String {
-        if self.use_time {
-            return log_info.timestamp.unwrap_or(chrono::prelude::Utc::now()).format(&self.date_time_format).to_string();
-        }
-        "".to_string()
+        return log_info.timestamp.unwrap_or(chrono::prelude::Utc::now()).format(&self.date_time_format).to_string();
     }
     pub fn set_log_format(&mut self, format: impl Into<String>) {
         self.log_format = format.into();
@@ -133,7 +130,11 @@ impl Logger {
         output.push('\n');
 
         let bytes = output.as_bytes();
-        _ = tokio::io::stderr().write_all(bytes).await;
+        if log_info.level == LogLevel::Error {
+            _ = self.stderr.write_all(bytes).await;
+        } else {
+            _ = self.stdout.write_all(bytes).await;
+        }
     }
     fn get_http_request_id(&self) -> String {
         if self.use_request_id {
