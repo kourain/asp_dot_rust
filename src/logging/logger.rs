@@ -1,4 +1,7 @@
-use crate::logging::{LogInfo, LogLevel};
+use crate::{
+    logging::{LogInfo, LogLevel},
+    threading::{get_connection_id, get_http_request_id},
+};
 use tokio::io::AsyncWriteExt;
 #[derive(Clone, Debug)]
 enum FormatPart {
@@ -44,21 +47,21 @@ impl Logger {
     }
     /// write a log message
     pub async fn write_log(&mut self, log_info: &LogInfo) {
-        if self.should_log(log_info.level) {
+        if self.should_log(&log_info.level) {
             self.output_log_aysnc(log_info).await;
         }
     }
-    fn should_log(&self, level: LogLevel) -> bool {
+    fn should_log(&self, level: &LogLevel) -> bool {
         // hide Debug in release build
         #[cfg(not(debug_assertions))]
         if level == LogLevel::Debug {
             return false;
         }
-        level >= self.level
+        level >= &self.level
     }
     /// get the current timestamp as a string
     fn get_timestamp(&self, log_info: &LogInfo) -> String {
-        return log_info.timestamp.unwrap_or(chrono::prelude::Utc::now()).format(&self.date_time_format).to_string();
+        return log_info.timestamp.format(&self.date_time_format).to_string();
     }
     pub fn set_log_format(&mut self, format: impl Into<String>) {
         self.log_format = format.into();
@@ -123,8 +126,8 @@ impl Logger {
                 FormatPart::Level => output.push_str(&level_str),
                 FormatPart::Timestamp => output.push_str(&timestamp),
                 FormatPart::Message => output.push_str(&log_info.message),
-                FormatPart::RequestID => output.push_str(&self.get_http_request_id()),
-                FormatPart::ConnectionID => output.push_str(&self.get_connection_id()),
+                FormatPart::RequestID => output.push_str(&get_http_request_id()),
+                FormatPart::ConnectionID => output.push_str(&get_connection_id()),
             }
         }
         output.push('\n');
@@ -134,20 +137,6 @@ impl Logger {
             _ = self.stderr.write_all(bytes).await;
         } else {
             _ = self.stdout.write_all(bytes).await;
-        }
-    }
-    fn get_http_request_id(&self) -> String {
-        if self.use_request_id {
-            crate::threading::HTTP_REQUEST_ID.try_with(|id| id.clone()).unwrap_or_else(|_| "".to_string())
-        } else {
-            "".to_string()
-        }
-    }
-    fn get_connection_id(&self) -> String {
-        if self.use_connection_id {
-            crate::threading::TCP_CONNECTION_ID.try_with(|id| id.clone()).unwrap_or_else(|_| "".to_string())
-        } else {
-            "".to_string()
         }
     }
 }

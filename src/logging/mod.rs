@@ -63,7 +63,7 @@ fn start_default_logger(mut _rx: Option<LogReceiver>) {
                 },
                 Err(RecvError::Lagged(missed)) => {
                     let log = LogInfo {
-                        timestamp: None,
+                        timestamp: chrono::Utc::now(),
                         level: LogLevel::Error,
                         message: format!("LOGGER Missed {} log messages due to lag", missed),
                     };
@@ -87,16 +87,13 @@ fn get_sender() -> &'static LogSender {
         tx
     })
 }
-pub fn spawn_log_receiver() -> LogReceiver {
-    get_sender().subscribe()
-}
 pub struct LOGGER;
 impl LOGGER {
     /// Log a message (non-blocking, sends through channel)
     pub fn log(level: LogLevel, message: impl Into<String>) {
         if LOG_RUNNING.load(Ordering::Relaxed) {
             let log_info = LogInfo {
-                timestamp: Some(chrono::Utc::now()),
+                timestamp: chrono::Utc::now(),
                 level,
                 message: message.into(),
             };
@@ -172,5 +169,8 @@ impl LOGGER {
 
     pub fn verbose(message: impl Into<String>) {
         Self::log(LogLevel::Verbose, message);
+    }
+    pub fn spawn_log_receiver() -> LogReceiver {
+        get_sender().subscribe()
     }
 }
