@@ -14,7 +14,19 @@ pub struct RoutingInfo {
 #[derive(Debug, Default)]
 pub struct ResolvedRoute {
     /// key: http_method, value: ControllerInfo
-    pub router_info: Option<Arc<RoutingInfo>>,
+    pub router_info: RoutingResult,
     pub path_params: HashMap<String, String>,
     pub query_params: HashMap<String, String>,
+}
+
+#[derive(Debug)]
+pub enum RoutingResult {
+    Found(Arc<RoutingInfo>),
+    NotFound,
+    MethodNotAllowed,
+}
+impl Default for RoutingResult {
+    fn default() -> Self {
+        RoutingResult::NotFound
+    }
 }

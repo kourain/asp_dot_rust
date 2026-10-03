@@ -1,5 +1,10 @@
 use crate::{
-    controller::{ActionRoute, Routing}, dependency_injection::DependencyInjectableController, services::routing::{ControllerCollect, RoutingService, routing_result::{ControllerInvoke, RoutingInfo}},
+    controller::{ActionRoute, Routing},
+    dependency_injection::DependencyInjectableController,
+    services::routing::{
+        ControllerCollect, RoutingService,
+        routing_result::{ControllerInvoke, RoutingInfo},
+    },
 };
 use asp_dot_rust_macros::DependencyInjectableService;
 use std::{
@@ -102,8 +107,13 @@ impl RoutingServiceBuilder {
     }
     pub fn build(self) -> RoutingService {
         let mut result = RoutingService::default();
-        for route in self._router {
-            _ = result._router.insert(route.0, route.1);
+        for route in &self._router {
+            match result._router.insert(route.0, route.1.clone()) {
+                Ok(_) => {}
+                Err(e) => {
+                    panic!("Failed to insert route {}: {:?}", route.0, e);
+                }
+            }
         }
         result
     }

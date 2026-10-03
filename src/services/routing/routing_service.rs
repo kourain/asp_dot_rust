@@ -1,6 +1,9 @@
 use crate::{
     dependency_injection::DependencyInjectableService,
-    services::routing::routing_result::{ResolvedRoute, RoutingInfo},
+    services::routing::{
+        RoutingResult,
+        routing_result::{ResolvedRoute, RoutingInfo},
+    },
 };
 use matchit::Router;
 use std::{
@@ -40,7 +43,7 @@ impl RoutingService {
         match matched {
             Err(_) => ResolvedRoute {
                 path_params: HashMap::new(),
-                router_info: None,
+                router_info: RoutingResult::NotFound,
                 query_params,
             },
             Ok(matched) => {
@@ -48,13 +51,13 @@ impl RoutingService {
                     let params = HashMap::from_iter(matched.params.iter().map(|(k, v)| (k.into(), v.into())));
                     ResolvedRoute {
                         path_params: params,
-                        router_info: Some(route_info.clone()),
+                        router_info: RoutingResult::Found(route_info.clone()),
                         query_params,
                     }
                 } else {
                     ResolvedRoute {
                         path_params: HashMap::new(),
-                        router_info: None,
+                        router_info: RoutingResult::MethodNotAllowed,
                         query_params,
                     }
                 }
