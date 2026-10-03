@@ -15,7 +15,6 @@ pub struct HttpResponse {
     pub status_code: http::StatusCode,
     pub headers: HeaderMap<HeaderValue>,
     pub body: Vec<u8>,
-    pub version: http::Version,
     pub written_phase: WritenPhase,
     pub keep_alive: bool,
     in_memory_output: Option<Vec<u8>>,
@@ -27,9 +26,8 @@ impl HttpResponse {
         headers.insert("server", "ASP.RS".parse().unwrap());
         Self {
             status_code: http::StatusCode::NO_CONTENT,
-            headers: headers,
+            headers,
             body: Vec::new(),
-            version: http::Version::HTTP_11,
             written_phase: WritenPhase::NONE,
             keep_alive: false,
             in_memory_output: Some(Vec::new()),
