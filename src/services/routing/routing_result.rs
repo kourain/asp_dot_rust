@@ -1,8 +1,8 @@
+use crate::http_context::HttpContext;
 use std::{collections::HashMap, pin::Pin, sync::Arc};
 
-use crate::http_context::HttpContext;
-
 pub(crate) type ControllerInvoke = for<'a> fn(&'a mut HttpContext, &'static str) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
+
 #[derive(Clone, Debug)]
 pub struct RoutingInfo {
     pub controller_name: &'static str,
@@ -19,14 +19,10 @@ pub struct ResolvedRoute {
     pub query_params: HashMap<String, String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum RoutingResult {
     Found(Arc<RoutingInfo>),
+    #[default]
     NotFound,
     MethodNotAllowed,
-}
-impl Default for RoutingResult {
-    fn default() -> Self {
-        RoutingResult::NotFound
-    }
 }

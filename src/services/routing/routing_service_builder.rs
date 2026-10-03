@@ -44,12 +44,11 @@ impl RoutingServiceBuilder {
             let route = Self::join_route(root_route, action.route);
             self.add_controller_route::<T>(route, action.method, action.action_name, controller_invoker.clone());
         }
-        let controller_collect = ControllerCollect {
+        ControllerCollect {
             type_id: TypeId::of::<T>(),
             type_name: std::any::type_name::<T>(),
             controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
-        };
-        controller_collect
+        }
     }
 
     fn join_route(root_route: &str, action_route: &str) -> String {
@@ -87,11 +86,8 @@ impl RoutingServiceBuilder {
                 for method in methods {
                     // Route already exists, update it
                     let http_method = http::Method::from_str(&method.to_uppercase()).unwrap();
-                    match exist_route.insert(http_method, Arc::new(route_info.clone())) {
-                        Some(old) => {
-                            panic!("Doublicate route {}, method {} at {}::{}", route, &method, old.controller_type_name, old.action_name)
-                        }
-                        None => {}
+                    if let Some(old) = exist_route.insert(http_method, Arc::new(route_info.clone())) {
+                        panic!("Doublicate route {}, method {} at {}::{}", route, method, old.controller_type_name, old.action_name)
                     }
                 }
             }
@@ -107,8 +103,8 @@ impl RoutingServiceBuilder {
     }
     pub fn build(self) -> RoutingService {
         let mut result = RoutingService::default();
-        for route in &self._router {
-            match result._router.insert(route.0, route.1.clone()) {
+        for route in self._router {
+            match result._router.insert(&route.0, route.1) {
                 Ok(_) => {}
                 Err(e) => {
                     panic!("Failed to insert route {}: {:?}", route.0, e);

@@ -33,8 +33,8 @@ impl RoutingService {
         let query_params = if let Some(query_string) = uri.query() {
             HashMap::from_iter(query_string.split('&').filter_map(|pair| {
                 let mut parts = pair.splitn(2, '=');
-                let key = parts.next()?.into();
-                let value = urlencoding::decode(parts.next()?).ok()?.into();
+                let key = urlencoding::decode(parts.next().unwrap_or("")).ok()?.into();
+                let value = urlencoding::decode(parts.next().unwrap_or("")).ok()?.into();
                 Some((key, value))
             }))
         } else {

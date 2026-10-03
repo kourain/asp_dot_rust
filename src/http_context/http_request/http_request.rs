@@ -29,8 +29,8 @@ impl HttpRequest {
             body,
             headers,
             keep_alive: true, // default to true, can be updated based on headers
-            client_socket_addr: client_socket_addr,
-            local_socket_addr: local_socket_addr,
+            client_socket_addr,
+            local_socket_addr,
             routing_info,
         }
     }
