@@ -57,7 +57,7 @@ impl RoutingService {
                 } else {
                     ResolvedRoute {
                         path_params: HashMap::new(),
-                        router_info: RoutingResult::MethodNotAllowed,
+                        router_info: RoutingResult::MethodNotAllowed(matched.value.keys().cloned().collect()),
                         query_params,
                     }
                 }

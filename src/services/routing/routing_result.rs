@@ -24,5 +24,5 @@ pub enum RoutingResult {
     Found(Arc<RoutingInfo>),
     #[default]
     NotFound,
-    MethodNotAllowed,
+    MethodNotAllowed(Vec<http::Method>),
 }

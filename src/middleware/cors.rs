@@ -43,7 +43,7 @@ impl Middleware for CorsMiddleware {
 
             // cors header for allowed origin
             let allow_origin = if self.configuration.is_origin_allowed(&origin) { &origin } else { "" };
-            let route_method = self.routing_service.get_allowed_methods(&http_context.request.path());
+            let route_method = self.routing_service.get_allowed_methods(http_context.request.path());
             let route_method = self.configuration.allowed_methods.intersection(&route_method).cloned().collect::<Vec<http::Method>>();
 
             http_context.response.headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, allow_origin.parse().unwrap());

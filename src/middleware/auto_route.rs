@@ -10,9 +10,13 @@ pub fn invoke_async<'a>(http_context: &'a mut HttpContext) -> Pin<Box<dyn std::f
             Found(controller) => {
                 _ = (controller.invoke_async)(http_context, controller.action_name).await;
             }
-            MethodNotAllowed => {
+            MethodNotAllowed(allowed_methods) => {
                 http_context.response.status_code = http::StatusCode::METHOD_NOT_ALLOWED;
                 http_context.response.body = http::StatusCode::METHOD_NOT_ALLOWED.canonical_reason().unwrap_or("Method Not Allowed").as_bytes().to_vec();
+                http_context
+                    .response
+                    .headers
+                    .insert(http::header::ALLOW, allowed_methods.iter().map(|m| m.as_str()).collect::<Vec<_>>().join(", ").parse().unwrap());
             }
             NotFound => {
                 http_context.response.status_code = http::StatusCode::NOT_FOUND;
