@@ -3,7 +3,7 @@ use std::{collections::HashMap, pin::Pin, sync::Arc};
 
 pub(crate) type ControllerInvoke = for<'a> fn(&'a mut HttpContext, &'static str) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct RoutingInfo {
     pub controller_name: &'static str,
     pub controller_type_name: &'static str,

@@ -51,7 +51,7 @@ impl RoutingServiceBuilder {
         }
     }
 
-    fn join_route(root_route: &str, action_route: &str) -> String {
+    pub fn join_route(root_route: &str, action_route: &str) -> String {
         let root = root_route.trim_matches('/');
         let action = action_route.trim_matches('/');
 
@@ -74,19 +74,19 @@ impl RoutingServiceBuilder {
     where
         T: DependencyInjectableController + Routing + Send + 'static,
     {
-        let route_info = RoutingInfo {
+        let route_info = Arc::new(RoutingInfo {
             controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
             controller_type_name: std::any::type_name::<T>(),
             action_name,
             invoke_async: invoker,
-        };
+        });
 
         match self._router.get_mut(&route) {
             Some(exist_route) => {
                 for method in methods {
                     // Route already exists, update it
                     let http_method = http::Method::from_str(&method.to_uppercase()).unwrap();
-                    if let Some(old) = exist_route.insert(http_method, Arc::new(route_info.clone())) {
+                    if let Some(old) = exist_route.insert(http_method, route_info.clone()) {
                         panic!("Doublicate route {}, method {} at {}::{}", route, method, old.controller_type_name, old.action_name)
                     }
                 }
@@ -95,7 +95,7 @@ impl RoutingServiceBuilder {
                 // Route doesn't exist, insert it
                 let mut method_map = HashMap::new();
                 for method in methods {
-                    method_map.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), Arc::new(route_info.clone()));
+                    method_map.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
                 }
                 self._router.insert(route, method_map);
             }

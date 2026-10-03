@@ -6,4 +6,4 @@ mod routing_result;
 pub use application_routing::*;
 pub use routing_service::*;
 pub use routing_service_builder::*;
-pub(crate) use routing_result::*;
+pub use routing_result::*;

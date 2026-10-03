@@ -29,7 +29,7 @@ impl ApplicationBuilder {
             ip: HashSet::new(),
             http_port: HashSet::new(),
             https_port: HashSet::new(),
-            configuration: ConfigurationService::new(),
+            configuration: ConfigurationService::default(),
             service: ServiceProviderScope::new(),
             hosted_services: Vec::new(),
         };

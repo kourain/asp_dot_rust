@@ -10,7 +10,11 @@ Hard code a minimal framework, style base on ASP.NET (C#)
 
 ### 1. Controller
 
-Minimal Controller with routing
+Minimal Controller with routing, matched by a `matchit`-based radix tree
+router with dynamic path parameters (`/{id}`) and per-method dispatch.
+
+See [`docs/routing.md`](docs/routing.md) for the full guide, including path
+parameters, query string parsing, and `404`/`405` resolution.
 
 ### 2. Model
 

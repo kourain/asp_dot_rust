@@ -1,10 +1,8 @@
-use crate::{
-    dependency_injection::DependencyInjectableService,
-    services::routing::{
-        RoutingResult,
-        routing_result::{ResolvedRoute, RoutingInfo},
-    },
+use crate::services::routing::{
+    RoutingResult,
+    routing_result::{ResolvedRoute, RoutingInfo},
 };
+use asp_dot_rust_macros::DependencyInjectableService;
 use matchit::Router;
 use std::{
     collections::{HashMap, HashSet},
@@ -12,24 +10,16 @@ use std::{
     sync::Arc,
 };
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, DependencyInjectableService)]
 pub struct RoutingService {
     /// key: "route", value: HashMap<http_method, resolved controller action info>
+    #[di(default)]
     pub(crate) _router: Router<HashMap<http::Method, Arc<RoutingInfo>>>,
 }
 
-impl DependencyInjectableService for RoutingService {
-    fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
-    where
-        Self: Sized,
-    {
-        RoutingService::default()
-    }
-}
 impl RoutingService {
     pub fn resolve(&self, uri: &http::Uri, method: &http::Method) -> ResolvedRoute {
-        let path = uri.path();
-        let matched = self._router.at(path);
+        let matched = self._router.at(uri.path());
         let query_params = if let Some(query_string) = uri.query() {
             HashMap::from_iter(query_string.split('&').filter_map(|pair| {
                 let mut parts = pair.splitn(2, '=');
