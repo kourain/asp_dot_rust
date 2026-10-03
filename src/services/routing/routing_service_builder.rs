@@ -1,7 +1,5 @@
 use crate::{
-    controller::{ActionRoute, Routing},
-    dependency_injection::DependencyInjectableController,
-    services::routing::{ControllerCollect, ControllerInfo, RoutingService},
+    controller::{ActionRoute, Routing}, dependency_injection::DependencyInjectableController, services::routing::{ControllerCollect, RoutingService, routing_result::{ControllerInvoke, RoutingInfo}},
 };
 use asp_dot_rust_macros::DependencyInjectableService;
 use std::{
@@ -16,9 +14,9 @@ use std::{
 pub struct RoutingServiceBuilder {
     /// key: "route", value: HashMap<http_method, resolved controller action info>
     #[di(default)]
-    _router: HashMap<String, HashMap<http::Method, Arc<ControllerInfo>>>,
+    _router: HashMap<String, HashMap<http::Method, Arc<RoutingInfo>>>,
     #[di(default)]
-    _registered_controllers: HashSet<ControllerCollect>,
+    _registered_controllers: HashSet<TypeId>,
 }
 
 impl RoutingServiceBuilder {
@@ -26,16 +24,26 @@ impl RoutingServiceBuilder {
     where
         T: DependencyInjectableController + Routing + Send + 'static,
     {
+        let controller_invoker: Arc<ControllerInvoke> = Arc::new(|http_context: &mut crate::http_context::HttpContext, action_name: &'static str| {
+            Box::pin(async move {
+                let is_valid = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+                let mut controller = T::inject(http_context, is_valid.clone());
+                controller.routing(action_name).await;
+                is_valid.store(false, std::sync::atomic::Ordering::Release);
+            })
+        });
+        if !self._registered_controllers.insert(TypeId::of::<T>()) {
+            panic!("Registered Controller {} twice", std::any::type_name::<T>());
+        }
         for action in action_routes {
             let route = Self::join_route(root_route, action.route);
-            self.add_route::<T>(route, action.method, action.action_name);
+            self.add_controller_route::<T>(route, action.method, action.action_name, controller_invoker.clone());
         }
         let controller_collect = ControllerCollect {
             type_id: TypeId::of::<T>(),
             type_name: std::any::type_name::<T>(),
             controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
         };
-        self._registered_controllers.insert(controller_collect.clone());
         controller_collect
     }
 
@@ -58,22 +66,15 @@ impl RoutingServiceBuilder {
         format!("/{root}/{action}")
     }
 
-    pub fn add_route<T>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str)
+    pub fn add_controller_route<T>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str, invoker: Arc<ControllerInvoke>)
     where
         T: DependencyInjectableController + Routing + Send + 'static,
     {
-        let route_info = ControllerInfo {
+        let route_info = RoutingInfo {
             controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
             controller_type_name: std::any::type_name::<T>(),
             action_name,
-            invoke_async: |http_context, action_name| {
-                Box::pin(async move {
-                    let is_valid = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-                    let mut controller = T::inject(http_context, is_valid.clone());
-                    controller.routing(action_name).await;
-                    is_valid.store(false, std::sync::atomic::Ordering::Release);
-                })
-            },
+            invoke_async: invoker,
         };
 
         match self._router.get_mut(&route) {
@@ -102,7 +103,7 @@ impl RoutingServiceBuilder {
     pub fn build(self) -> RoutingService {
         let mut result = RoutingService::default();
         for route in self._router {
-            _ = result._router.insert(route.0, Arc::new(route.1));
+            _ = result._router.insert(route.0, route.1);
         }
         result
     }

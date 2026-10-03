@@ -31,23 +31,23 @@ impl DependencyInjectableService for RateLimitMiddleware {
 #[async_trait::async_trait]
 impl Middleware for RateLimitMiddleware {
     async fn invoke_async(&self, context: &mut HttpContext, next: MiddlewareNext) {
-        let client_ip = context.request.client_addr;
+        let client_socket_addr = context.request.client_socket_addr;
         let now = std::time::Instant::now();
-        match self.ip_blocked_until.get(&client_ip.ip()) {
+        match self.ip_blocked_until.get(&client_socket_addr.ip()) {
             Some(blocked_time) => {
                 if now < *blocked_time {
                     context.response.status_code = http::StatusCode::TOO_MANY_REQUESTS; // Too Many Requests
                     context.response.body = http::StatusCode::TOO_MANY_REQUESTS.canonical_reason().unwrap_or("Too Many Requests").as_bytes().to_vec();
                     return;
                 } else {
-                    self.ip_blocked_until.remove(&client_ip.ip());
+                    self.ip_blocked_until.remove(&client_socket_addr.ip());
                 }
             }
             None => {
-                self.ip_blocked_until.insert(client_ip.ip(), std::time::Instant::now());
+                self.ip_blocked_until.insert(client_socket_addr.ip(), std::time::Instant::now());
             }
         };
-        match self.ip_request_counts.get_mut(&client_ip.ip()) {
+        match self.ip_request_counts.get_mut(&client_socket_addr.ip()) {
             Some(mut history_access) => {
                 history_access.push(now);
                 let mut index: usize = 0;
@@ -59,14 +59,14 @@ impl Middleware for RateLimitMiddleware {
                 }
                 if history_access.len() - index - 1 > self.max_requests {
                     self.ip_blocked_until
-                        .insert(client_ip.ip(), std::time::Instant::now() + std::time::Duration::from_secs(self.block_duration_seconds.into()));
+                        .insert(client_socket_addr.ip(), std::time::Instant::now() + std::time::Duration::from_secs(self.block_duration_seconds.into()));
                     history_access.clear(); // Clear history to start fresh after blocking
                 } else {
                     history_access.drain(..index); // Remove old timestamps outside the time window
                 }
             }
             None => {
-                self.ip_request_counts.insert(client_ip.ip(), vec![now]);
+                self.ip_request_counts.insert(client_socket_addr.ip(), vec![now]);
             }
         };
 

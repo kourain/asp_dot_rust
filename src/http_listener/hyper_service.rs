@@ -1,8 +1,8 @@
 use futures::FutureExt;
 use http_body_util::channel::Channel;
 use hyper::{Response, body::Bytes, service::service_fn};
-use std::{convert::Infallible, panic::AssertUnwindSafe};
 use std::sync::Arc;
+use std::{convert::Infallible, panic::AssertUnwindSafe};
 use tokio::net::TcpStream;
 
 use crate::{
@@ -50,17 +50,17 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
         // Extract request metadata before consuming the body
         let content_length: u64 = req.headers().content_length().unwrap_or(0);
         let routing_service = routing_service.clone();
+        let routing_info = routing_service.resolve(req.uri(), req.method());
         async move {
             LOGGER::info(format!("Hyper received {} {} {:?} (Content-Length: {})", req.method(), req.uri(), req.version(), content_length));
 
-            let custom_req = HttpRequest::from_http(req, client_socket_addr, local_listen_socket_addr);
+            let custom_req = HttpRequest::from_http(req, routing_info, client_socket_addr, local_listen_socket_addr);
 
             // Create an in-memory response to run through existing pipeline
             let custom_resp = HttpResponse::new_in_memory();
 
             // Build HttpContext and run middlewares/handlers
             let mut http_context = HttpContext::new(custom_req, custom_resp, app.service_provider.create_scope());
-            http_context.routing_info = routing_service.resolve(&http_context.request.path);
             match AssertUnwindSafe(app.call_middlewares_async(&mut http_context)).catch_unwind().await {
                 Ok(()) => {}
                 Err(panic_payload) => {

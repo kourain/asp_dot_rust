@@ -1,34 +1,18 @@
-use crate::{dependency_injection::DependencyInjectableService, http_context::HttpContext};
+use crate::{
+    dependency_injection::DependencyInjectableService,
+    services::routing::routing_result::{ResolvedRoute, RoutingInfo},
+};
 use matchit::Router;
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
-    future::Future,
-    pin::Pin,
     sync::Arc,
 };
 
-type ControllerInvoke = for<'a> fn(&'a mut HttpContext, &'static str) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
-#[derive(Clone, Debug)]
-pub struct ControllerInfo {
-    pub controller_name: &'static str,
-    pub controller_type_name: &'static str,
-    pub action_name: &'static str,
-    pub(crate) invoke_async: ControllerInvoke,
-}
-#[derive(Debug)]
-pub struct ResolvedRoute {
-    /// key: http_method, value: ControllerInfo
-    pub router_info: Arc<HashMap<http::Method, Arc<ControllerInfo>>>,
-    pub path: String,
-    pub query_string: String,
-    pub path_params: HashMap<String, String>,
-    pub query_params: HashMap<String, String>,
-}
 #[derive(Clone, Default, Debug)]
 pub struct RoutingService {
     /// key: "route", value: HashMap<http_method, resolved controller action info>
-    pub(crate) _router: Router<Arc<HashMap<http::Method, Arc<ControllerInfo>>>>,
+    pub(crate) _router: Router<HashMap<http::Method, Arc<RoutingInfo>>>,
 }
 
 impl DependencyInjectableService for RoutingService {
@@ -40,27 +24,40 @@ impl DependencyInjectableService for RoutingService {
     }
 }
 impl RoutingService {
-    pub fn resolve(&self, full_path: &str) -> Option<ResolvedRoute> {
-        let query_pos = full_path.find('?').unwrap_or(full_path.len());
-        let path = &full_path[..query_pos];
-        let query_string = if query_pos < full_path.len() { &full_path[query_pos + 1..] } else { "" };
+    pub fn resolve(&self, uri: &http::Uri, method: &http::Method) -> ResolvedRoute {
+        let path = uri.path();
         let matched = self._router.at(path);
+        let query_params = if let Some(query_string) = uri.query() {
+            HashMap::from_iter(query_string.split('&').filter_map(|pair| {
+                let mut parts = pair.splitn(2, '=');
+                let key = parts.next()?.into();
+                let value = urlencoding::decode(parts.next()?).ok()?.into();
+                Some((key, value))
+            }))
+        } else {
+            HashMap::new()
+        };
         match matched {
-            Err(_) => None,
+            Err(_) => ResolvedRoute {
+                path_params: HashMap::new(),
+                router_info: None,
+                query_params,
+            },
             Ok(matched) => {
-                let params = HashMap::from_iter(matched.params.iter().map(|(k, v)| (k.into(), v.into())));
-                Some(ResolvedRoute {
-                    path: path.into(),
-                    path_params: params,
-                    router_info: matched.value.clone(),
-                    query_string: query_string.into(),
-                    query_params: HashMap::from_iter(query_string.split('&').filter_map(|pair| {
-                        let mut parts = pair.splitn(2, '=');
-                        let key = parts.next()?.into();
-                        let value = urlencoding::decode(parts.next()?).ok()?.into();
-                        Some((key, value))
-                    })),
-                })
+                if let Some(route_info) = matched.value.get(method) {
+                    let params = HashMap::from_iter(matched.params.iter().map(|(k, v)| (k.into(), v.into())));
+                    ResolvedRoute {
+                        path_params: params,
+                        router_info: Some(route_info.clone()),
+                        query_params,
+                    }
+                } else {
+                    ResolvedRoute {
+                        path_params: HashMap::new(),
+                        router_info: None,
+                        query_params,
+                    }
+                }
             }
         }
     }
