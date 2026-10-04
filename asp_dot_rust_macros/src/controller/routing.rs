@@ -90,7 +90,7 @@ fn push_match_route(routes: &mut Vec<proc_macro2::TokenStream>, method_name_lit:
 
 pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStream {
     let main_crate_path = asp_dot_rust_crate_path();
-    let root_route = parse_macro_input!(args as LitStr);
+    let root_route = parse_macro_input!(args as Option<LitStr>).unwrap_or_else(|| LitStr::new("", proc_macro2::Span::call_site()));
     let original_input = item.clone();
     let input_impl = parse_macro_input!(item as ItemImpl);
     let self_ty = input_impl.self_ty.as_ref();

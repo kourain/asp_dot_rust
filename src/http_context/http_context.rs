@@ -4,17 +4,11 @@ use crate::services::service_provider::service_provider_scope::ServiceProviderSc
 pub struct HttpContext {
     pub request: HttpRequest,
     pub response: HttpResponse,
-    pub routing_info: Option<crate::services::routing::ResolvedRoute>,
     pub service_provider: ServiceProviderScope,
 }
 
 impl HttpContext {
     pub(crate) fn new(request: HttpRequest, response: HttpResponse, service_provider: ServiceProviderScope) -> Self {
-        Self {
-            request,
-            response,
-            routing_info: None,
-            service_provider,
-        }
+        Self { request, response, service_provider }
     }
 }

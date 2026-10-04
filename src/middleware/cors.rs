@@ -26,7 +26,7 @@ impl CorsMiddleware {
 impl Middleware for CorsMiddleware {
     async fn invoke_async(&self, http_context: &mut HttpContext, next: crate::middleware::MiddlewareNext) {
         {
-            let request_origin = http_context.request.headers().origin();
+            let request_origin = http_context.request.headers.origin();
 
             // server-to-server
             let Some(origin) = request_origin else {
@@ -43,7 +43,7 @@ impl Middleware for CorsMiddleware {
 
             // cors header for allowed origin
             let allow_origin = if self.configuration.is_origin_allowed(&origin) { &origin } else { "" };
-            let route_method = self.routing_service.get_allowed_methods(&http_context.request.path);
+            let route_method = self.routing_service.get_allowed_methods(http_context.request.path());
             let route_method = self.configuration.allowed_methods.intersection(&route_method).cloned().collect::<Vec<http::Method>>();
 
             http_context.response.headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, allow_origin.parse().unwrap());
@@ -68,7 +68,7 @@ impl Middleware for CorsMiddleware {
             http_context.response.headers.insert(header::VARY, "Origin".parse().unwrap());
 
             // Preflight OPTIONS
-            let is_options = { http_context.request.method() == http::Method::OPTIONS };
+            let is_options = { http_context.request.method == http::Method::OPTIONS };
             if is_options {
                 http_context.response.headers.insert_str("Access-Control-Max-Age", &self.configuration.max_age.to_string());
                 http_context.response.status_code = http::StatusCode::NO_CONTENT;

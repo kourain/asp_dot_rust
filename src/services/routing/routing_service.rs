@@ -1,147 +1,56 @@
-use crate::{
-    controller::{ActionRoute, Routing},
-    dependency_injection::{DependencyInjectableController, DependencyInjectableService},
-    http_context::HttpContext,
-    services::routing::ControllerCollect,
+use crate::services::routing::{
+    RoutingResult,
+    routing_result::{ResolvedRoute, RoutingInfo},
 };
+use asp_dot_rust_macros::DependencyInjectableService;
 use matchit::Router;
 use std::{
-    any::TypeId,
     collections::{HashMap, HashSet},
     fmt::Debug,
-    future::Future,
-    pin::Pin,
-    str::FromStr,
+    sync::Arc,
 };
 
-type ControllerInvoke = for<'a> fn(&'a mut HttpContext, &'static str) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
-#[derive(Clone, Debug)]
-pub struct ControllerInfo {
-    pub controller_type: TypeId,
-    pub controller_name: &'static str,
-    pub controller_type_name: &'static str,
-    pub action_name: &'static str,
-    pub(crate) invoke_async: ControllerInvoke,
-}
-#[derive(Debug)]
-pub struct ResolvedRoute {
-    pub router_info: HashMap<http::Method, ControllerInfo>, // key: http_method, value: ControllerInfo
-    pub path: String,
-    pub query_string: String,
-    pub path_params: HashMap<String, String>,
-    pub query_params: HashMap<String, String>,
-}
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, DependencyInjectableService)]
 pub struct RoutingService {
-    _router: Router<HashMap<http::Method, ControllerInfo>>, // key: "route", value: HashMap<http_method, resolved controller action info>
-    _registered_controllers: HashSet<ControllerCollect>,
+    /// key: "route", value: HashMap<http_method, resolved controller action info>
+    #[di(default)]
+    pub(crate) _router: Router<HashMap<http::Method, Arc<RoutingInfo>>>,
 }
 
-impl DependencyInjectableService for RoutingService {
-    fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
-    where
-        Self: Sized,
-    {
-        RoutingService::default()
-    }
-}
 impl RoutingService {
-    pub fn register_controller<T>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
-    where
-        T: DependencyInjectableController + Routing + Send + 'static,
-    {
-        for action in action_routes {
-            let route = Self::join_route(root_route, action.route);
-            self.add_route::<T>(route, action.method, action.action_name);
-        }
-        let controller_collect = ControllerCollect {
-            type_id: TypeId::of::<T>(),
-            type_name: std::any::type_name::<T>(),
-            controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
+    pub fn resolve(&self, uri: &http::Uri, method: &http::Method) -> ResolvedRoute {
+        let matched = self._router.at(uri.path());
+        let query_params = if let Some(query_string) = uri.query() {
+            HashMap::from_iter(query_string.split('&').filter_map(|pair| {
+                let mut parts = pair.splitn(2, '=');
+                let key = urlencoding::decode(parts.next().unwrap_or("")).ok()?.into();
+                let value = urlencoding::decode(parts.next().unwrap_or("")).ok()?.into();
+                Some((key, value))
+            }))
+        } else {
+            HashMap::new()
         };
-        self._registered_controllers.insert(controller_collect.clone());
-        controller_collect
-    }
-
-    fn join_route(root_route: &str, action_route: &str) -> String {
-        let root = root_route.trim_matches('/');
-        let action = action_route.trim_matches('/');
-
-        if root.is_empty() && action.is_empty() {
-            return "/".into();
-        }
-
-        if root.is_empty() {
-            return format!("/{action}");
-        }
-
-        if action.is_empty() {
-            return format!("/{root}");
-        }
-
-        format!("/{root}/{action}")
-    }
-
-    pub fn add_route<T>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str)
-    where
-        T: DependencyInjectableController + Routing + Send + 'static,
-    {
-        let controller_type_id = TypeId::of::<T>();
-        let route_info = ControllerInfo {
-            controller_type: controller_type_id,
-            controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
-            controller_type_name: std::any::type_name::<T>(),
-            action_name,
-            invoke_async: |http_context, action_name| {
-                Box::pin(async move {
-                    let is_valid = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-                    let mut controller = T::inject(http_context, is_valid.clone());
-                    controller.routing(action_name).await;
-                    is_valid.store(false, std::sync::atomic::Ordering::Release);
-                })
-            },
-        };
-
-        match self._router.at_mut(&route) {
-            Ok(exist_route) => {
-                for method in methods {
-                    // Route already exists, update it
-                    exist_route.value.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
-                }
-            }
-            Err(_) => {
-                // Route doesn't exist, insert it
-                let mut method_map = HashMap::new();
-                for method in methods {
-                    method_map.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
-                }
-                self._router.insert(&route, method_map).unwrap_or_else(|e| {
-                    panic!("Controller {} failed to insert route: {}, error: {:?}", std::any::type_name::<T>(), route, e);
-                });
-            }
-        }
-    }
-    pub fn resolve(&self, full_path: &str) -> Option<ResolvedRoute> {
-        let query_pos = full_path.find('?').unwrap_or(full_path.len());
-        let path = &full_path[..query_pos];
-        let query_string = if query_pos < full_path.len() { &full_path[query_pos + 1..] } else { "" };
-        let matched = self._router.at(path);
         match matched {
-            Err(_) => None,
+            Err(_) => ResolvedRoute {
+                path_params: HashMap::new(),
+                router_info: RoutingResult::NotFound,
+                query_params,
+            },
             Ok(matched) => {
-                let params = HashMap::from_iter(matched.params.iter().map(|(k, v)| (k.into(), v.into())));
-                Some(ResolvedRoute {
-                    path: path.into(),
-                    path_params: params,
-                    router_info: matched.value.clone(),
-                    query_string: query_string.into(),
-                    query_params: HashMap::from_iter(query_string.split('&').filter_map(|pair| {
-                        let mut parts = pair.split('=');
-                        let key = parts.next()?.into();
-                        let value = urlencoding::decode(parts.next()?).ok()?.into();
-                        Some((key, value))
-                    })),
-                })
+                if let Some(route_info) = matched.value.get(method) {
+                    let params = HashMap::from_iter(matched.params.iter().map(|(k, v)| (k.into(), v.into())));
+                    ResolvedRoute {
+                        path_params: params,
+                        router_info: RoutingResult::Found(route_info.clone()),
+                        query_params,
+                    }
+                } else {
+                    ResolvedRoute {
+                        path_params: HashMap::new(),
+                        router_info: RoutingResult::MethodNotAllowed(matched.value.keys().cloned().collect()),
+                        query_params,
+                    }
+                }
             }
         }
     }
