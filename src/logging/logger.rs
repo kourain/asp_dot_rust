@@ -1,15 +1,10 @@
-use crate::{
-    logging::{LogInfo, LogLevel},
-    threading::{get_connection_id, get_http_request_id},
-};
+use crate::logging::{LogInfo, LogLevel};
 use tokio::io::AsyncWriteExt;
 enum FormatPart {
     Literal(String),
     Level,
     Timestamp,
     Message,
-    RequestID,
-    ConnectionID,
 }
 pub struct Logger {
     pub level: LogLevel,
@@ -60,7 +55,7 @@ impl Logger {
     }
     /// get the current timestamp as a string
     fn get_timestamp(&self, log_info: &LogInfo) -> String {
-        return log_info.timestamp.format(&self.date_time_format).to_string();
+        log_info.timestamp.format(&self.date_time_format).to_string()
     }
     pub fn set_log_format(&mut self, format: impl Into<String>) {
         self.log_format = format.into();
@@ -88,12 +83,6 @@ impl Logger {
                 remaining = stripped;
             } else if let Some(stripped) = rest.strip_prefix("{message}") {
                 parts.push(FormatPart::Message);
-                remaining = stripped;
-            } else if let Some(stripped) = rest.strip_prefix("{requestid}") {
-                parts.push(FormatPart::RequestID);
-                remaining = stripped;
-            } else if let Some(stripped) = rest.strip_prefix("{connectionid}") {
-                parts.push(FormatPart::ConnectionID);
                 remaining = stripped;
             } else {
                 parts.push(FormatPart::Literal("{".to_string()));
@@ -125,8 +114,6 @@ impl Logger {
                 FormatPart::Level => output.push_str(&level_str),
                 FormatPart::Timestamp => output.push_str(&timestamp),
                 FormatPart::Message => output.push_str(&log_info.message),
-                FormatPart::RequestID => output.push_str(&get_http_request_id()),
-                FormatPart::ConnectionID => output.push_str(&get_connection_id()),
             }
         }
         output.push('\n');

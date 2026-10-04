@@ -1,5 +1,9 @@
 use crate::{
-    Application, configuration::HyperConfig, http_context::{HttpContext, http_request::HttpRequest, http_response::HttpResponse}, logging::LOGGER, services::routing::RoutingService,
+    Application,
+    configuration::HyperConfig,
+    http_context::{HttpContext, http_request::HttpRequest, http_response::HttpResponse},
+    logging::LOGGER,
+    services::routing::RoutingService,
 };
 use futures::FutureExt;
 use http_body_util::channel::Channel;
@@ -60,14 +64,17 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
             match AssertUnwindSafe(app.call_middlewares_async(&mut http_context)).catch_unwind().await {
                 Ok(()) => {}
                 Err(panic_payload) => {
-                    LOGGER::error(format!("Unhandled panic: {:?}", panic_payload));
+                    LOGGER::error(format!(
+                        "Request {}:{}, Unhandled panic: {:?}",
+                        http_context.request.connection_id, http_context.request.request_id, panic_payload
+                    ));
                     http_context.response.status_code = http::StatusCode::INTERNAL_SERVER_ERROR;
                     http_context.response.body = b"Internal Server Error".to_vec();
                 }
             }
             let duration = start.elapsed();
             LOGGER::info(format!(
-                "{} {} {:?}  {} {} in {:.3} ms",
+                "{} {} {:?} {} {} in {:.3} ms",
                 http_context.request.client_socket_addr,
                 http_context.request.method,
                 http_context.request.http_version,

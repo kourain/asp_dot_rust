@@ -16,6 +16,4 @@ pub enum LogCommand {
     SetEnable(bool),
     SetDefaultLogger(bool),
     SetUseColorOutput(bool),
-    SetUseRequestId(bool),
-    SetUseConnectionId(bool),
 }

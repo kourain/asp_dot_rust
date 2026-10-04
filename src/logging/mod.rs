@@ -48,16 +48,6 @@ impl LOGGER {
         _ = Self::get_sender().send(LogCommand::SetUseColorOutput(true_or_false));
     }
 
-    /// set log with request_id
-    pub fn with_request_id(true_or_false: bool) {
-        _ = Self::get_sender().send(LogCommand::SetUseRequestId(true_or_false));
-    }
-
-    /// set log with connection_id
-    pub fn with_connection_id(true_or_false: bool) {
-        _ = Self::get_sender().send(LogCommand::SetUseConnectionId(true_or_false));
-    }
-
     /// set the log level
     pub fn with_level(level: LogLevel) {
         _ = Self::get_sender().send(LogCommand::SetLogLevel(level));
@@ -170,12 +160,6 @@ impl LOGGER {
                         }
                         LogCommand::SetUseColorOutput(enable) => {
                             logger.use_color_output = enable;
-                        }
-                        LogCommand::SetUseRequestId(enable) => {
-                            logger.use_request_id = enable;
-                        }
-                        LogCommand::SetUseConnectionId(enable) => {
-                            logger.use_connection_id = enable;
                         }
                     },
                     Err(RecvError::Lagged(missed)) => {

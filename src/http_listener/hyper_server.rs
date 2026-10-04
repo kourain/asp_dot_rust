@@ -12,7 +12,7 @@ pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> 
         let port = *port;
         let routing_service = app.service_provider.get_service::<RoutingService>();
         let configuration_service = app.service_provider.get_service::<ConfigurationService>();
-        let hypercfg = configuration_service.get::<crate::configuration::HyperConfig>().unwrap();
+        let hypercfg = configuration_service.get::<crate::configuration::HyperConfig>().unwrap_or_default();
         async move {
             let listener = TcpListener::bind((ip, port)).await?;
             LOGGER::info(format!("HTTP server listening on {}:{}", ip, port));
