@@ -2,7 +2,7 @@ use crate::logging::LogLevel;
 
 #[derive(Clone, Debug)]
 pub struct LogInfo {
-    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
     pub level: LogLevel,
     pub message: String,
 }
@@ -14,8 +14,6 @@ pub enum LogCommand {
     SetLogLevel(LogLevel),
     SetTimeFormat(String),
     SetEnable(bool),
-    SetUseTime(bool),
+    SetDefaultLogger(bool),
     SetUseColorOutput(bool),
-    SetUseRequestId(bool),
-    SetUseConnectionId(bool),
 }

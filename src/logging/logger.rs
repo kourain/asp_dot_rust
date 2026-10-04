@@ -1,37 +1,30 @@
 use crate::logging::{LogInfo, LogLevel};
 use tokio::io::AsyncWriteExt;
-#[derive(Clone, Debug)]
 enum FormatPart {
     Literal(String),
     Level,
     Timestamp,
     Message,
-    RequestID,
-    ConnectionID,
 }
 pub struct Logger {
-    pub level: LogLevel,
-    pub enable: bool,
+    level: LogLevel,
     log_format: String,
     date_time_format: String,
     format_parts: Vec<FormatPart>,
-    pub use_time: bool,
-    pub use_color_output: bool,
-    pub use_request_id: bool,
-    pub use_connection_id: bool,
+    use_color_output: bool,
+    stdout: tokio::io::Stdout,
+    stderr: tokio::io::Stderr,
 }
 impl Default for Logger {
     fn default() -> Self {
         let mut log = Logger {
             level: LogLevel::Info,
-            enable: true,
-            log_format: "[{level}] {timestamp} {connectionid} {requestid} {message}".to_string(),
+            log_format: "[{level}] {timestamp} {message}".to_string(),
             date_time_format: "%Y-%m-%d %H:%M:%S".to_string(),
             format_parts: Vec::new(),
-            use_time: true,
             use_color_output: true,
-            use_request_id: false,
-            use_connection_id: false,
+            stdout: tokio::io::stdout(),
+            stderr: tokio::io::stderr(),
         };
         log.format_parts = Self::parse_format(&log.log_format);
         log
@@ -44,24 +37,27 @@ impl Logger {
     }
     /// write a log message
     pub async fn write_log(&mut self, log_info: &LogInfo) {
-        if self.enable && self.should_log(log_info.level) {
+        if self.should_log(&log_info.level) {
             self.output_log_aysnc(log_info).await;
         }
     }
-    fn should_log(&self, level: LogLevel) -> bool {
+    fn should_log(&self, level: &LogLevel) -> bool {
         // hide Debug in release build
         #[cfg(not(debug_assertions))]
         if level == LogLevel::Debug {
             return false;
         }
-        level >= self.level
+        level >= &self.level
     }
     /// get the current timestamp as a string
     fn get_timestamp(&self, log_info: &LogInfo) -> String {
-        if self.use_time {
-            return log_info.timestamp.unwrap_or(chrono::prelude::Utc::now()).format(&self.date_time_format).to_string();
-        }
-        "".to_string()
+        log_info.timestamp.format(&self.date_time_format).to_string()
+    }
+    pub fn set_level(&mut self, level: LogLevel) {
+        self.level = level;
+    }
+    pub fn set_use_color_output(&mut self, use_color: bool) {
+        self.use_color_output = use_color;
     }
     pub fn set_log_format(&mut self, format: impl Into<String>) {
         self.log_format = format.into();
@@ -89,12 +85,6 @@ impl Logger {
                 remaining = stripped;
             } else if let Some(stripped) = rest.strip_prefix("{message}") {
                 parts.push(FormatPart::Message);
-                remaining = stripped;
-            } else if let Some(stripped) = rest.strip_prefix("{requestid}") {
-                parts.push(FormatPart::RequestID);
-                remaining = stripped;
-            } else if let Some(stripped) = rest.strip_prefix("{connectionid}") {
-                parts.push(FormatPart::ConnectionID);
                 remaining = stripped;
             } else {
                 parts.push(FormatPart::Literal("{".to_string()));
@@ -126,27 +116,15 @@ impl Logger {
                 FormatPart::Level => output.push_str(&level_str),
                 FormatPart::Timestamp => output.push_str(&timestamp),
                 FormatPart::Message => output.push_str(&log_info.message),
-                FormatPart::RequestID => output.push_str(&self.get_http_request_id()),
-                FormatPart::ConnectionID => output.push_str(&self.get_connection_id()),
             }
         }
         output.push('\n');
 
         let bytes = output.as_bytes();
-        _ = tokio::io::stderr().write_all(bytes).await;
-    }
-    fn get_http_request_id(&self) -> String {
-        if self.use_request_id {
-            crate::threading::HTTP_REQUEST_ID.try_with(|id| id.clone()).unwrap_or_else(|_| "".to_string())
+        if log_info.level == LogLevel::Error {
+            _ = self.stderr.write_all(bytes).await;
         } else {
-            "".to_string()
-        }
-    }
-    fn get_connection_id(&self) -> String {
-        if self.use_connection_id {
-            crate::threading::TCP_CONNECTION_ID.try_with(|id| id.clone()).unwrap_or_else(|_| "".to_string())
-        } else {
-            "".to_string()
+            _ = self.stdout.write_all(bytes).await;
         }
     }
 }

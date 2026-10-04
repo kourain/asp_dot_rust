@@ -33,17 +33,16 @@ impl ApplicationMiddlewares {
             LOGGER::trace(format!("Adding middleware to pipeline: {}", middleware.type_name()));
             next = Arc::new(move |http_context: &mut HttpContext| {
                 let middleware = middleware.clone();
-                LOGGER::trace(format!("Nexting to middleware: {}", middleware.type_name()));
                 let next = next_handler.clone();
                 Box::pin(async move {
-                    LOGGER::debug(format!("Executing middleware: {}", middleware.type_name()));
+                    LOGGER::trace(format!("Executing middleware: {}", middleware.type_name()));
                     middleware.invoke_async(http_context, next).await;
                 })
             });
         }
         self.pipeline = Some(next);
     }
-    pub async fn execute(&self, http_context: &mut HttpContext) {
+    pub async fn invoke_async(&self, http_context: &mut HttpContext) {
         if let Some(root) = self.pipeline.as_ref() {
             root(http_context).await;
         }
@@ -70,6 +69,6 @@ impl Application {
         self
     }
     pub(crate) async fn call_middlewares_async(&self, http_context: &mut HttpContext) {
-        self._middlewares.execute(http_context).await;
+        self._middlewares.invoke_async(http_context).await;
     }
 }

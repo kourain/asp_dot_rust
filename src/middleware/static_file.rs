@@ -2,7 +2,7 @@ use crate::{
     Application,
     configuration::StaticFileConfiguration,
     dependency_injection::Cfg,
-    http_context::http_header::AspDotRustHttpHeader,
+    http_context::http_header::HttpHeader,
     macros::inject,
     middleware::{self, Middleware},
     utils,

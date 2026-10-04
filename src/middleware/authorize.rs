@@ -1,17 +1,14 @@
+use asp_dot_rust_macros::DependencyInjectableService;
+
 use crate::{
     Application,
-    dependency_injection::DependencyInjectableService,
-    http_context::{HttpContext, http_header::AspDotRustHttpHeader},
+    http_context::{HttpContext, http_header::HttpHeader},
     middleware::{Middleware, MiddlewareNext},
 };
-#[derive(Default)]
+#[derive(Default, DependencyInjectableService)]
 pub(crate) struct AuthorizeMiddleware {
+    #[di(default)]
     schema: String,
-}
-impl DependencyInjectableService for AuthorizeMiddleware {
-    fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
-        AuthorizeMiddleware::default()
-    }
 }
 #[async_trait::async_trait]
 impl Middleware for AuthorizeMiddleware {

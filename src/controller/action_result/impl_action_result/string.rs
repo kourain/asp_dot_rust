@@ -1,4 +1,4 @@
-use crate::{controller::ActionResult, http_context::http_header::AspDotRustHttpHeader};
+use crate::{controller::ActionResult, http_context::http_header::HttpHeader};
 
 impl ActionResult for String {
     async fn get_body_async(&self) -> Vec<u8> {
