@@ -1,14 +1,12 @@
-use std::sync::Arc;
-
-use rustls::ServerConfig;
-use tokio::net::TcpListener;
-use tokio_rustls::TlsAcceptor;
-
 use crate::{
     Application,
     logging::LOGGER,
     services::{configuration::ConfigurationService, routing::RoutingService},
 };
+use rustls::ServerConfig;
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use tokio_rustls::TlsAcceptor;
 
 pub(crate) async fn hyper_server_tls(app: &Arc<Application>, tls_config: Arc<ServerConfig>) -> std::io::Result<()> {
     let acceptor = TlsAcceptor::from(tls_config);
@@ -23,7 +21,7 @@ pub(crate) async fn hyper_server_tls(app: &Arc<Application>, tls_config: Arc<Ser
         let hypercfg = configuration_service.get::<crate::configuration::HyperConfig>().unwrap_or_default();
         async move {
             let listener = TcpListener::bind((ip, port)).await?;
-            LOGGER::info(format!("HTTPS server listening on {}:{}", ip, port));
+            LOGGER::info(format!("HTTPS server listening on {}:{}", if ip.is_ipv4() { "IPv4" } else { "IPv6" }, port));
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {
