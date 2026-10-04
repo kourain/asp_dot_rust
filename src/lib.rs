@@ -9,7 +9,6 @@ pub mod http_listener;
 pub mod logging;
 pub mod middleware;
 pub mod services;
-pub mod threading;
 pub mod macros {
     pub use asp_dot_rust_macros::*;
 }

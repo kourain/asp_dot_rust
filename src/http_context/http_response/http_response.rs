@@ -1,6 +1,6 @@
 use http::{HeaderMap, HeaderValue};
 
-use crate::{http_context::http_header::AspDotRustHttpHeader, logging::LOGGER};
+use crate::{http_context::http_header::HttpHeader, logging::LOGGER};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]

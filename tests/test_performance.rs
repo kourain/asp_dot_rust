@@ -9,9 +9,7 @@ use asp_dot_rust::{
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 20)]
 async fn test_application() {
-    LOGGER::set_enable(false);
-    // LOGGER::with_chrono_time_format("%Y-%m-%d %H:%M:%S%.9f");
-    // LOGGER::with_request_id(true);
+    LOGGER::disable();
     let mut app_builder = ApplicationBuilder::new("TestApp");
     app_builder.with_any_ip().with_http_port(8080);
     app_builder

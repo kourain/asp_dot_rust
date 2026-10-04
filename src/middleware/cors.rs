@@ -2,7 +2,7 @@ use crate::{
     Application,
     configuration::CorsConfiguration,
     dependency_injection::{Cfg, Serv},
-    http_context::{HttpContext, http_header::AspDotRustHttpHeader},
+    http_context::{HttpContext, http_header::HttpHeader},
     macros::inject,
     middleware::Middleware,
 };

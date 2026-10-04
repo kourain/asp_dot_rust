@@ -1,4 +1,8 @@
-use crate::{Application, logging::LOGGER};
+use crate::{
+    Application,
+    logging::LOGGER,
+    services::{configuration::ConfigurationService, routing::RoutingService},
+};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
@@ -6,17 +10,20 @@ pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> 
     futures::future::try_join_all(app.ip.iter().zip(app.http_port.iter()).map(|(ip, port)| {
         let ip = *ip;
         let port = *port;
+        let routing_service = app.service_provider.get_service::<RoutingService>();
+        let configuration_service = app.service_provider.get_service::<ConfigurationService>();
+        let hypercfg = configuration_service.get::<crate::configuration::HyperConfig>().unwrap_or_default();
         async move {
             let listener = TcpListener::bind((ip, port)).await?;
             LOGGER::info(format!("HTTP server listening on {}:{}", ip, port));
-            let routing_service = app.service_provider.get_service::<crate::services::routing::RoutingService>();
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {
                         let app = app.clone();
                         let routing_service = routing_service.clone();
+                        let hypercfg = hypercfg.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, app, &routing_service).await {
+                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, app, routing_service, hypercfg).await {
                                 LOGGER::error(format!("Error occurred: {}", e));
                             }
                         });

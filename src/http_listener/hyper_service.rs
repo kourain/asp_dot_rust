@@ -1,18 +1,20 @@
+use crate::{
+    Application,
+    configuration::HyperConfig,
+    http_context::{HttpContext, http_request::HttpRequest, http_response::HttpResponse},
+    logging::LOGGER,
+    services::routing::RoutingService,
+};
 use futures::FutureExt;
 use http_body_util::channel::Channel;
 use hyper::{Response, body::Bytes, service::service_fn};
+use hyper_util::rt::{TokioIo, TokioTimer};
+use hyper_util::server::conn::auto as auto_conn;
 use std::sync::Arc;
+use std::time::Duration;
 use std::{convert::Infallible, panic::AssertUnwindSafe};
 use tokio::net::TcpStream;
-
-use crate::{
-    Application,
-    http_context::{AspDotRustHttpHeader, HttpContext, http_request::HttpRequest, http_response::HttpResponse},
-    logging::LOGGER,
-};
-
-use hyper_util::rt::TokioIo;
-use hyper_util::server::conn::auto as auto_conn;
+use ulid::Ulid;
 
 /// Chunk size for streaming response body (64KB per chunk)
 const RESPONSE_CHUNK_SIZE: usize = 64 * 1024;
@@ -40,21 +42,19 @@ fn create_streaming_body(body_vec: Vec<u8>) -> Channel<Bytes, Infallible> {
     body
 }
 
-pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: &Arc<crate::services::routing::RoutingService>) -> std::io::Result<()> {
-    let app_clone = app.clone();
+pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: Arc<RoutingService>, hypercfg: Arc<HyperConfig>) -> std::io::Result<()> {
     let client_socket_addr = stream.peer_addr().unwrap();
     let local_listen_socket_addr = stream.local_addr().unwrap();
-    let service = service_fn(move |req| {
-        let app = app_clone.clone();
+    let connection_id: Arc<Ulid> = Arc::new(Ulid::generate());
+    let hyper_service = service_fn(move |req| {
+        let app = app.clone();
         let start = std::time::Instant::now();
         // Extract request metadata before consuming the body
-        let content_length: u64 = req.headers().content_length().unwrap_or(0);
         let routing_service = routing_service.clone();
+        let connection_id = connection_id.clone();
         let routing_info = routing_service.resolve(req.uri(), req.method());
         async move {
-            LOGGER::info(format!("Hyper received {} {} {:?} (Content-Length: {})", req.method(), req.uri(), req.version(), content_length));
-
-            let custom_req = HttpRequest::from_http(req, routing_info, client_socket_addr, local_listen_socket_addr);
+            let custom_req = HttpRequest::from_http(req, routing_info, client_socket_addr, local_listen_socket_addr, connection_id);
 
             // Create an in-memory response to run through existing pipeline
             let custom_resp = HttpResponse::new_in_memory();
@@ -64,11 +64,24 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
             match AssertUnwindSafe(app.call_middlewares_async(&mut http_context)).catch_unwind().await {
                 Ok(()) => {}
                 Err(panic_payload) => {
-                    LOGGER::error(format!("Unhandled panic: {:?}", panic_payload));
+                    LOGGER::error(format!(
+                        "Request {}:{}, Unhandled panic: {:?}",
+                        http_context.request.connection_id, http_context.request.request_id, panic_payload
+                    ));
                     http_context.response.status_code = http::StatusCode::INTERNAL_SERVER_ERROR;
                     http_context.response.body = b"Internal Server Error".to_vec();
                 }
             }
+            let duration = start.elapsed();
+            LOGGER::info(format!(
+                "{} {} {:?} {} {} in {:.3} ms",
+                http_context.request.client_socket_addr,
+                http_context.request.method,
+                http_context.request.http_version,
+                http_context.request.uri,
+                http_context.response.status_code,
+                duration.as_secs_f64() * 1000.0
+            ));
             // Convert internal response to http::Response<Vec<u8>> and then to hyper::Response<Body>
             let http_response = http_context.response.move_to_http_response();
             let mut builder = Response::builder().status(http_response.status());
@@ -81,22 +94,28 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
             }
 
             let body_vec = http_response.body().clone();
-            let body_len = body_vec.len();
-
             // Stream response body chunk-by-chunk (64KB per chunk)
             let response_body = create_streaming_body(body_vec);
             let response = builder.body(response_body).unwrap_or_else(|e| {
                 LOGGER::error(format!("Failed to build response: {}", e));
                 Response::builder().status(500).body(create_streaming_body(Vec::new())).unwrap()
             });
-            let duration = start.elapsed();
-            LOGGER::info(format!("Handled in {:.3} ms, response size: {} bytes", duration.as_secs_f64() * 1000.0, body_len));
             Ok::<_, hyper::Error>(response)
         }
     });
-
-    let builder = auto_conn::Builder::new(hyper_util::rt::TokioExecutor::new());
+    let mut builder = auto_conn::Builder::new(hyper_util::rt::TokioExecutor::new());
+    // HTTP/1.1 keep-alive is already on by default, but without a timer it
+    // never times out: a client that opens a connection and stops sending
+    // requests (or headers) would hold the socket/task open indefinitely.
+    builder.http1().timer(TokioTimer::new()).header_read_timeout(Duration::from_secs(hypercfg.header_read_timeout));
+    // HTTP/2 multiplexes over a single long-lived connection by design, so
+    // enable PING-based keep-alive to detect and drop dead peers.
+    builder
+        .http2()
+        .timer(TokioTimer::new())
+        .keep_alive_interval(Duration::from_secs(hypercfg.http2_keep_alive_interval))
+        .keep_alive_timeout(Duration::from_secs(hypercfg.http2_keep_alive_timeout));
     // wrap the tokio TcpStream so hyper-util can use hyper RT traits
     let io = TokioIo::new(stream);
-    builder.serve_connection(io, service).await.map_err(std::io::Error::other)
+    builder.serve_connection(io, hyper_service).await.map_err(std::io::Error::other)
 }
