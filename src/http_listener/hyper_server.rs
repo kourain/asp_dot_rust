@@ -17,7 +17,7 @@ pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> 
         let hypercfg = configuration_service.get::<crate::configuration::HyperConfig>().unwrap_or_default();
         async move {
             let listener = TcpListener::bind((ip, port)).await?;
-            LOGGER::info(format!("HTTP server listening on {}:{}", ip, port));
+            LOGGER::info(format!("HTTP server listening on {}:{}", if ip.is_ipv4() { "IPv4" } else { "IPv6" }, port));
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {

@@ -5,6 +5,7 @@ pub(crate) mod cors;
 pub(crate) mod rate_limit;
 pub(crate) mod request_timeout;
 pub(crate) mod static_file;
+
 use crate::dependency_injection::DependencyInjectableService;
 use crate::http_context::HttpContext;
 use async_trait::async_trait;
