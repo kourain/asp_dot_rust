@@ -114,7 +114,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                     http_context: &mut #main_crate_path::http_context::HttpContext,
                     is_valid: std::sync::Arc<std::sync::atomic::AtomicBool>
                 ) -> Self {
-                    let service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope = &http_context.service_provider;
+                    let service_scope: &#main_crate_path::services::service_provider::ServiceProviderScope = &http_context.service_provider;
                     #http_context_inject
                     #configuration_service
                     Self::new( #(#call_args),* )
@@ -126,7 +126,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
             #input
             impl #main_crate_path::dependency_injection::DependencyInjectableService for #self_ty {
                 fn inject(
-                    service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope
+                    service_scope: &#main_crate_path::services::service_provider::ServiceProviderScope
                 ) -> Self {
                     #http_context_inject
                     #configuration_service

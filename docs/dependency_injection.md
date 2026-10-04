@@ -103,7 +103,7 @@ skipped entirely:
 
 ```rust
 use asp_dot_rust::dependency_injection::Serv;
-use asp_dot_rust_macros::DependencyInjectableService;
+use asp_dot_rust::macros::DependencyInjectableService;
 
 #[derive(DependencyInjectableService)]
 pub struct Ex2Service {

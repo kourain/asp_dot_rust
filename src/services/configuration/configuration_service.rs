@@ -1,6 +1,5 @@
-use crate::{logging::LOGGER, utils::path::get_real_path};
+use crate::{logging::LOGGER, macros::DependencyInjectableService, utils::path::get_real_path};
 use arc_swap::ArcSwap;
-use asp_dot_rust_macros::DependencyInjectableService;
 use serde::de::DeserializeOwned;
 use std::{
     any::{Any, TypeId},
