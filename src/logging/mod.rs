@@ -40,7 +40,7 @@ impl LOGGER {
     }
 
     /// set whether to use UTC time for timestamps
-    pub fn with_chrono_time_format(format: impl Into<String>) {
+    pub fn with_time_format(format: impl Into<String>) {
         _ = Self::get_sender().send(LogCommand::SetTimeFormat(format.into()));
     }
 

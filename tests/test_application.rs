@@ -13,10 +13,6 @@ use crate::middleware::TestMidware;
 #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
 async fn test_application() {
     LOGGER::disable();
-    LOGGER::with_color_output(true);
-    LOGGER::with_level(asp_dot_rust::logging::LogLevel::Verbose);
-    LOGGER::with_chrono_time_format("%Y-%m-%d %H:%M:%S%.3f");
-    // LOGGER::with_request_id(true);
     let mut app_builder = ApplicationBuilder::new("TestApp");
     app_builder.with_any_ip().with_http_port(8080).with_http_port(9999);
     app_builder
