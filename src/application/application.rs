@@ -42,6 +42,8 @@ impl Application {
                 service.invoke_async().await
             });
         }
-        _ = hyper_server(&app).await;
+        if let Err(e) = hyper_server(&app).await {
+            panic!("Error occurred while running the application: {}", e);
+        }
     }
 }

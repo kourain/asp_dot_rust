@@ -1,8 +1,12 @@
 use crate::services::routing::ResolvedRoute;
 use http::{HeaderMap, Uri};
 use hyper::body::Incoming;
+use std::sync::Arc;
+use ulid::Ulid;
 
 pub struct HttpRequest {
+    pub connection_id: Arc<Ulid>,
+    pub request_id: Ulid,
     pub http_version: http::Version,
     pub keep_alive: bool,
     pub method: http::Method,
@@ -16,13 +20,15 @@ pub struct HttpRequest {
 
 impl HttpRequest {
     /// move the http::Request<Incoming> into HttpRequest, extracting the necessary fields
-    pub fn from_http(http: http::Request<Incoming>, routing_info: ResolvedRoute, client_socket_addr: std::net::SocketAddr, local_socket_addr: std::net::SocketAddr) -> Self {
+    pub fn from_http(http: http::Request<Incoming>, routing_info: ResolvedRoute, client_socket_addr: std::net::SocketAddr, local_socket_addr: std::net::SocketAddr, connection_id: Arc<Ulid>) -> Self {
         let (part, body) = http.into_parts();
         let method = part.method;
         let uri = part.uri;
         let http_version = part.version;
         let headers = part.headers;
         Self {
+            connection_id,
+            request_id: Ulid::generate(),
             method,
             uri,
             http_version,

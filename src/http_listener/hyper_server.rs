@@ -1,6 +1,7 @@
 use crate::{Application, logging::LOGGER};
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use ulid::Ulid;
 
 pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> {
     futures::future::try_join_all(app.ip.iter().zip(app.http_port.iter()).map(|(ip, port)| {
@@ -14,9 +15,10 @@ pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> 
                 match listener.accept().await {
                     Ok((stream, _)) => {
                         let app = app.clone();
+                        let connection_id = Arc::new(Ulid::generate());
                         let routing_service = routing_service.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, app, &routing_service).await {
+                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, app, &routing_service, connection_id.clone()).await {
                                 LOGGER::error(format!("Error occurred: {}", e));
                             }
                         });

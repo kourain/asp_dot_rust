@@ -3,7 +3,6 @@ use crate::{
     threading::{get_connection_id, get_http_request_id},
 };
 use tokio::io::AsyncWriteExt;
-#[derive(Clone, Debug)]
 enum FormatPart {
     Literal(String),
     Level,

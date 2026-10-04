@@ -1,5 +1,5 @@
 use http::{HeaderMap, HeaderValue, header::{AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, ORIGIN}};
-pub trait AspDotRustHttpHeader {
+pub trait HttpHeader {
     /// get the Authorization header value, if present
     fn authorization(&self) -> Option<String>;
     /// get the Content-Type header value, if present
@@ -16,8 +16,12 @@ pub trait AspDotRustHttpHeader {
     fn insert_str(&mut self, key: &'static str, value: &str);
     /// insert a header with a static key and a string value
     fn insert_string(&mut self, key: &'static str, value: String);
+    /// append a string value to an existing header or create a new one
+    fn append_str(&mut self, key: &'static str, value: &str);
+    /// append a string value to an existing header or create a new one
+    fn append_string(&mut self, key: &'static str, value: String);
 }
-impl AspDotRustHttpHeader for HeaderMap<HeaderValue> {
+impl HttpHeader for HeaderMap<HeaderValue> {
     fn authorization(&self) -> Option<String> {
         self.get(AUTHORIZATION).and_then(|value| value.to_str().ok()).map(|s| s.to_string())
     }
@@ -41,5 +45,11 @@ impl AspDotRustHttpHeader for HeaderMap<HeaderValue> {
     }
     fn insert_string(&mut self, key: &'static str, value: String) {
         self.insert(key, HeaderValue::from_str(&value).unwrap());
+    }
+    fn append_str(&mut self, key: &'static str, value: &str) {
+        self.append(key, HeaderValue::from_str(value).unwrap());
+    }
+    fn append_string(&mut self, key: &'static str, value: String) {
+        self.append(key, HeaderValue::from_str(&value).unwrap());
     }
 }

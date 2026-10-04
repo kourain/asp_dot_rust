@@ -1,18 +1,17 @@
+use crate::{
+    Application,
+    http_context::{HttpContext, http_request::HttpRequest, http_response::HttpResponse},
+    logging::LOGGER,
+};
 use futures::FutureExt;
 use http_body_util::channel::Channel;
 use hyper::{Response, body::Bytes, service::service_fn};
+use hyper_util::rt::TokioIo;
+use hyper_util::server::conn::auto as auto_conn;
 use std::sync::Arc;
 use std::{convert::Infallible, panic::AssertUnwindSafe};
 use tokio::net::TcpStream;
-
-use crate::{
-    Application,
-    http_context::{AspDotRustHttpHeader, HttpContext, http_request::HttpRequest, http_response::HttpResponse},
-    logging::LOGGER,
-};
-
-use hyper_util::rt::TokioIo;
-use hyper_util::server::conn::auto as auto_conn;
+use ulid::Ulid;
 
 /// Chunk size for streaming response body (64KB per chunk)
 const RESPONSE_CHUNK_SIZE: usize = 64 * 1024;
@@ -40,21 +39,18 @@ fn create_streaming_body(body_vec: Vec<u8>) -> Channel<Bytes, Infallible> {
     body
 }
 
-pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: &Arc<crate::services::routing::RoutingService>) -> std::io::Result<()> {
-    let app_clone = app.clone();
+pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: &Arc<crate::services::routing::RoutingService>, connection_id: Arc<Ulid>) -> std::io::Result<()> {
     let client_socket_addr = stream.peer_addr().unwrap();
     let local_listen_socket_addr = stream.local_addr().unwrap();
     let service = service_fn(move |req| {
-        let app = app_clone.clone();
+        let app = app.clone();
         let start = std::time::Instant::now();
         // Extract request metadata before consuming the body
-        let content_length: u64 = req.headers().content_length().unwrap_or(0);
         let routing_service = routing_service.clone();
+        let connection_id = connection_id.clone();
         let routing_info = routing_service.resolve(req.uri(), req.method());
         async move {
-            LOGGER::info(format!("Hyper received {} {} {:?} (Content-Length: {})", req.method(), req.uri(), req.version(), content_length));
-
-            let custom_req = HttpRequest::from_http(req, routing_info, client_socket_addr, local_listen_socket_addr);
+            let custom_req = HttpRequest::from_http(req, routing_info, client_socket_addr, local_listen_socket_addr, connection_id);
 
             // Create an in-memory response to run through existing pipeline
             let custom_resp = HttpResponse::new_in_memory();
@@ -69,6 +65,16 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
                     http_context.response.body = b"Internal Server Error".to_vec();
                 }
             }
+            let duration = start.elapsed();
+            LOGGER::info(format!(
+                "{} {} {:?}  {} {} in {:.3} ms",
+                http_context.request.client_socket_addr,
+                http_context.request.method,
+                http_context.request.http_version,
+                http_context.request.uri,
+                http_context.response.status_code,
+                duration.as_secs_f64() * 1000.0
+            ));
             // Convert internal response to http::Response<Vec<u8>> and then to hyper::Response<Body>
             let http_response = http_context.response.move_to_http_response();
             let mut builder = Response::builder().status(http_response.status());
@@ -81,16 +87,12 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
             }
 
             let body_vec = http_response.body().clone();
-            let body_len = body_vec.len();
-
             // Stream response body chunk-by-chunk (64KB per chunk)
             let response_body = create_streaming_body(body_vec);
             let response = builder.body(response_body).unwrap_or_else(|e| {
                 LOGGER::error(format!("Failed to build response: {}", e));
                 Response::builder().status(500).body(create_streaming_body(Vec::new())).unwrap()
             });
-            let duration = start.elapsed();
-            LOGGER::info(format!("Handled in {:.3} ms, response size: {} bytes", duration.as_secs_f64() * 1000.0, body_len));
             Ok::<_, hyper::Error>(response)
         }
     });

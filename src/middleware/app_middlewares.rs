@@ -33,10 +33,9 @@ impl ApplicationMiddlewares {
             LOGGER::trace(format!("Adding middleware to pipeline: {}", middleware.type_name()));
             next = Arc::new(move |http_context: &mut HttpContext| {
                 let middleware = middleware.clone();
-                LOGGER::trace(format!("Nexting to middleware: {}", middleware.type_name()));
                 let next = next_handler.clone();
                 Box::pin(async move {
-                    LOGGER::debug(format!("Executing middleware: {}", middleware.type_name()));
+                    LOGGER::trace(format!("Executing middleware: {}", middleware.type_name()));
                     middleware.invoke_async(http_context, next).await;
                 })
             });
