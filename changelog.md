@@ -1,5 +1,9 @@
 # Change log
 
+## 0.2.6
+
+- fix logging disable `LOGGER::disable()` at start not work
+
 ## 0.2.5
 
 ### Logging
