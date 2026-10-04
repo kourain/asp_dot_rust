@@ -10,7 +10,7 @@ api_controller!(pub HomeController {
     temp: String,
 });
 
-#[controller_route("")]
+#[controller_route]
 #[controller_inject]
 impl HomeController {
     fn new(http_context: HttpContextRef) -> Self {

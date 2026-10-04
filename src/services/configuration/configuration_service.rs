@@ -1,5 +1,6 @@
-use crate::{dependency_injection::DependencyInjectableService, logging::LOGGER, utils::get_real_path};
+use crate::{logging::LOGGER, utils::get_real_path};
 use arc_swap::ArcSwap;
+use asp_dot_rust_macros::DependencyInjectableService;
 use serde::de::DeserializeOwned;
 use std::{
     any::{Any, TypeId},
@@ -18,34 +19,19 @@ struct ReloadEntry {
     section: String,
     reload_fn: ReloadFn,
 }
-
+#[derive(DependencyInjectableService, Default)]
 pub struct ConfigurationService {
+    #[di(default)]
     _inner: HashMap<TypeId, Arc<dyn Any + Send + Sync>>,
     // RwLock so `reload_all()` can run through `&self`, e.g. from a background
     // task holding `Arc<ConfigurationService>` after the app has started.
+    #[di(default)]
     _toml_tables: RwLock<HashMap<String, toml::Table>>,
+    #[di(default)]
     _reload_sections: RwLock<HashMap<TypeId, ReloadEntry>>,
-}
-impl DependencyInjectableService for ConfigurationService {
-    fn inject(_service_provider: &crate::services::service_provider::ServiceProviderScope) -> Self {
-        Self::new()
-    }
-}
-impl Default for ConfigurationService {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl ConfigurationService {
-    pub fn new() -> Self {
-        Self {
-            _inner: HashMap::new(),
-            _toml_tables: RwLock::new(HashMap::new()),
-            _reload_sections: RwLock::new(HashMap::new()),
-        }
-    }
-
     /// check if the configuration of type T exists
     pub fn contains<T>(&self) -> bool
     where
