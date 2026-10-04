@@ -7,13 +7,11 @@ enum FormatPart {
     Message,
 }
 pub struct Logger {
-    pub level: LogLevel,
+    level: LogLevel,
     log_format: String,
     date_time_format: String,
     format_parts: Vec<FormatPart>,
-    pub use_color_output: bool,
-    pub use_request_id: bool,
-    pub use_connection_id: bool,
+    use_color_output: bool,
     stdout: tokio::io::Stdout,
     stderr: tokio::io::Stderr,
 }
@@ -21,12 +19,10 @@ impl Default for Logger {
     fn default() -> Self {
         let mut log = Logger {
             level: LogLevel::Info,
-            log_format: "[{level}] {timestamp} {connectionid} {requestid} {message}".to_string(),
+            log_format: "[{level}] {timestamp} {message}".to_string(),
             date_time_format: "%Y-%m-%d %H:%M:%S".to_string(),
             format_parts: Vec::new(),
             use_color_output: true,
-            use_request_id: false,
-            use_connection_id: false,
             stdout: tokio::io::stdout(),
             stderr: tokio::io::stderr(),
         };
@@ -56,6 +52,12 @@ impl Logger {
     /// get the current timestamp as a string
     fn get_timestamp(&self, log_info: &LogInfo) -> String {
         log_info.timestamp.format(&self.date_time_format).to_string()
+    }
+    pub fn set_level(&mut self, level: LogLevel) {
+        self.level = level;
+    }
+    pub fn set_use_color_output(&mut self, use_color: bool) {
+        self.use_color_output = use_color;
     }
     pub fn set_log_format(&mut self, format: impl Into<String>) {
         self.log_format = format.into();
