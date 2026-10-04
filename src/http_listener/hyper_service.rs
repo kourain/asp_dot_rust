@@ -1,14 +1,13 @@
 use crate::{
-    Application,
-    http_context::{HttpContext, http_request::HttpRequest, http_response::HttpResponse},
-    logging::LOGGER,
+    Application, configuration::HyperConfig, http_context::{HttpContext, http_request::HttpRequest, http_response::HttpResponse}, logging::LOGGER, services::routing::RoutingService,
 };
 use futures::FutureExt;
 use http_body_util::channel::Channel;
 use hyper::{Response, body::Bytes, service::service_fn};
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioIo, TokioTimer};
 use hyper_util::server::conn::auto as auto_conn;
 use std::sync::Arc;
+use std::time::Duration;
 use std::{convert::Infallible, panic::AssertUnwindSafe};
 use tokio::net::TcpStream;
 use ulid::Ulid;
@@ -39,10 +38,11 @@ fn create_streaming_body(body_vec: Vec<u8>) -> Channel<Bytes, Infallible> {
     body
 }
 
-pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: &Arc<crate::services::routing::RoutingService>, connection_id: Arc<Ulid>) -> std::io::Result<()> {
+pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: Arc<RoutingService>, hypercfg: Arc<HyperConfig>) -> std::io::Result<()> {
     let client_socket_addr = stream.peer_addr().unwrap();
     let local_listen_socket_addr = stream.local_addr().unwrap();
-    let service = service_fn(move |req| {
+    let connection_id: Arc<Ulid> = Arc::new(Ulid::generate());
+    let hyper_service = service_fn(move |req| {
         let app = app.clone();
         let start = std::time::Instant::now();
         // Extract request metadata before consuming the body
@@ -96,9 +96,19 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
             Ok::<_, hyper::Error>(response)
         }
     });
-
-    let builder = auto_conn::Builder::new(hyper_util::rt::TokioExecutor::new());
+    let mut builder = auto_conn::Builder::new(hyper_util::rt::TokioExecutor::new());
+    // HTTP/1.1 keep-alive is already on by default, but without a timer it
+    // never times out: a client that opens a connection and stops sending
+    // requests (or headers) would hold the socket/task open indefinitely.
+    builder.http1().timer(TokioTimer::new()).header_read_timeout(Duration::from_secs(hypercfg.header_read_timeout));
+    // HTTP/2 multiplexes over a single long-lived connection by design, so
+    // enable PING-based keep-alive to detect and drop dead peers.
+    builder
+        .http2()
+        .timer(TokioTimer::new())
+        .keep_alive_interval(Duration::from_secs(hypercfg.http2_keep_alive_interval))
+        .keep_alive_timeout(Duration::from_secs(hypercfg.http2_keep_alive_timeout));
     // wrap the tokio TcpStream so hyper-util can use hyper RT traits
     let io = TokioIo::new(stream);
-    builder.serve_connection(io, service).await.map_err(std::io::Error::other)
+    builder.serve_connection(io, hyper_service).await.map_err(std::io::Error::other)
 }

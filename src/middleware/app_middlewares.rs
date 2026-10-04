@@ -42,7 +42,7 @@ impl ApplicationMiddlewares {
         }
         self.pipeline = Some(next);
     }
-    pub async fn execute(&self, http_context: &mut HttpContext) {
+    pub async fn invoke_async(&self, http_context: &mut HttpContext) {
         if let Some(root) = self.pipeline.as_ref() {
             root(http_context).await;
         }
@@ -69,6 +69,6 @@ impl Application {
         self
     }
     pub(crate) async fn call_middlewares_async(&self, http_context: &mut HttpContext) {
-        self._middlewares.execute(http_context).await;
+        self._middlewares.invoke_async(http_context).await;
     }
 }
