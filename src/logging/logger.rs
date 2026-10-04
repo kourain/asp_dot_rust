@@ -44,7 +44,7 @@ impl Logger {
     fn should_log(&self, level: &LogLevel) -> bool {
         // hide Debug in release build
         #[cfg(not(debug_assertions))]
-        if level == LogLevel::Debug {
+        if *level == LogLevel::Debug {
             return false;
         }
         level >= &self.level

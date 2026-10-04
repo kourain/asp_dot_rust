@@ -51,7 +51,7 @@ impl Application {
         };
 
         if let Err(e) = result {
-            LOGGER::error(format!("Server terminated with error: {}", e));
+            panic!("Error occurred while running the application: {}", e);
         }
     }
 }
