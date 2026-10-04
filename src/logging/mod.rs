@@ -14,7 +14,7 @@ type LogSender = broadcast::Sender<LogCommand>;
 pub type LogReceiver = broadcast::Receiver<LogCommand>;
 
 static LOG_SENDER: OnceLock<LogSender> = OnceLock::new();
-static LOG_RUNNING: AtomicBool = AtomicBool::new(false);
+static LOG_RUNNING: AtomicBool = AtomicBool::new(true);
 static DEFAULT_LOG_ENABLE: AtomicBool = AtomicBool::new(true);
 static DEFAULT_LOG_RUNNING: AtomicBool = AtomicBool::new(false);
 
@@ -96,7 +96,6 @@ impl LOGGER {
         LOG_SENDER.get_or_init(|| {
             // Fallback if not initialized (shouldn't happen in normal usage)
             let (tx, rx) = broadcast::channel::<LogCommand>(1_000_000);
-            LOG_RUNNING.store(true, Ordering::Release);
             Self::start_default_logger(Some(rx));
             tx
         })
@@ -127,7 +126,7 @@ impl LOGGER {
     }
     // default console logger, runs in background task
     fn start_default_logger(mut _rx: Option<LogReceiver>) {
-        if !LOG_RUNNING.load(Ordering::Relaxed) || !DEFAULT_LOG_ENABLE.load(Ordering::Relaxed) || DEFAULT_LOG_RUNNING.swap(true, Ordering::SeqCst) {
+        if !DEFAULT_LOG_ENABLE.load(Ordering::Relaxed) || DEFAULT_LOG_RUNNING.swap(true, Ordering::SeqCst) {
             return; // Already initialized
         }
         let mut rx;
