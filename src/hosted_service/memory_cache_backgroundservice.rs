@@ -1,14 +1,13 @@
-use async_trait::async_trait;
-use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
-
 use crate::{
     dependency_injection::DependencyInjectableService,
     hosted_service::BackGroundService,
     logging::LOGGER,
-    services::{memory_cache::MemoryCacheService, service_provider::service_provider_scope::ServiceProviderScope},
+    services::{memory_cache::MemoryCacheService, service_provider::ServiceProviderScope},
 };
-#[derive(Default)]
+use async_trait::async_trait;
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
+
 pub struct MemoryCacheBackgroundService {
     memcache: Arc<MemoryCacheService>,
     release_after_seconds: AtomicU64,

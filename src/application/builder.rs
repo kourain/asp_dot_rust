@@ -1,5 +1,3 @@
-use std::{collections::HashSet, net::IpAddr, path::Path, sync::Arc};
-
 use crate::{
     Application,
     hosted_service::ApplicationHostedService,
@@ -8,10 +6,11 @@ use crate::{
     middleware::app_middlewares::ApplicationMiddlewares,
     services::{
         configuration::ConfigurationService,
-        service_provider::{ServiceType, service_provider_scope::ServiceProviderScope},
+        service_provider::{ServiceProviderScope, ServiceType},
     },
     utils::build_info,
 };
+use std::{collections::HashSet, net::IpAddr, path::Path, sync::Arc};
 
 pub struct ApplicationBuilder {
     pub name: String,

@@ -1,7 +1,6 @@
-use std::sync::atomic::{AtomicU32, Ordering};
-
 use asp_dot_rust::dependency_injection::Serv;
-use asp_dot_rust_macros::{DependencyInjectableService, inject};
+use asp_dot_rust::macros::{DependencyInjectableService, inject};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 /// A simple service with no dependencies.
 pub struct CounterService {

@@ -7,7 +7,7 @@ pub use inject_types::{Cfg, CfgReload, CfgRequire, Serv};
 pub use inventory;
 
 pub trait DependencyInjectableService: Send + Sync + 'static {
-    fn inject(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
+    fn inject(service_scope: &crate::services::service_provider::ServiceProviderScope) -> Self
     where
         Self: Sized;
 }

@@ -16,7 +16,7 @@ pub struct RateLimitMiddleware {
     block_duration_seconds: u32,
 }
 impl DependencyInjectableService for RateLimitMiddleware {
-    fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+    fn inject(_service_scope: &crate::services::service_provider::ServiceProviderScope) -> Self {
         let config_service = _service_scope.get_service::<ConfigurationService>();
         let config = config_service.get::<RateLimitConfiguration>().unwrap_or_default();
         RateLimitMiddleware {

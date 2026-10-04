@@ -1,12 +1,13 @@
-use crate::dependency_injection::DependencyInjectableService;
+use crate::macros::DependencyInjectableService;
 
 struct CacheItem {
     value: Box<dyn std::any::Any + Send + Sync>,
     expiration: Option<std::time::Instant>,
 }
 
-#[derive(Default)]
+#[derive(DependencyInjectableService)]
 pub struct MemoryCacheService {
+    #[di(default)]
     _inner: dashmap::DashMap<std::any::TypeId, dashmap::DashMap<String, CacheItem>>,
 }
 impl MemoryCacheService {
@@ -47,7 +48,9 @@ impl MemoryCacheService {
         }
     }
     pub fn clear<T>(&self)
-    where T: 'static + Send + Sync {
+    where
+        T: 'static + Send + Sync,
+    {
         let type_id = std::any::TypeId::of::<T>();
         if let Some(type_map) = self._inner.get(&type_id) {
             type_map.clear();
@@ -56,7 +59,7 @@ impl MemoryCacheService {
     pub fn get_or_update<T, F>(&self, key: &str, value_factory: F, exp_seconds: Option<u64>) -> T
     where
         T: 'static + Send + Sync + Clone,
-        F: FnOnce() -> T
+        F: FnOnce() -> T,
     {
         let type_id = std::any::TypeId::of::<T>();
         let type_map = self._inner.entry(type_id).or_default();
@@ -105,13 +108,5 @@ impl MemoryCacheService {
                 type_map.remove(&key);
             }
         }
-    }
-}
-impl DependencyInjectableService for MemoryCacheService {
-    fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
-    where
-        Self: Sized,
-    {
-        MemoryCacheService::default()
     }
 }

@@ -1,11 +1,10 @@
-use std::sync::Arc;
-
 use crate::{
     Application,
     http_context::HttpContext,
     logging::LOGGER,
     middleware::{Middleware, MiddlewareNext, auto_route},
 };
+use std::sync::Arc;
 
 pub(crate) struct ApplicationMiddlewares {
     middlewares: Vec<Arc<dyn Middleware>>,

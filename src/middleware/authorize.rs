@@ -1,9 +1,9 @@
 use crate::{
     Application,
     http_context::{HttpContext, http_header::HttpHeader},
+    macros::DependencyInjectableService,
     middleware::{Middleware, MiddlewareNext},
 };
-use asp_dot_rust_macros::DependencyInjectableService;
 
 #[derive(Default, DependencyInjectableService)]
 pub(crate) struct AuthorizeMiddleware {
