@@ -49,7 +49,6 @@ pub(crate) async fn hyper_server_tls(app: &Arc<Application>, tls_config: Arc<Ser
                                 }
                                 Err(e) => {
                                     LOGGER::warn(format!("TLS handshake failed with {}: {}", client_addr, e));
-                                    return;
                                 }
                             };
                         });

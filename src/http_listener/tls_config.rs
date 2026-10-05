@@ -14,7 +14,7 @@ use std::{
 /// (small) cost of reading and parsing the files from disk is paid only once.
 pub(crate) fn build_tls_server_config(cert_path: &Path, key_path: &Path) -> Result<Arc<ServerConfig>, Error> {
     // install the default ring crypto provider, which is required for rustls to work
-    rustls::crypto::ring::default_provider().install_default().unwrap();
+    _ = rustls::crypto::ring::default_provider().install_default();
 
     let cert_file = File::open(cert_path).map_err(|e| Error::new(e.kind(), format!("Failed to read certificate file '{}': {}", cert_path.display(), e)))?;
     let key_file = File::open(key_path).map_err(|e| Error::new(e.kind(), format!("Failed to read private key file '{}': {}", key_path.display(), e)))?;
