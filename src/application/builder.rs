@@ -75,7 +75,8 @@ impl ApplicationBuilder {
             panic!("Port {} is already in use by HTTP. Please choose a different port for HTTPS.", port);
         }
         self.https_port.insert(port);
-        todo!("ADD SSL SUPPORT");
+        LOGGER::warn("HTTPS require asp_dot_rust 3.0.0 or later, which is not yet released. Please remove the `--https-port` argument or wait for the release.");
+        self
     }
 
     pub fn build(self) -> Application {

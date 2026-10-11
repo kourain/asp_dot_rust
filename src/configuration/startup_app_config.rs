@@ -78,19 +78,21 @@ impl ApplicationBuilder {
     /// read custom flags via `Cfg<StartupAppConfiguration>`.
     pub(crate) fn with_args(&mut self) -> &mut Self {
         let args: Vec<String> = env::args().skip(1).collect();
-        if !self.configuration.contains::<StartupAppConfiguration>() {
-            self.configuration.insert(StartupAppConfiguration::default());
-        }
-    
-        let old_cli = self.configuration.get::<StartupAppConfiguration>().unwrap();
-        let new_cli = old_cli.deref().clone().parse(args);
+        self.with_custom_args(args)
+    }
+
+    /// Same as `with_args`, but takes the arguments explicitly (used by tests).
+    pub fn with_custom_args(&mut self, args: Vec<String>) -> &mut Self {
+        let mut old_cli = self.configuration.get::<StartupAppConfiguration>().map(|c| c.deref().clone()).unwrap_or_default();
+        let new_cli = old_cli.parse(args);
 
         self.set_ip(&new_cli);
         self.set_http_port(&new_cli);
         self.set_https_port(&new_cli);
 
         LOGGER::info(format!("Parsed {} command-line argument(s)", new_cli.len()));
-        self.configuration.insert(new_cli);
+        // replacing the previous value is expected here, do not warn about it
+        self.configuration.replace(new_cli);
         self
     }
     fn set_ip(&mut self, cli: &StartupAppConfiguration) {

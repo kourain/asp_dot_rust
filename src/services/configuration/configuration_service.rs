@@ -51,6 +51,15 @@ impl ConfigurationService {
         self._inner.insert(TypeId::of::<T>(), Arc::new(config));
     }
 
+    /// insert a configuration of type T, replacing any existing one without logging a warning
+    /// (for internal callers that replace a value on purpose)
+    pub(crate) fn replace<T>(&mut self, config: T)
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        self._inner.insert(TypeId::of::<T>(), Arc::new(config));
+    }
+
     /// get a configuration of type T, if the configuration of type T does not exist, return None
     pub fn get<T>(&self) -> Option<Arc<T>>
     where
