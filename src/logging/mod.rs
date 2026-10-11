@@ -6,12 +6,13 @@ pub use log_level::LogLevel;
 pub use logger::Logger;
 pub use loginfo::{LogCommand, LogInfo};
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 
 type LogSender = broadcast::Sender<LogCommand>;
 pub type LogReceiver = broadcast::Receiver<LogCommand>;
+static LOG_CHANNEL_CAPACITY: AtomicU64 = AtomicU64::new(4096); // default capacity of log channel, can be changed with LOGGER::set_logger_capacity()
 
 static LOG_SENDER: OnceLock<LogSender> = OnceLock::new();
 static LOG_RUNNING: AtomicBool = AtomicBool::new(true);
@@ -95,7 +96,7 @@ impl LOGGER {
     fn get_sender() -> &'static LogSender {
         LOG_SENDER.get_or_init(|| {
             // Fallback if not initialized (shouldn't happen in normal usage)
-            let (tx, rx) = broadcast::channel::<LogCommand>(1_000_000);
+            let (tx, rx) = broadcast::channel::<LogCommand>(LOG_CHANNEL_CAPACITY.load(Ordering::Relaxed) as usize);
             Self::start_default_logger(Some(rx));
             tx
         })
@@ -114,6 +115,20 @@ impl LOGGER {
     /// disable the default logger
     pub fn disable_default_logger() {
         Self::use_default_logger(false);
+    }
+
+    /// set the capacity of the log channel, you must call this at top of main() before any logging occurs
+    /// ```no_run
+    /// use asp_dot_rust::logging::LOGGER;
+    /// use asp_dot_rust::Application;
+    /// #[tokio::main]
+    /// async fn main() {
+    ///   LOGGER::set_logger_capacity(4096);
+    ///   Application::new("").build().run().await;
+    /// }
+    /// ```
+    pub fn set_logger_capacity(capacity: u64) {
+        LOG_CHANNEL_CAPACITY.store(capacity, Ordering::Release);
     }
 
     fn use_default_logger(true_or_false: bool) {
@@ -135,8 +150,8 @@ impl LOGGER {
         } else {
             rx = Self::spawn_log_receiver();
         }
-        // Spawn background logging task
-        tokio::spawn(async move {
+        // Run it on its own thread with a small current-thread runtime instead of `tokio::spawn`.
+        let log_task = async move {
             let mut logger = Logger::new();
             loop {
                 let received = rx.recv().await;
@@ -173,13 +188,27 @@ impl LOGGER {
                             };
                             logger.write_log(&log).await;
                         }
-                        Err(RecvError::Closed) => {}
+                        Err(RecvError::Closed) => break,
                     }
                 } else {
                     break;
                 }
             }
             DEFAULT_LOG_RUNNING.store(false, Ordering::Release);
+        };
+
+        let spawned = std::thread::Builder::new().name("asp-logger".to_string()).spawn(move || {
+            match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+                Ok(runtime) => runtime.block_on(log_task),
+                Err(e) => {
+                    DEFAULT_LOG_RUNNING.store(false, Ordering::Release);
+                    eprintln!("LOGGER failed to build its runtime: {e}");
+                }
+            }
         });
+        if let Err(e) = spawned {
+            DEFAULT_LOG_RUNNING.store(false, Ordering::Release);
+            eprintln!("LOGGER failed to start its thread: {e}");
+        }
     }
 }
