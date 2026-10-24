@@ -94,7 +94,8 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
         .http2()
         .timer(TokioTimer::new())
         .keep_alive_interval(Duration::from_secs(hypercfg.http2_keep_alive_interval))
-        .keep_alive_timeout(Duration::from_secs(hypercfg.http2_keep_alive_timeout));
+        .keep_alive_timeout(Duration::from_secs(hypercfg.http2_keep_alive_timeout))
+        .max_header_list_size(u32::try_from(hypercfg.max_request_headers_size).unwrap_or(u32::MAX));
     // wrap the tokio TcpStream so hyper-util can use hyper RT traits
     let io = TokioIo::new(stream);
     builder.serve_connection(io, hyper_service).await.map_err(std::io::Error::other)
