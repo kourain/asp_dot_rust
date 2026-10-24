@@ -1,6 +1,7 @@
 pub(crate) mod app_middlewares;
 pub(crate) mod authorize;
 pub(crate) mod auto_route;
+pub(crate) mod compression;
 pub(crate) mod cors;
 pub(crate) mod rate_limit;
 pub(crate) mod request_timeout;

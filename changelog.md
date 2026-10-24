@@ -1,5 +1,10 @@
 # Change log
 
+## Unreleased
+
+- New `CompressionMiddleware` (`app.use_compression()`): gzip, deflate, brotli and zstd response compression chosen from `Accept-Encoding`, built on `async-compression`. See `docs/compression.md`.
+- New `CompressionConfiguration` and `CompressionLevel` (`enable_gzip`, `enable_deflate`, `enable_brotli`, `enable_zstd`, `min_size`, `level`), can be bound from a TOML section.
+
 ## 0.2.6
 
 - fix logging disable `LOGGER::disable()` at start not work
