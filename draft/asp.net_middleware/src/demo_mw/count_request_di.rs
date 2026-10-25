@@ -5,30 +5,24 @@ use std::{
 
 use crate::code::{
     app::ServiceProviderScope,
-    mw::{Middleware, MiddlewareInjectable, MiddlewareNext, MiddwareInjectInvoke},
+    mw::{Middleware, MiddlewareNext},
 };
 
 pub struct CountRequestDIMiddleware {
     next: MiddlewareNext,
 }
-/// manual write or macro #[middleware] generate from new
-impl MiddlewareInjectable for CountRequestDIMiddleware {
+/// manual write or macro #[middleware] generate
+#[async_trait::async_trait]
+impl Middleware for CountRequestDIMiddleware {
     fn inject(_: &ServiceProviderScope, next: MiddlewareNext) -> Self {
         Self::new(next)
     }
-}
-///marco #[middleware] generate
-#[async_trait::async_trait]
-impl MiddwareInjectInvoke for CountRequestDIMiddleware {
     async fn inject_invoke_async(&self, ctx: &mut crate::code::app::HttpContext) {
         let svp = &ctx.serv_provider;
         let demo_sv = svp.get_service_demo();
         self.invoke_async(ctx, demo_sv).await;
     }
 }
-/// deriven marco generate (#[derive(Middleware)] at top struct) or manual
-impl Middleware for CountRequestDIMiddleware {}
-
 /// #[middleware]
 impl CountRequestDIMiddleware {
     pub fn new(next: MiddlewareNext) -> Self {

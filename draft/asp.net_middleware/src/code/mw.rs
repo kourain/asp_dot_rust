@@ -22,18 +22,13 @@ impl ApplicationMiddwareBuilder {
         result
     }
 }
-
-pub trait MiddlewareInjectable {
+#[async_trait::async_trait]
+pub trait Middleware: Send + Sync {
     fn inject(sp: &ServiceProviderScope, next: MiddlewareNext) -> Self
     where
         Self: Sized;
-}
-// pub type MiddlewareNextFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
-#[async_trait::async_trait]
-pub trait MiddwareInjectInvoke: Send + Sync {
     async fn inject_invoke_async(&self, ctx: &mut HttpContext);
 }
-pub trait Middleware: MiddwareInjectInvoke + MiddlewareInjectable + Send + Sync {}
 
 #[derive(Default)]
 pub struct RoutingMiddleware;
@@ -44,16 +39,19 @@ impl RoutingMiddleware {
     }
 }
 #[async_trait::async_trait]
-impl MiddwareInjectInvoke for RoutingMiddleware {
+impl Middleware for RoutingMiddleware {
+    fn inject(_: &ServiceProviderScope, _: MiddlewareNext) -> Self {
+        Self
+    }
     async fn inject_invoke_async(&self, ctx: &mut HttpContext) {
         self.invoker_async(ctx).await;
     }
 }
 
-pub struct MiddlewareNext(Arc<dyn MiddwareInjectInvoke>);
+pub struct MiddlewareNext(Arc<dyn Middleware>);
 
 impl MiddlewareNext {
-    pub fn new<M: MiddwareInjectInvoke + 'static>(middleware: M) -> Self {
+    pub fn new<M: Middleware + 'static>(middleware: M) -> Self {
         Self(Arc::new(middleware))
     }
     pub async fn call_async(&self, ctx: &mut HttpContext) {
