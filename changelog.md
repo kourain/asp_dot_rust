@@ -3,11 +3,15 @@
 ## 0.2.7
 
 - Middleware in the style of ASP.NET: it holds the next middleware (`MiddlewareNext`) given to its constructor and the pipeline is built once at run. See `docs/middleware.md`.
-- New `#[middleware]` on `impl T { fn new(next, ..); async fn invoke_async(&self, ctx, ..) }`, it generates `Middleware`, `Middleware` and `Middleware`. Parameters of `invoke_async` are injected on every request.
+- New `#[middleware]` on `impl T { fn new(next, ..); async fn invoke_async(&self, ctx, ..) }`, it generates `Middleware`, `Middleware` and `Middleware`. Parameters of `invoke_async` are injected on every request(as scoped from HttpContext).
 - `add_middleware_instance` is replaced by `add_middleware_factory`. The macro `middleware!` bodies call `next.call_async(ctx)`.
 - Removed the per request `LOGGER::trace` of each middleware.
 - New `CompressionMiddleware` (`app.use_compression()`): gzip, deflate, brotli and zstd response compression chosen from `Accept-Encoding`, built on `async-compression`. See `docs/compression.md`.
 - New `CompressionConfiguration` and `CompressionLevel` (`enable_gzip`, `enable_deflate`, `enable_brotli`, `enable_zstd`, `min_size`, `level`), can be bound from a TOML section.
+
+### Breaking changes 0.2.6
+
+- now you must write middleware like asp.net core
 
 ## 0.2.6
 
