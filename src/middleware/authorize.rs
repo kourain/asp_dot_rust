@@ -1,5 +1,8 @@
 use crate::{
-    Application, http_context::{HttpContext, http_header::HttpHeader}, middleware::{Middleware, MiddlewareNext}, services::service_provider::service_provider_scope::ServiceProviderScope,
+    Application,
+    http_context::{HttpContext, http_header::HttpHeader},
+    middleware::{Middleware, MiddlewareNext},
+    services::service_provider::ServiceProviderScope,
 };
 pub(crate) struct AuthorizeMiddleware {
     next: MiddlewareNext,

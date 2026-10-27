@@ -3,9 +3,8 @@ use crate::{
     http_context::HttpContext,
     logging::LOGGER,
     middleware::{Middleware, MiddlewareNext, auto_route::RoutingMiddleware},
-    services::service_provider::service_provider_scope::ServiceProviderScope,
+    services::service_provider::ServiceProviderScope,
 };
-use std::sync::Arc;
 
 /// Creates a middleware from the next one, called once when the pipeline is built.
 type Factory = Box<dyn Fn(&ServiceProviderScope, MiddlewareNext) -> MiddlewareNext + Send + Sync>;

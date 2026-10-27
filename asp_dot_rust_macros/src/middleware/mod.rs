@@ -79,7 +79,7 @@ pub(crate) fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
     };
     let new_fn = find_fn("new");
     let mw = quote!(#main_crate_path::middleware);
-    let scope_ty = quote!(#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope);
+    let scope_ty = quote!(#main_crate_path::services::service_provider::ServiceProviderScope);
     let config_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
 
     // ---- startup: `new` parameters, resolved once when the pipeline is built

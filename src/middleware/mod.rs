@@ -7,7 +7,7 @@ pub(crate) mod rate_limit;
 pub(crate) mod request_timeout;
 pub(crate) mod static_file;
 use crate::http_context::HttpContext;
-use crate::services::service_provider::service_provider_scope::ServiceProviderScope;
+use crate::services::service_provider::ServiceProviderScope;
 use std::sync::Arc;
 
 /// The next middleware of the chain, given to the constructor of a middleware (like `RequestDelegate` in ASP.NET).
