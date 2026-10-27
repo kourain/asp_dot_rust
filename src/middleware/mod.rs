@@ -1,45 +1,48 @@
 pub(crate) mod app_middlewares;
 pub(crate) mod authorize;
 pub(crate) mod auto_route;
+pub(crate) mod compression;
 pub(crate) mod cors;
 pub(crate) mod rate_limit;
 pub(crate) mod request_timeout;
 pub(crate) mod static_file;
-use crate::dependency_injection::DependencyInjectableService;
 use crate::http_context::HttpContext;
-use async_trait::async_trait;
-use core::any::type_name;
-use core::{future::Future, pin::Pin};
+use crate::services::service_provider::service_provider_scope::ServiceProviderScope;
 use std::sync::Arc;
 
-pub type MiddlewareNext = Arc<dyn for<'a> Fn(&'a mut HttpContext) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> + Send + Sync>;
-#[async_trait]
-pub trait Middleware: DependencyInjectableService + Send + Sync {
-    async fn invoke_async(&self, http_context: &mut HttpContext, next: MiddlewareNext);
-    fn type_name(&self) -> &'static str {
-        type_name::<Self>()
+/// The next middleware of the chain, given to the constructor of a middleware (like `RequestDelegate` in ASP.NET).
+pub struct MiddlewareNext(Arc<dyn Middleware>);
+impl MiddlewareNext {
+    pub(crate) fn new<M: Middleware + 'static>(middleware: M) -> Self {
+        Self(Arc::new(middleware))
+    }
+    pub async fn next_async(&self, http_context: &mut HttpContext) {
+        self.0.inject_invoke_async(http_context).await;
     }
 }
 
+/// Creates a middleware from the services and the next middleware.
+/// A middleware of the chain, `#[middleware]` implements it.
+#[async_trait::async_trait]
+pub trait Middleware: Send + Sync {
+    fn inject(service_scope: &ServiceProviderScope, next: MiddlewareNext) -> Self
+    where
+        Self: Sized;
+    async fn inject_invoke_async(&self, http_context: &mut HttpContext);
+}
+
+/// Defines a middleware that has only the field `next`: `middleware!(pub Name, |ctx, next| { next.call_async(ctx).await; });`
 #[macro_export]
 macro_rules! middleware {
     ($vis:vis $name:ident, |$ctx:ident, $next:ident| $body:block) => {
-        #[derive(Default)]
-        $vis struct $name;
-
-        #[async_trait::async_trait]
-        impl $crate::middleware::Middleware for $name {
-            async fn invoke_async<'a>(
-                &self,
-                $ctx: &'a mut $crate::http_context::HttpContext,
-                $next: $crate::middleware::MiddlewareNext,
-            ) $body
+        $vis struct $name {
+            next: $crate::middleware::MiddlewareNext,
         }
-        impl $crate::dependency_injection::DependencyInjectableService for $name {
-            fn inject(
-                _service_scope: &$crate::services::service_provider::service_provider_scope::ServiceProviderScope,
-            ) -> Self {
-                Self
+        #[$crate::macros::middleware]
+        impl $name {
+            pub async fn invoke_async(&self, $ctx: &mut $crate::http_context::HttpContext) {
+                let $next = &self.next;
+                $body
             }
         }
     };

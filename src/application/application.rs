@@ -32,7 +32,7 @@ impl Application {
         if self.http_port.is_empty() {
             self.http_port.insert(8080);
         }
-        self._middlewares.build_pipeline();
+        self._middlewares.build_pipeline(&self.service_provider);
         let mut hosted_services_app = std::mem::take(&mut self._hosted_services); // clear hosted services from app since we're moving them to the async block
         let app = Arc::new(self);
         // let mut hosted_services_app = Vec::new();

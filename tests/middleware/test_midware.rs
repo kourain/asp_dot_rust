@@ -1,20 +1,20 @@
-use asp_dot_rust::{macros::inject, middleware::Middleware};
-use async_trait::async_trait;
+use asp_dot_rust::{macros::middleware, middleware::MiddlewareNext};
 use std::sync::atomic::AtomicUsize;
 
 pub struct TestMidware {
+    next: MiddlewareNext,
     test_state: AtomicUsize,
 }
-#[inject]
+#[middleware]
 impl TestMidware {
-    fn new() -> Self {
-        Self { test_state: AtomicUsize::new(0) }
+    fn new(next: MiddlewareNext) -> Self {
+        Self {
+            next,
+            test_state: AtomicUsize::new(0),
+        }
     }
-}
-#[async_trait]
-impl Middleware for TestMidware {
-    async fn invoke_async(&self, http_context: &mut asp_dot_rust::http_context::HttpContext, next: asp_dot_rust::middleware::MiddlewareNext) {
+    pub async fn invoke_async(&self, http_context: &mut asp_dot_rust::http_context::HttpContext) {
         self.test_state.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        next(http_context).await;
+        self.next.next_async(http_context).await;
     }
 }
