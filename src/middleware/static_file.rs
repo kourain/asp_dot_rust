@@ -3,18 +3,19 @@ use crate::{
     configuration::StaticFileConfiguration,
     dependency_injection::Cfg,
     http_context::http_header::HttpHeader,
-    macros::inject,
-    middleware::{self, Middleware},
+    macros::middleware,
+    middleware::MiddlewareNext,
     utils,
 };
 
 pub struct StaticFileMiddleware {
+    next: MiddlewareNext,
     static_dir_path: std::path::PathBuf,
 }
 
-#[inject]
+#[middleware]
 impl StaticFileMiddleware {
-    pub fn new(config: Cfg<StaticFileConfiguration>) -> Self {
+    pub fn new(next: MiddlewareNext, config: Cfg<StaticFileConfiguration>) -> Self {
         let config = config.unwrap_or_default();
         let static_dir_path = std::path::Path::new(&config.static_files_directory);
         if !static_dir_path.is_dir() {
@@ -24,14 +25,12 @@ impl StaticFileMiddleware {
             );
         }
         StaticFileMiddleware {
+            next,
             static_dir_path: static_dir_path.to_path_buf(),
         }
     }
-}
 
-#[async_trait::async_trait]
-impl Middleware for StaticFileMiddleware {
-    async fn invoke_async(&self, http_context: &mut crate::http_context::HttpContext, next: middleware::MiddlewareNext) {
+    pub async fn invoke_async(&self, http_context: &mut crate::http_context::HttpContext) {
         let request_path = http_context.request.path().to_string();
         let static_file_path = format!("{}/{}", self.static_dir_path.display(), request_path.trim_start_matches('/'));
         let fpath = std::path::Path::new(&static_file_path);
@@ -63,7 +62,7 @@ impl Middleware for StaticFileMiddleware {
                 }
             }
         } else {
-            next(http_context).await;
+            self.next.next_async(http_context).await;
         }
     }
 }

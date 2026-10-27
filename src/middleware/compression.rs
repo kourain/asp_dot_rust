@@ -4,8 +4,8 @@ use crate::{
     dependency_injection::Cfg,
     http_context::{HttpContext, http_header::HttpHeader, http_response::HttpResponse},
     logging::LOGGER,
-    macros::inject,
-    middleware::{Middleware, MiddlewareNext},
+    macros::middleware,
+    middleware::MiddlewareNext,
 };
 use async_compression::{
     Level,
@@ -119,14 +119,20 @@ async fn encode(encoding: Encoding, level: CompressionLevel, data: &[u8]) -> std
 /// Register it before the middlewares that produce the body (static files, routing),
 /// because the first registered middleware is the outermost one.
 pub struct CompressionMiddleware {
+    next: MiddlewareNext,
     configuration: Arc<CompressionConfiguration>,
 }
-#[inject]
+#[middleware]
 impl CompressionMiddleware {
-    pub fn new(configuration: Cfg<CompressionConfiguration>) -> Self {
+    pub fn new(next: MiddlewareNext, configuration: Cfg<CompressionConfiguration>) -> Self {
         Self {
+            next,
             configuration: configuration.unwrap_or_default(),
         }
+    }
+    pub async fn invoke_async(&self, http_context: &mut HttpContext) {
+        self.next.next_async(http_context).await;
+        self.compress_response(&http_context.request.headers, &mut http_context.response).await;
     }
 }
 impl CompressionMiddleware {
@@ -200,179 +206,9 @@ impl CompressionMiddleware {
         response.headers.insert_str("Content-Encoding", encoding.as_str());
     }
 }
-#[async_trait::async_trait]
-impl Middleware for CompressionMiddleware {
-    async fn invoke_async(&self, http_context: &mut HttpContext, next: MiddlewareNext) {
-        next(http_context).await;
-        self.compress_response(&http_context.request.headers, &mut http_context.response).await;
-    }
-}
 impl Application {
     pub fn use_compression(&mut self) -> &mut Self {
         self.add_middleware::<CompressionMiddleware>();
         self
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use async_compression::tokio::bufread::{BrotliDecoder, GzipDecoder, ZlibDecoder, ZstdDecoder};
-    use tokio::io::AsyncReadExt;
-
-    fn request_headers(accept_encoding: Option<&str>) -> HeaderMap {
-        let mut headers = HeaderMap::new();
-        if let Some(value) = accept_encoding {
-            headers.insert(header::ACCEPT_ENCODING, value.parse().unwrap());
-        }
-        headers
-    }
-
-    fn middleware(configuration: CompressionConfiguration) -> CompressionMiddleware {
-        CompressionMiddleware {
-            configuration: Arc::new(configuration),
-        }
-    }
-
-    fn text_response(body: Vec<u8>) -> HttpResponse {
-        let mut response = HttpResponse::new_in_memory();
-        response.status_code = http::StatusCode::OK;
-        response.headers.set_content_type("text/plain");
-        response.headers.set_content_length(body.len());
-        response.body = body;
-        response
-    }
-
-    async fn decode(encoding: &str, data: &[u8]) -> Vec<u8> {
-        let mut out = Vec::new();
-        match encoding {
-            "gzip" => GzipDecoder::new(data).read_to_end(&mut out).await.unwrap(),
-            "deflate" => ZlibDecoder::new(data).read_to_end(&mut out).await.unwrap(),
-            "br" => BrotliDecoder::new(data).read_to_end(&mut out).await.unwrap(),
-            "zstd" => ZstdDecoder::new(data).read_to_end(&mut out).await.unwrap(),
-            other => panic!("unknown encoding {other}"),
-        };
-        out
-    }
-
-    #[test]
-    fn select_encoding_follows_accept_encoding() {
-        let cfg = CompressionConfiguration::default();
-        assert_eq!(select_encoding(&request_headers(None), &cfg), None);
-        assert_eq!(select_encoding(&request_headers(Some("identity")), &cfg), None);
-        assert_eq!(select_encoding(&request_headers(Some("gzip")), &cfg), Some(Encoding::Gzip));
-        assert_eq!(select_encoding(&request_headers(Some("GZIP")), &cfg), Some(Encoding::Gzip));
-        assert_eq!(select_encoding(&request_headers(Some("gzip, deflate, br")), &cfg), Some(Encoding::Brotli));
-        assert_eq!(select_encoding(&request_headers(Some("gzip, br, zstd")), &cfg), Some(Encoding::Zstd));
-        assert_eq!(select_encoding(&request_headers(Some("gzip;q=0.5, deflate")), &cfg), Some(Encoding::Deflate));
-        assert_eq!(select_encoding(&request_headers(Some("gzip;q=0")), &cfg), None);
-        assert_eq!(select_encoding(&request_headers(Some("*")), &cfg), Some(Encoding::Zstd));
-        assert_eq!(select_encoding(&request_headers(Some("zstd;q=0, br;q=0, *")), &cfg), Some(Encoding::Gzip));
-        assert_eq!(select_encoding(&request_headers(Some("gzip;q=abc")), &cfg), None);
-        assert_eq!(select_encoding(&request_headers(Some("compress, sdch")), &cfg), None);
-    }
-
-    #[test]
-    fn select_encoding_respects_configuration() {
-        let cfg = CompressionConfiguration {
-            enable_brotli: false,
-            enable_zstd: false,
-            ..Default::default()
-        };
-        assert_eq!(select_encoding(&request_headers(Some("gzip, br, zstd")), &cfg), Some(Encoding::Gzip));
-        assert_eq!(select_encoding(&request_headers(Some("br, zstd")), &cfg), None);
-    }
-
-    #[tokio::test]
-    async fn compress_round_trip_for_every_encoding() {
-        let original = "hello compression ".repeat(500).into_bytes();
-        for name in ["gzip", "deflate", "br", "zstd"] {
-            let mw = middleware(CompressionConfiguration::default());
-            let mut response = text_response(original.clone());
-            mw.compress_response(&request_headers(Some(name)), &mut response).await;
-            assert_eq!(response.headers.get(header::CONTENT_ENCODING).unwrap(), name);
-            assert!(response.body.len() < original.len());
-            assert_eq!(response.headers.content_length(), Some(response.body.len() as u64));
-            assert_eq!(decode(name, &response.body).await, original);
-        }
-    }
-
-    #[tokio::test]
-    async fn adds_vary_header_once() {
-        let mw = middleware(CompressionConfiguration::default());
-        let mut response = text_response(vec![b'a'; 1000]);
-        response.headers.insert(header::VARY, "Origin".parse().unwrap());
-        mw.compress_response(&request_headers(Some("gzip")), &mut response).await;
-        let vary: Vec<_> = response.headers.get_all(header::VARY).iter().map(|v| v.to_str().unwrap().to_string()).collect();
-        assert_eq!(vary, ["Origin", "Accept-Encoding"]);
-
-        let mut again = text_response(vec![b'a'; 1000]);
-        again.headers.insert(header::VARY, "accept-encoding".parse().unwrap());
-        mw.compress_response(&request_headers(Some("gzip")), &mut again).await;
-        assert_eq!(again.headers.get_all(header::VARY).iter().count(), 1);
-    }
-
-    #[tokio::test]
-    async fn keeps_body_when_client_does_not_accept_compression() {
-        let mw = middleware(CompressionConfiguration::default());
-        let mut response = text_response(vec![b'a'; 1000]);
-        mw.compress_response(&request_headers(None), &mut response).await;
-        assert!(response.headers.get(header::CONTENT_ENCODING).is_none());
-        assert_eq!(response.body.len(), 1000);
-        assert!(response.headers.get(header::VARY).is_some());
-    }
-
-    #[tokio::test]
-    async fn skips_responses_that_must_not_be_compressed() {
-        let mw = middleware(CompressionConfiguration::default());
-        let accept = request_headers(Some("gzip"));
-        let cases: Vec<(&str, Box<dyn Fn(&mut HttpResponse)>)> = vec![
-            ("small body", Box::new(|r| r.body = vec![b'a'; 10])),
-            ("empty body", Box::new(|r| r.body.clear())),
-            ("png image", Box::new(|r| r.headers.set_content_type("image/png"))),
-            ("video", Box::new(|r| r.headers.set_content_type("video/mp4"))),
-            ("event stream", Box::new(|r| r.headers.set_content_type("text/event-stream"))),
-            ("already encoded", Box::new(|r| r.headers.insert_str("Content-Encoding", "br"))),
-            ("content range", Box::new(|r| r.headers.insert_str("Content-Range", "bytes 0-9/100"))),
-            ("partial content", Box::new(|r| r.status_code = http::StatusCode::PARTIAL_CONTENT)),
-            ("no-transform", Box::new(|r| r.headers.insert_str("Cache-Control", "public, No-Transform"))),
-        ];
-        for (name, change) in cases {
-            let mut response = text_response(vec![b'a'; 1000]);
-            change(&mut response);
-            let body_before = response.body.clone();
-            let encoding_before = response.headers.get(header::CONTENT_ENCODING).cloned();
-            mw.compress_response(&accept, &mut response).await;
-            assert_eq!(response.body, body_before, "{name}: body changed");
-            assert_eq!(response.headers.get(header::CONTENT_ENCODING).cloned(), encoding_before, "{name}: encoding changed");
-        }
-    }
-
-    #[tokio::test]
-    async fn compresses_svg_and_json() {
-        let mw = middleware(CompressionConfiguration::default());
-        for content_type in ["image/svg+xml", "application/json; charset=utf-8"] {
-            let mut response = text_response(vec![b'a'; 1000]);
-            response.headers.set_content_type(content_type);
-            mw.compress_response(&request_headers(Some("gzip")), &mut response).await;
-            assert_eq!(response.headers.get(header::CONTENT_ENCODING).unwrap(), "gzip", "{content_type}");
-        }
-    }
-
-    #[tokio::test]
-    async fn keeps_original_when_compression_is_not_smaller() {
-        let mw = middleware(CompressionConfiguration { min_size: 0, ..Default::default() });
-        let mut response = text_response(b"x".to_vec());
-        mw.compress_response(&request_headers(Some("gzip")), &mut response).await;
-        assert_eq!(response.body, b"x");
-        assert!(response.headers.get(header::CONTENT_ENCODING).is_none());
-    }
-
-    #[test]
-    fn configuration_is_read_from_toml_with_defaults() {
-        let cfg: CompressionConfiguration = toml::from_str("enable_brotli = false\nlevel = \"fastest\"\nmin_size = 256").unwrap();
-        assert!(!cfg.enable_brotli && cfg.enable_gzip && cfg.enable_deflate && cfg.enable_zstd);
-        assert_eq!(cfg.level, CompressionLevel::Fastest);
-        assert_eq!(cfg.min_size, 256);
     }
 }

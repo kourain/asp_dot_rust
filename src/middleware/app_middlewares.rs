@@ -1,71 +1,57 @@
-use std::sync::Arc;
-
 use crate::{
     Application,
     http_context::HttpContext,
     logging::LOGGER,
-    middleware::{Middleware, MiddlewareNext, auto_route},
+    middleware::{Middleware, MiddlewareNext, auto_route::RoutingMiddleware},
+    services::service_provider::service_provider_scope::ServiceProviderScope,
 };
 
+/// Creates a middleware from the next one, called once when the pipeline is built.
+type Factory = Box<dyn Fn(&ServiceProviderScope, MiddlewareNext) -> MiddlewareNext + Send + Sync>;
+
 pub(crate) struct ApplicationMiddlewares {
-    middlewares: Vec<Arc<dyn Middleware>>,
-    pipeline: Option<MiddlewareNext>,
+    builder: Vec<Factory>,
+    root: Option<MiddlewareNext>,
 }
 impl ApplicationMiddlewares {
     pub fn new() -> Self {
-        Self {
-            middlewares: Vec::new(),
-            pipeline: None,
-        }
+        Self { builder: Vec::new(), root: None }
     }
-    pub fn add<M>(&mut self, middleware: M)
-    where
-        M: Middleware + 'static,
-    {
-        self.middlewares.push(Arc::new(middleware));
+    pub fn add(&mut self, factory: Factory) {
+        self.builder.push(factory);
     }
-    pub fn build_pipeline(&mut self) {
-        LOGGER::info(format!("Building middleware pipeline {} middlewares", self.middlewares.len()));
-        let mut next: MiddlewareNext = Arc::new(|http_ctx| auto_route::invoke_async(http_ctx));
-        for middleware in self.middlewares.iter().rev() {
-            let middleware = middleware.clone();
-            let next_handler = next.clone();
-            LOGGER::trace(format!("Adding middleware to pipeline: {}", middleware.type_name()));
-            next = Arc::new(move |http_context: &mut HttpContext| {
-                let middleware = middleware.clone();
-                let next = next_handler.clone();
-                Box::pin(async move {
-                    LOGGER::trace(format!("Executing middleware: {}", middleware.type_name()));
-                    middleware.invoke_async(http_context, next).await;
-                })
-            });
-        }
-        self.pipeline = Some(next);
+    /// Creates the middlewares from the last to the first, so each one receives the one after it as `next`.
+    pub fn build_pipeline(&mut self, service_scope: &ServiceProviderScope) {
+        LOGGER::info(format!("Building middleware pipeline {} middlewares", self.builder.len()));
+        let routing = MiddlewareNext::new(RoutingMiddleware);
+        let root = self.builder.iter().rev().fold(routing, |next, factory| factory(service_scope, next));
+        self.builder.clear();
+        self.root = Some(root);
     }
     pub async fn invoke_async(&self, http_context: &mut HttpContext) {
-        if let Some(root) = self.pipeline.as_ref() {
-            root(http_context).await;
+        if let Some(root) = self.root.as_ref() {
+            root.next_async(http_context).await;
         }
     }
 }
 
 impl Application {
-    pub fn add_middleware<M>(&mut self) -> &mut Self
+    pub fn add_middleware<T>(&mut self) -> &mut Self
     where
-        M: Middleware + 'static,
+        T: Middleware + 'static,
     {
-        LOGGER::info(format!("Adding middleware: {}", std::any::type_name::<M>()));
-        let middleware_instance = M::inject(&self.service_provider);
-        self._middlewares.add(middleware_instance);
+        LOGGER::info(format!("Adding middleware: {}", std::any::type_name::<T>()));
+        self._middlewares.add(Box::new(|service_scope, next| MiddlewareNext::new(T::inject(service_scope, next))));
         self
     }
-    pub fn add_middleware_instance<M>(&mut self, middleware: M) -> &mut Self
+    /// Adds a middleware created by your own function, `factory` receives the next middleware.
+    pub fn add_middleware_factory<M, F>(&mut self, factory: F) -> &mut Self
     where
         M: Middleware + 'static,
+        F: Fn(MiddlewareNext) -> M + Send + Sync + 'static,
     {
-        LOGGER::info(format!("Adding middleware instance: {}", std::any::type_name::<M>()));
-        let middleware_instance = middleware;
-        self._middlewares.add(middleware_instance);
+        LOGGER::info(format!("Adding middleware factory: {}", std::any::type_name::<M>()));
+        self._middlewares.add(Box::new(move |_, next| MiddlewareNext::new(factory(next))));
         self
     }
     pub(crate) async fn call_middlewares_async(&self, http_context: &mut HttpContext) {

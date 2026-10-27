@@ -1,5 +1,6 @@
 mod controller;
 mod dependency_injection;
+mod middleware;
 mod utils;
 
 use proc_macro::TokenStream;
@@ -130,6 +131,32 @@ pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
     dependency_injection::inject_impliment::inject(args, item, InjectFlags::NONE)
+}
+
+/// middleware in the style of ASP.NET: the next middleware is given to the constructor <br>
+/// Place it on `impl T { fn new(next: MiddlewareNext, ..); async fn invoke_async(&self, ctx, ..) }`. <br>
+/// - parameters of `new` are resolved once when the pipeline is built (`MiddlewareNext`, `Serv<T>`, `Cfg<T>`, `CfgRequire<T>`, `CfgReload<T>`). <br>
+/// - parameters of `invoke_async` after `ctx` are resolved on every request from the request scope (`Serv<T>`, `Cfg<T>`...). <br>
+/// - it generates `Middleware`, `Middleware` for the type. <br>
+/// - without `fn new` the struct must have only the field `next`.
+///
+/// ```no_run
+/// pub struct LogMiddleware {
+///     next: MiddlewareNext,
+/// }
+/// #[middleware]
+/// impl LogMiddleware {
+///     pub fn new(next: MiddlewareNext) -> Self {
+///         Self { next }
+///     }
+///     pub async fn invoke_async(&self, http_context: &mut HttpContext) {
+///         self.next.call_async(http_context).await;
+///     }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
+    middleware::middleware(args, item)
 }
 
 /// inject httpcontext service and config <br>

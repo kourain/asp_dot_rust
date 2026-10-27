@@ -3,7 +3,7 @@
 macro_rules! api_controller {
     ( $vis:vis $name:ident { $( $field_name:ident : $field_type:ty ),* $(,)? } ) => {
         /// pre-impl 
-        /// ```no_run
+        /// ```no_run no_docs
         /// impl asp_dot_rust::utils::StructName for 
         /// {
         ///     fn str_name() -> &'static str {...}

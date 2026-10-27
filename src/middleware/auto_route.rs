@@ -1,11 +1,20 @@
 use crate::{
     http_context::HttpContext,
-    services::routing::RoutingResult::{Found, MethodNotAllowed, NotFound},
+    middleware::{Middleware, MiddlewareNext},
+    services::{
+        routing::RoutingResult::{Found, MethodNotAllowed, NotFound},
+        service_provider::ServiceProviderScope,
+    },
 };
-use std::pin::Pin;
 
-pub fn invoke_async<'a>(http_context: &'a mut HttpContext) -> Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
-    Box::pin(async {
+/// Last middleware of the chain, calls the router.
+pub struct RoutingMiddleware;
+#[async_trait::async_trait]
+impl Middleware for RoutingMiddleware {
+    fn inject(_: &ServiceProviderScope, _: MiddlewareNext) -> Self {
+        Self {}
+    }
+    async fn inject_invoke_async(&self, http_context: &mut HttpContext) {
         match &http_context.request.routing_info.router_info {
             Found(controller) => {
                 _ = (controller.invoke_async)(http_context, controller.action_name).await;
@@ -23,5 +32,5 @@ pub fn invoke_async<'a>(http_context: &'a mut HttpContext) -> Pin<Box<dyn std::f
                 http_context.response.body = http::StatusCode::NOT_FOUND.canonical_reason().unwrap_or("Not Found").as_bytes().to_vec();
             }
         }
-    })
+    }
 }

@@ -24,5 +24,7 @@ pub mod utils;
 
 pub use application::{Application, ApplicationBuilder};
 pub use inventory;
+#[doc(hidden)]
+pub use async_trait as __async_trait;
 
 pub type MutexAsync<T> = tokio::sync::Mutex<T>;

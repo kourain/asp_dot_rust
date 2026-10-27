@@ -1,25 +1,20 @@
-use crate::{
-    Application,
-    configuration::RateLimitConfiguration,
-    dependency_injection::DependencyInjectableService,
-    http_context::HttpContext,
-    middleware::{Middleware, MiddlewareNext},
-    services::configuration::ConfigurationService,
-};
+use crate::{Application, configuration::RateLimitConfiguration, dependency_injection::Cfg, http_context::HttpContext, macros::middleware, middleware::MiddlewareNext};
 use dashmap::DashMap;
 
 pub struct RateLimitMiddleware {
+    next: MiddlewareNext,
     ip_request_counts: DashMap<std::net::IpAddr, Vec<std::time::Instant>>,
     ip_blocked_until: DashMap<std::net::IpAddr, std::time::Instant>,
     max_requests: usize,
     limit_seconds: u32,
     block_duration_seconds: u32,
 }
-impl DependencyInjectableService for RateLimitMiddleware {
-    fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
-        let config_service = _service_scope.get_service::<ConfigurationService>();
-        let config = config_service.get::<RateLimitConfiguration>().unwrap_or_default();
+#[middleware]
+impl RateLimitMiddleware {
+    pub fn new(next: MiddlewareNext, config: Cfg<RateLimitConfiguration>) -> Self {
+        let config = config.unwrap_or_default();
         RateLimitMiddleware {
+            next,
             ip_request_counts: DashMap::new(),
             ip_blocked_until: DashMap::new(),
             max_requests: config.max_requests,
@@ -27,10 +22,7 @@ impl DependencyInjectableService for RateLimitMiddleware {
             block_duration_seconds: config.block_duration_seconds,
         }
     }
-}
-#[async_trait::async_trait]
-impl Middleware for RateLimitMiddleware {
-    async fn invoke_async(&self, context: &mut HttpContext, next: MiddlewareNext) {
+    pub async fn invoke_async(&self, context: &mut HttpContext) {
         let client_socket_addr = context.request.client_socket_addr;
         let now = std::time::Instant::now();
         match self.ip_blocked_until.get(&client_socket_addr.ip()) {
@@ -70,7 +62,7 @@ impl Middleware for RateLimitMiddleware {
             }
         };
 
-        next(context).await;
+        self.next.next_async(context).await;
     }
 }
 
