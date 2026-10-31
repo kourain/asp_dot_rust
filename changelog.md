@@ -1,5 +1,18 @@
 # Change log
 
+## 0.2.8
+
+- Stream response: a complete response (controller result, `response.body`) is written into the stream when the pipeline ends; other data is sent with `response.write_async(bytes)`. See `docs/stream_response.md`.
+- Response API in the style of ASP.NET: `has_started` (HasStarted), `start_async` (StartAsync), `write_async` (WriteAsync), `complete_async` (CompleteAsync) and `HttpContext::abort` (Abort). `write_bytes_async` writes owned bytes without copying them.
+- The pipeline now runs in its own task only when it waits after the head is sent.
+- A response with status 204 or 304 no longer has `Content-Length`.
+
+### Breaking changes 0.2.8
+
+- `HttpResponse::write_async` takes `impl AsRef<[u8]>` and, like the other write methods, now really writes to the connection and returns `std::io::Result<()>`.
+- `write_headers_async` is now `start_async`, `write_response_async` is now `complete_async`, `write_body_async` is removed.
+- Removed `HttpResponse::keep_alive` and `move_to_http_response`; the connection is managed by hyper.
+
 ## 0.2.7
 
 - Middleware in the style of ASP.NET: it holds the next middleware (`MiddlewareNext`) given to its constructor and the pipeline is built once at run. See `docs/middleware.md`.

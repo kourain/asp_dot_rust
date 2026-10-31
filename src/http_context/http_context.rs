@@ -11,4 +11,10 @@ impl HttpContext {
     pub(crate) fn new(request: HttpRequest, response: HttpResponse, service_provider: ServiceProviderScope) -> Self {
         Self { request, response, service_provider }
     }
+
+    /// Breaks the response stream when the response has started,
+    /// Does nothing when the response has not started, set the status and body instead.
+    pub fn abort(&mut self) {
+        self.response.abort();
+    }
 }
