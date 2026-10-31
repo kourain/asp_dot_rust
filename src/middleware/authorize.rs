@@ -1,25 +1,29 @@
-use asp_dot_rust_macros::DependencyInjectableService;
-
 use crate::{
-    Application,
-    http_context::{HttpContext, http_header::HttpHeader},
-    middleware::{Middleware, MiddlewareNext},
+    Application, http_context::{HttpContext, http_header::HttpHeader}, middleware::{Middleware, MiddlewareNext}, services::service_provider::service_provider_scope::ServiceProviderScope,
 };
-#[derive(Default, DependencyInjectableService)]
 pub(crate) struct AuthorizeMiddleware {
-    #[di(default)]
+    next: MiddlewareNext,
     schema: String,
 }
+/// written by hand, `schema` is not a service: `use_authorize` creates it with `add_middleware_factory`.
 #[async_trait::async_trait]
 impl Middleware for AuthorizeMiddleware {
-    async fn invoke_async(&self, http_context: &mut HttpContext, next: MiddlewareNext) {
+    fn inject(_service_scope: &ServiceProviderScope, next: MiddlewareNext) -> Self {
+        Self { next, schema: String::new() }
+    }
+    async fn inject_invoke_async(&self, http_context: &mut HttpContext) {
+        self.invoke_async(http_context).await;
+    }
+}
+impl AuthorizeMiddleware {
+    async fn invoke_async(&self, http_context: &mut HttpContext) {
         let auth_header: Option<String> = http_context.request.headers.authorization();
         if let Some(auth_header) = auth_header {
             let split_token: Vec<&str> = auth_header.trim().split(" ").collect::<Vec<&str>>();
             if let Some(schema) = split_token.first()
                 && *schema == self.schema
             {
-                next(http_context).await;
+                self.next.next_async(http_context).await;
                 return;
             }
         }
@@ -30,8 +34,8 @@ impl Middleware for AuthorizeMiddleware {
 }
 impl Application {
     pub fn use_authorize(&mut self, schema: impl Into<String>) -> &mut Self {
-        let middleware = AuthorizeMiddleware { schema: schema.into() };
-        self.add_middleware_instance(middleware);
+        let schema: String = schema.into();
+        self.add_middleware_factory(move |next| AuthorizeMiddleware { next, schema: schema.clone() });
         self
     }
     pub fn use_authorize_bearer(&mut self) -> &mut Self {

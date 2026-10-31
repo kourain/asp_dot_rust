@@ -3,34 +3,33 @@ use crate::{
     configuration::CorsConfiguration,
     dependency_injection::{Cfg, Serv},
     http_context::{HttpContext, http_header::HttpHeader},
-    macros::inject,
-    middleware::Middleware,
+    macros::middleware,
+    middleware::MiddlewareNext,
 };
 use http::header;
 use std::sync::Arc;
 
 pub struct CorsMiddleware {
+    next: MiddlewareNext,
     routing_service: Serv<crate::services::routing::RoutingService>,
     configuration: Arc<CorsConfiguration>,
 }
-#[inject]
+#[middleware]
 impl CorsMiddleware {
-    pub fn new(routing_service: Serv<crate::services::routing::RoutingService>, configuration: Cfg<CorsConfiguration>) -> Self {
+    pub fn new(next: MiddlewareNext, routing_service: Serv<crate::services::routing::RoutingService>, configuration: Cfg<CorsConfiguration>) -> Self {
         Self {
+            next,
             routing_service,
             configuration: configuration.unwrap_or_default(),
         }
     }
-}
-#[async_trait::async_trait]
-impl Middleware for CorsMiddleware {
-    async fn invoke_async(&self, http_context: &mut HttpContext, next: crate::middleware::MiddlewareNext) {
+    pub async fn invoke_async(&self, http_context: &mut HttpContext) {
         {
             let request_origin = http_context.request.headers.origin();
 
             // server-to-server
             let Some(origin) = request_origin else {
-                next(http_context).await;
+                self.next.next_async(http_context).await;
                 return;
             };
 
@@ -76,7 +75,7 @@ impl Middleware for CorsMiddleware {
             }
         }
         // normal request
-        next(http_context).await;
+        self.next.next_async(http_context).await;
     }
 }
 impl Application {

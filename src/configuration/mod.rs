@@ -1,3 +1,4 @@
+mod compression_config;
 mod cors_config;
 mod get_client_ip_config;
 mod hyper_config;
@@ -7,6 +8,7 @@ mod request_timeout_config;
 mod startup_app_config;
 mod static_file_config;
 
+pub use compression_config::{CompressionConfiguration, CompressionLevel};
 pub use cors_config::CorsConfiguration;
 pub use get_client_ip_config::GetClientIpConfiguration;
 pub use hyper_config::HyperConfig;
