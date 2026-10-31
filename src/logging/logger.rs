@@ -41,10 +41,10 @@ impl Logger {
             self.output_log_aysnc(log_info).await;
         }
     }
-    fn should_log(&self, level: &LogLevel) -> bool {
+    pub fn should_log(&self, level: &LogLevel) -> bool {
         // hide Debug in release build
         #[cfg(not(debug_assertions))]
-        if level == LogLevel::Debug {
+        if *level == LogLevel::Debug {
             return false;
         }
         level >= &self.level
