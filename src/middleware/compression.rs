@@ -138,7 +138,9 @@ impl CompressionMiddleware {
 impl CompressionMiddleware {
     fn should_compress(&self, response: &HttpResponse) -> bool {
         let status = response.status_code;
-        if response.body.is_empty()
+        // the head (and maybe a part of the body) is already sent, the headers can not describe a compressed body any more
+        if response.is_committed()
+            || response.body.is_empty()
             || response.body.len() < self.configuration.min_size
             || status.is_informational()
             || status == http::StatusCode::NO_CONTENT

@@ -8,7 +8,8 @@ impl ActionResult for String {
         http_context.response.status_code = self.status_code();
         http_context.response.headers.set_content_length(self.content_length());
         http_context.response.headers.set_content_type(self.content_type());
-        http_context.response.write_async(self.as_bytes()).await;
+        // the error only tells that the client is gone, there is nobody left to answer
+        _ = http_context.response.write_async(self.as_bytes()).await;
     }
     fn content_length(&self) -> usize {
         self.len()
