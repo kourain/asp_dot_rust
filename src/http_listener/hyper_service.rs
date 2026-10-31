@@ -42,9 +42,9 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
                             "Request {}:{}, Unhandled panic: {:?}",
                             http_context.request.connection_id, http_context.request.request_id, panic_payload
                         ));
-                        if http_context.response.is_committed() {
+                        if http_context.response.has_started() {
                             // the status is already sent, the only way to tell the client is to break the stream
-                            http_context.response.abort();
+                            http_context.abort();
                         } else {
                             http_context.response.status_code = http::StatusCode::INTERNAL_SERVER_ERROR;
                             http_context.response.body = b"Internal Server Error".to_vec();
@@ -62,7 +62,7 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
                     duration.as_secs_f64() * 1000.0
                 ));
                 // Writes what is still in `response.body` (the whole body of a complete response) and ends the stream
-                if let Err(e) = http_context.response.write_response_async().await {
+                if let Err(e) = http_context.response.complete_async().await {
                     LOGGER::debug(format!("Response not fully written: {}", e));
                 }
             };

@@ -133,10 +133,43 @@ impl StreamController {
     #[get("/stream/headers_only")]
     pub async fn stream_headers_only(&mut self) -> impl ActionResult {
         self.http_context.response.headers.insert_str("X-Early", "1");
-        self.http_context.response.write_headers_async().await.unwrap();
+        self.http_context.response.start_async().await.unwrap();
         tokio::time::sleep(Duration::from_millis(300)).await;
         self.http_context.response.write_async("late").await.unwrap();
         ""
+    }
+
+    #[get("/stream/has_started")]
+    pub async fn stream_has_started(&mut self) -> impl ActionResult {
+        let before = self.http_context.response.has_started();
+        self.http_context.response.write_async("x").await.unwrap();
+        let after = self.http_context.response.has_started();
+        self.http_context.response.write_async(format!("{before},{after}")).await.unwrap();
+        ""
+    }
+
+    #[get("/stream/complete")]
+    pub async fn stream_complete(&mut self) -> impl ActionResult {
+        self.http_context.response.write_async("a").await.unwrap();
+        self.http_context.response.body = b"b".to_vec();
+        self.http_context.response.complete_async().await.unwrap();
+        // the client must not wait for this
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        ""
+    }
+
+    #[get("/stream/abort")]
+    pub async fn stream_abort(&mut self) -> impl ActionResult {
+        self.http_context.response.write_async("partial").await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        self.http_context.abort();
+        ""
+    }
+
+    #[get("/stream/abort_before")]
+    pub async fn stream_abort_before(&mut self) -> impl ActionResult {
+        self.http_context.abort();
+        "still complete"
     }
 
     #[get("/stream/disconnect")]
@@ -477,6 +510,45 @@ async fn slow_client_makes_the_writer_wait() {
     }
     assert_eq!(total, BACKPRESSURE_CHUNKS * BACKPRESSURE_CHUNK_SIZE);
     assert_eq!(PRODUCED_CHUNKS.load(Ordering::SeqCst), BACKPRESSURE_CHUNKS);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn has_started_is_true_after_the_first_write() {
+    let port = start_server(|_| {}).await;
+    let (head, body) = Conn::connect(port).await.get("/stream/has_started", &[]).await;
+    assert_eq!(head.status, 200);
+    assert_eq!(body, b"xfalse,true");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn complete_async_ends_the_stream_without_waiting_for_the_handler() {
+    let port = start_server(|_| {}).await;
+    let mut conn = Conn::connect(port).await;
+    let started = Instant::now();
+    conn.send("GET", "/stream/complete", &[]).await;
+    let head = conn.read_head().await;
+    assert_eq!(head.status, 200);
+    assert_eq!(conn.read_body(&head).await.unwrap(), b"ab");
+    assert!(started.elapsed() < Duration::from_millis(400), "the stream ended with the handler: {:?}", started.elapsed());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn abort_after_the_first_write_breaks_the_stream() {
+    let port = start_server(|_| {}).await;
+    let mut conn = Conn::connect(port).await;
+    conn.send("GET", "/stream/abort", &[]).await;
+    let head = conn.read_head().await;
+    assert_eq!(head.status, 200);
+    assert_eq!(conn.read_chunk().await.unwrap().unwrap(), b"partial");
+    assert!(conn.read_chunk().await.is_err(), "the stream ended as if it was complete");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn abort_before_the_first_write_does_nothing() {
+    let port = start_server(|_| {}).await;
+    let (head, body) = Conn::connect(port).await.get("/stream/abort_before", &[]).await;
+    assert_eq!(head.status, 200);
+    assert_eq!(body, b"still complete");
 }
 
 // ---------------------------------------------------------------------------

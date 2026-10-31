@@ -30,13 +30,24 @@ pub async fn stream(&mut self) -> impl ActionResult {
 }
 ```
 
+## ASP.NET style API
+
+| ASP.RS | ASP.NET Core |
+|---|---|
+| `response.has_started()` | `Response.HasStarted` |
+| `response.start_async()` | `Response.StartAsync()` |
+| `response.write_async(bytes)` | `Response.WriteAsync(text)` / `Response.Body.WriteAsync(bytes)` |
+| `response.complete_async()` | `Response.CompleteAsync()` |
+| `http_context.abort()` | `HttpContext.Abort()` |
+
 ## Rules
 
-- The first `write_async` (or `write_headers_async`) sends the status and headers. Changes after that are ignored.
+- The first `write_async` (or `start_async`) sends the status and headers. Changes after that are ignored.
 - A status that is still the default (204) is sent as 200 when you stream.
 - No `Content-Length` is added when streaming, the body is chunked (HTTP/1.1) unless you set the header yourself.
 - `write_async` waits when the client is slow and returns an error when the client has disconnected.
 - Bytes still in `response.body` when the pipeline ends are written after the streamed bytes. The returned `""` adds nothing.
+- `complete_async` writes the head and `response.body` and ends the stream now, instead of when the pipeline ends.
 - `CompressionMiddleware` skips a response that is already streamed.
 - A panic or a request timeout after the first write breaks the stream, so the client does not see a body that looks complete. Before the first write they give 500 and 408.
-- `response.abort()` breaks the stream by hand.
+- `http_context.abort()` breaks the stream by hand. It does nothing before the first write.

@@ -28,7 +28,7 @@ pub enum WritenPhase {
 
 /// The response of a request, it is written in one of two ways:
 /// - complete: set `status_code`, `headers` and `body` (a controller result does this), everything is written to the stream when the pipeline ends.
-/// - streamed: call `write_async` (or `write_headers_async`), the status and headers are sent with the first call and can not be changed after it.
+/// - streamed: call `write_async` (or `start_async`), the status and headers are sent with the first call and can not be changed after it.
 ///   A status that is still the default (204) is sent as 200.
 pub struct HttpResponse {
     pub status_code: StatusCode,
@@ -83,8 +83,8 @@ impl HttpResponse {
         response
     }
 
-    /// `true` once the status and headers are sent, they can not be changed after that.
-    pub fn is_committed(&self) -> bool {
+    /// `true` once the status and headers are sent (like `HasStarted` of ASP.NET), they can not be changed after that.
+    pub fn has_started(&self) -> bool {
         self.written_phase >= WritenPhase::HTTP_HEADERS
     }
 
@@ -95,7 +95,7 @@ impl HttpResponse {
 
     /// Sends the status and headers, `content_length` (when known) replaces the Content-Length header.
     fn commit(&mut self, content_length: Option<usize>) -> io::Result<()> {
-        if self.is_committed() {
+        if self.has_started() {
             return Ok(());
         }
         let (Some(head_tx), Some(body)) = (self.head_tx.take(), self.pending_body.take()) else {
@@ -137,8 +137,8 @@ impl HttpResponse {
         Ok(())
     }
 
-    /// Sends the status and headers now, without a body. The headers are sent as they are, no Content-Length is added.
-    pub async fn write_headers_async(&mut self) -> io::Result<()> {
+    /// Sends the status and headers now (like `StartAsync` of ASP.NET), without a body. The headers are sent as they are, no Content-Length is added.
+    pub async fn start_async(&mut self) -> io::Result<()> {
         self.commit(None)
     }
 
@@ -164,9 +164,9 @@ impl HttpResponse {
     }
 
     /// Writes the bytes of `body` to the stream, the head is sent first with Content-Length = `body.len()` if it is not sent yet.
-    pub async fn write_body_async(&mut self) -> io::Result<()> {
+    async fn flush_body_async(&mut self) -> io::Result<()> {
         let body = Bytes::from(std::mem::take(&mut self.body));
-        let content_length = if self.is_committed() { None } else { Some(body.len()) };
+        let content_length = if self.has_started() { None } else { Some(body.len()) };
         self.commit(content_length)?;
         if status_forbids_body(self.final_status()) {
             return Ok(());
@@ -181,18 +181,18 @@ impl HttpResponse {
         Ok(())
     }
 
-    /// Writes the whole response (head and `body`) and ends the stream.
-    pub async fn write_response_async(&mut self) -> io::Result<()> {
-        let result = self.write_body_async().await;
+    /// Writes what is left (head and `body`) and ends the stream, like `CompleteAsync` of ASP.NET.
+    pub async fn complete_async(&mut self) -> io::Result<()> {
+        let result = self.flush_body_async().await;
         self.body_tx = None;
         self.written_phase = WritenPhase::END;
         result
     }
 
-    /// Ends the stream with an error, the client sees a broken response instead of a complete one.
+    /// Ends the stream with an error, the client sees a broken response instead of a complete one. Use `HttpContext::abort`.
     /// Does nothing when the head is not sent yet, set the status and body instead.
-    pub fn abort(&mut self) {
-        if !self.is_committed() {
+    pub(crate) fn abort(&mut self) {
+        if !self.has_started() {
             return;
         }
         if let Some(body_tx) = self.body_tx.take() {

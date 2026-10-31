@@ -18,9 +18,9 @@ impl RequestTimeoutMiddleware {
         let timeout = std::time::Duration::from_secs(self.request_timeout_config.timeout_seconds);
         if tokio::time::timeout(timeout, self.next.next_async(http_context)).await.is_err() {
             LOGGER::warn("Request timed out");
-            if http_context.response.is_committed() {
+            if http_context.response.has_started() {
                 // the status is already sent, the only way to tell the client is to break the stream
-                http_context.response.abort();
+                http_context.abort();
             } else {
                 http_context.response.status_code = http::StatusCode::REQUEST_TIMEOUT;
                 http_context.response.body = http::StatusCode::REQUEST_TIMEOUT.canonical_reason().unwrap_or("Request Timeout").as_bytes().to_vec();
