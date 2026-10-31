@@ -144,71 +144,64 @@ impl LOGGER {
         if !DEFAULT_LOG_ENABLE.load(Ordering::Relaxed) || DEFAULT_LOG_RUNNING.swap(true, Ordering::SeqCst) {
             return; // Already initialized
         }
-        let mut rx;
-        if let Some(_rx) = _rx {
-            rx = _rx;
-        } else {
-            rx = Self::spawn_log_receiver();
-        }
-        // Run it on its own thread with a small current-thread runtime instead of `tokio::spawn`.
-        let log_task = async move {
-            let mut logger = Logger::new();
-            loop {
-                let received = rx.recv().await;
-                if DEFAULT_LOG_ENABLE.load(Ordering::Relaxed) {
-                    match received {
-                        Ok(command) => match command {
-                            LogCommand::Log(log_info) => {
-                                logger.write_log(&log_info).await;
+        // Do not create another thread when no tokio runtime is active
+        if let Ok(handler) = tokio::runtime::Handle::try_current() {
+            let mut rx;
+            if let Some(_rx) = _rx {
+                rx = _rx;
+            } else {
+                rx = Self::spawn_log_receiver();
+            }
+            // Run it on its own thread with a small current-thread runtime instead of `tokio::spawn`.
+            let log_task = async move {
+                let mut logger = Logger::new();
+                loop {
+                    let received = rx.recv().await;
+                    if DEFAULT_LOG_ENABLE.load(Ordering::Relaxed) {
+                        match received {
+                            Ok(command) => match command {
+                                LogCommand::Log(log_info) => {
+                                    logger.write_log(&log_info).await;
+                                }
+                                LogCommand::SetLogFormat(format) => {
+                                    logger.set_log_format(format);
+                                }
+                                LogCommand::SetTimeFormat(format) => {
+                                    logger.set_date_time_format(format);
+                                }
+                                LogCommand::SetLogLevel(level) => {
+                                    logger.set_level(level);
+                                }
+                                LogCommand::SetEnable(_) => {
+                                    // Do nothing, handled by outer loop
+                                }
+                                LogCommand::SetDefaultLogger(enable) => {
+                                    DEFAULT_LOG_ENABLE.store(enable, Ordering::Release);
+                                }
+                                LogCommand::SetUseColorOutput(enable) => {
+                                    logger.set_use_color_output(enable);
+                                }
+                            },
+                            Err(RecvError::Lagged(missed)) => {
+                                let log = LogInfo {
+                                    timestamp: chrono::Utc::now(),
+                                    level: LogLevel::Error,
+                                    message: format!("LOGGER Missed {} log messages due to lag", missed),
+                                };
+                                logger.write_log(&log).await;
                             }
-                            LogCommand::SetLogFormat(format) => {
-                                logger.set_log_format(format);
-                            }
-                            LogCommand::SetTimeFormat(format) => {
-                                logger.set_date_time_format(format);
-                            }
-                            LogCommand::SetLogLevel(level) => {
-                                logger.set_level(level);
-                            }
-                            LogCommand::SetEnable(_) => {
-                                // Do nothing, handled by outer loop
-                            }
-                            LogCommand::SetDefaultLogger(enable) => {
-                                DEFAULT_LOG_ENABLE.store(enable, Ordering::Release);
-                            }
-                            LogCommand::SetUseColorOutput(enable) => {
-                                logger.set_use_color_output(enable);
-                            }
-                        },
-                        Err(RecvError::Lagged(missed)) => {
-                            let log = LogInfo {
-                                timestamp: chrono::Utc::now(),
-                                level: LogLevel::Error,
-                                message: format!("LOGGER Missed {} log messages due to lag", missed),
-                            };
-                            logger.write_log(&log).await;
+                            Err(RecvError::Closed) => break,
                         }
-                        Err(RecvError::Closed) => break,
+                    } else {
+                        break;
                     }
-                } else {
-                    break;
                 }
-            }
-            DEFAULT_LOG_RUNNING.store(false, Ordering::Release);
-        };
-
-        let spawned = std::thread::Builder::new().name("asp-logger".to_string()).spawn(move || {
-            match tokio::runtime::Builder::new_current_thread().enable_all().build() {
-                Ok(runtime) => runtime.block_on(log_task),
-                Err(e) => {
-                    DEFAULT_LOG_RUNNING.store(false, Ordering::Release);
-                    eprintln!("LOGGER failed to build its runtime: {e}");
-                }
-            }
-        });
-        if let Err(e) = spawned {
-            DEFAULT_LOG_RUNNING.store(false, Ordering::Release);
-            eprintln!("LOGGER failed to start its thread: {e}");
+                DEFAULT_LOG_RUNNING.store(false, Ordering::Release);
+            };
+            handler.spawn(log_task);
+        } else {
+            eprintln!("LOGGER warning: default logger was not started because no tokio runtime is running");
+            return;
         }
     }
 }
