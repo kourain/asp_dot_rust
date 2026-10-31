@@ -1,48 +1,29 @@
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::Arc;
 
 use crate::{
     ApplicationBuilder,
-    controller::ActionRoute,
-    dependency_injection::DependencyInjectableController,
     logging::LOGGER,
     services::{routing::RoutingServiceBuilder, service_provider::ServiceType},
 };
 
-pub(crate) static CONTROLLER_REGISTRY: LazyLock<Mutex<RoutingServiceBuilder>> = LazyLock::new(|| Mutex::new(RoutingServiceBuilder::default()));
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub struct ControllerCollect {
-    pub(crate) type_id: std::any::TypeId,
-    pub(crate) type_name: &'static str,
-    pub(crate) controller_name: &'static str,
-}
 pub struct ControllerBootstrapRegistration {
-    pub bootstrap: fn() -> ControllerCollect,
+    pub bootstrap: fn(&mut RoutingServiceBuilder),
 }
 
 inventory::collect!(ControllerBootstrapRegistration);
 
-pub(crate) fn bootstrap_registered_controllers() {
+pub(crate) fn bootstrap_registered_controllers() -> RoutingServiceBuilder {
     LOGGER::info("Bootstrapping registered controllers...");
+    let mut routing_sv = RoutingServiceBuilder::default();
     for registration in inventory::iter::<ControllerBootstrapRegistration> {
-        let controller_collect = (registration.bootstrap)();
-        LOGGER::info(format!("Bootstrapped controller: {}", controller_collect.type_name));
+        (registration.bootstrap)(&mut routing_sv);
     }
-}
-
-pub fn register_controller<T>(root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
-where
-    T: DependencyInjectableController + crate::controller::Routing + Send + 'static,
-{
-    let mut registry = CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry");
-    registry.register_controller::<T>(root_route, action_routes)
+    routing_sv
 }
 
 impl ApplicationBuilder {
     pub fn add_controllers(&mut self) -> &mut Self {
-        LOGGER::info("Registering controllers...");
-        bootstrap_registered_controllers();
-        let routing_snapshot: RoutingServiceBuilder = std::mem::take(&mut *CONTROLLER_REGISTRY.lock().expect("Failed to lock controller registry"));
-        LOGGER::debug(format!("{:#?}", routing_snapshot));
+        let routing_snapshot = bootstrap_registered_controllers();
         self.service.add_instance(Arc::new(routing_snapshot.build()), ServiceType::Singleton);
         self
     }

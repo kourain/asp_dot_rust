@@ -2,7 +2,7 @@ use crate::{
     controller::{ActionRoute, Routing},
     dependency_injection::DependencyInjectableController,
     services::routing::{
-        ControllerCollect, RoutingService,
+        RoutingService,
         routing_result::{ControllerInvoke, RoutingInfo},
     },
 };
@@ -25,7 +25,7 @@ pub struct RoutingServiceBuilder {
 }
 
 impl RoutingServiceBuilder {
-    pub fn register_controller<T>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
+    pub fn register_controller<T>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>)
     where
         T: DependencyInjectableController + Routing + Send + 'static,
     {
@@ -43,11 +43,6 @@ impl RoutingServiceBuilder {
         for action in action_routes {
             let route = Self::join_route(root_route, action.route);
             self.add_controller_route::<T>(route, action.method, action.action_name, controller_invoker.clone());
-        }
-        ControllerCollect {
-            type_id: TypeId::of::<T>(),
-            type_name: std::any::type_name::<T>(),
-            controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
         }
     }
 
