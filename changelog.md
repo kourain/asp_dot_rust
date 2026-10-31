@@ -9,6 +9,15 @@
 - New `CompressionMiddleware` (`app.use_compression()`): gzip, deflate, brotli and zstd response compression chosen from `Accept-Encoding`, built on `async-compression`. See `docs/compression.md`.
 - New `CompressionConfiguration` and `CompressionLevel` (`enable_gzip`, `enable_deflate`, `enable_brotli`, `enable_zstd`, `min_size`, `level`), can be bound from a TOML section.
 
+- Stream response: a complete response (controller result, `response.body`) is written into the stream when the pipeline ends; other data is sent with `response.write_async(bytes)`. See `docs/stream_response.md`.
+- New `write_bytes_async`, `is_committed` and `abort` on the response. The pipeline now runs in its own task only when it waits after the head is sent.
+- A response with status 204 or 304 no longer has `Content-Length`.
+
+### Breaking changes 0.2.7
+
+- `HttpResponse::write_async`, `write_headers_async`, `write_body_async` and `write_response_async` now really write to the connection and return `std::io::Result<()>`; `write_async` takes `impl AsRef<[u8]>`.
+- Removed `HttpResponse::keep_alive` and `move_to_http_response`; the connection is managed by hyper.
+
 ### Breaking changes 0.2.6
 
 - now you must write middleware like asp.net core
