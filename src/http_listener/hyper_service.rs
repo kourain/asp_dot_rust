@@ -3,7 +3,7 @@ use crate::{
     configuration::HyperConfig,
     http_context::{HttpContext, http_request::HttpRequest, http_response::HttpResponse},
     logging::LOGGER,
-    services::routing::RoutingService,
+    services::routing::{ResolvedRoute, RoutingResult, RoutingService},
 };
 use futures::{FutureExt, future::Either};
 use hyper::service::service_fn;
@@ -15,19 +15,58 @@ use std::{convert::Infallible, panic::AssertUnwindSafe};
 use tokio::net::TcpStream;
 use ulid::Ulid;
 
+/// Size of the headers: name + value + 4 bytes (`: ` and CRLF) for each of them.
+fn headers_size(headers: &http::HeaderMap) -> usize {
+    headers.iter().map(|(name, value)| name.as_str().len() + value.len() + 4).sum()
+}
+
+/// The body limit of the request: the limit of the route it resolves to, or `max_request_body_size` when the route has none.
+fn max_body_size_of(route: &ResolvedRoute, limits: &HyperConfig) -> usize {
+    match &route.router_info {
+        RoutingResult::Found(info) => info.route_attr.get::<usize>("max_request_body_size").unwrap_or(limits.max_request_body_size),
+        _ => limits.max_request_body_size,
+    }
+}
+
+/// The status to refuse the request with when it is over `max_request_headers_size` (431)
+/// or its declared `Content-Length` is over `max_body_size` (413).
+fn exceeds_limits<B>(req: &http::Request<B>, limits: &HyperConfig, max_body_size: usize) -> Option<http::StatusCode> {
+    if headers_size(req.headers()) > limits.max_request_headers_size {
+        return Some(http::StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE);
+    }
+    let declared_length = req
+        .headers()
+        .get(http::header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<u128>().ok());
+    if declared_length.is_some_and(|length| length > max_body_size as u128) {
+        return Some(http::StatusCode::PAYLOAD_TOO_LARGE);
+    }
+    None
+}
+
 pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: Arc<RoutingService>, hypercfg: Arc<HyperConfig>) -> std::io::Result<()> {
     let client_socket_addr = stream.peer_addr().unwrap();
     let local_listen_socket_addr = stream.local_addr().unwrap();
     let connection_id: Arc<Ulid> = Arc::new(Ulid::generate());
+    let limits = hypercfg.clone();
     let hyper_service = service_fn(move |req| {
         let app = app.clone();
+        let limits = limits.clone();
         let start = std::time::Instant::now();
         // Extract request metadata before consuming the body
         let routing_service = routing_service.clone();
         let connection_id = connection_id.clone();
         let routing_info = routing_service.resolve(req.uri(), req.method());
         async move {
-            let custom_req = HttpRequest::from_http(req, routing_info, client_socket_addr, local_listen_socket_addr, connection_id);
+            // Refuse a request over the limits before it reaches the pipeline
+            let max_body_size = max_body_size_of(&routing_info, &limits);
+            if let Some(status) = exceeds_limits(&req, &limits, max_body_size) {
+                LOGGER::warn(format!("{} {} {} refused with {}", client_socket_addr, req.method(), req.uri(), status));
+                // the request body is not read, an HTTP/1.x connection can not be reused
+                return Ok::<_, Infallible>(HttpResponse::status_only(status, req.version() <= http::Version::HTTP_11));
+            }
+            let custom_req = HttpRequest::from_http(req, routing_info, max_body_size, client_socket_addr, local_listen_socket_addr, connection_id);
 
             // The response sends its head through `head_rx` as soon as the first byte is written or the response is complete
             let (custom_resp, head_rx) = HttpResponse::new_streaming();

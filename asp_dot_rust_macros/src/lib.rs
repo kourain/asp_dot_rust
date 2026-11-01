@@ -38,6 +38,18 @@ pub fn route(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::http_action(item, "")
 }
 
+/// sets the maximum size of the request body of a route, in bytes. A route without it uses `max_request_body_size` of `HyperConfig`. <br>
+/// Example usage:
+///
+/// ```no_run
+/// #[post("/upload")]
+/// #[max_body_size(10 * 1024 * 1024)]
+/// ```
+#[proc_macro_attribute]
+pub fn max_body_size(_args: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
 /// registers a function as a GET route handler <br>
 /// Example usage:
 ///

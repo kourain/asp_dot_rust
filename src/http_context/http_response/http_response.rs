@@ -74,13 +74,22 @@ impl HttpResponse {
         (response, head_rx)
     }
 
-    /// A response with status 500 and an empty body, used when the pipeline ends without any response.
-    pub(crate) fn internal_server_error() -> ResponseHead {
+    /// A response with an empty body, used when a request is refused before it reaches the pipeline.
+    /// `close_connection` adds `Connection: close` (HTTP/1.x only), for a request body that was not read.
+    pub(crate) fn status_only(status: StatusCode, close_connection: bool) -> ResponseHead {
         let (_, empty_body) = Channel::new(1);
         let mut response = http::Response::new(empty_body);
-        *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+        *response.status_mut() = status;
         response.headers_mut().set_content_length(0);
+        if close_connection {
+            response.headers_mut().insert(http::header::CONNECTION, HeaderValue::from_static("close"));
+        }
         response
+    }
+
+    /// A response with status 500 and an empty body, used when the pipeline ends without any response.
+    pub(crate) fn internal_server_error() -> ResponseHead {
+        Self::status_only(StatusCode::INTERNAL_SERVER_ERROR, false)
     }
 
     /// `true` once the status and headers are sent (like `HasStarted` of ASP.NET), they can not be changed after that.

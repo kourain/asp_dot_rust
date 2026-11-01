@@ -103,13 +103,28 @@ failure cases instead of collapsing them into one:
   registered route, but not with this HTTP method. `auto_route` replies
   `405 Method Not Allowed` and sets the `Allow` header to the methods that
   *are* registered for that path, per RFC 7231.
-- `RoutingResult::Found(Arc<RoutingInfo>)` — the path and method both
+- `RoutingResult::Found(Arc<Route>)` — the path and method both
   matched; `auto_route` invokes the matched controller action.
 
 `RoutingService::get_allowed_methods(path) -> HashSet<http::Method>` answers
 the same "what methods exist at this path" question independently of a
 specific request's method; it's used by the CORS middleware to compute
 `Access-Control-Allow-Methods`.
+
+## Request body limit per route
+
+`max_request_body_size` of `HyperConfig` is the default limit. Set `#[max_body_size(bytes)]` on an action to give its route its own limit (any `usize` expression, also above the default). It applies to every method of the route.
+
+```rust
+#[post("/upload")]
+#[max_body_size(10 * 1024 * 1024)]
+pub async fn upload(&mut self) -> impl ActionResult { /* ... */ }
+```
+
+- The limit is chosen when the request is created. `http_context.request.max_body_size` tells the one in use.
+- A declared `Content-Length` over the limit is refused with 413, the body is not read.
+- `http_context.request.body` is a `Limited<Incoming>`: reading more than the limit (chunked body, or no declared length) fails with `http_body_util::LengthLimitError`. The action decides what to answer.
+- An unknown path or method uses the default limit.
 
 ## Known limitations
 

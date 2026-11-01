@@ -1,5 +1,16 @@
 # Change log
 
+## 0.2.9
+
+- Fixed: with several ports only the first one was served (ip and port were zipped), now every ip is served on every port.
+- Fixed: `with_any_ip` failed on a host without IPv6 or when `[::]` already covers IPv4; `0.0.0.0` is bound first and `[::]` is skipped with a warning if it can not be bound.
+- `max_request_headers_size` (431) and `max_request_body_size` (413, by the declared `Content-Length`) are now applied.
+- `#[max_body_size(bytes)]` sets the request body limit of a route, routes without it use `max_request_body_size`. `HttpRequest::body` is now `Limited<Incoming>` and `HttpRequest::max_body_size` tells the limit in use. See `docs/routing.md`.
+
+### Breaking changes 0.2.9
+
+- `HttpRequest::body` is `Limited<Incoming>` (was `Incoming`) and `HttpRequest::from_http`, `ActionRoute`, `Route` and `add_controller_route` take or have the body limit of the route.
+
 ## 0.2.8
 
 - Stream response: a complete response (controller result, `response.body`) is written into the stream when the pipeline ends; other data is sent with `response.write_async(bytes)`. See `docs/stream_response.md`.
