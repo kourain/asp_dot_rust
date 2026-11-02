@@ -134,7 +134,7 @@ impl FilesController {
 - `#[attr]` on the impl has to be below `#[controller_route]`; above it, it is a compile error.
 - Read them in an action or a middleware: `request.route_attribute::<u8>("rate_limit")`, `request.route_attributes()` (`None` when the request resolved to no route) or `route.attributes()` on a resolved `Route`.
 - `get::<T>` returns `None` when the key is missing or the value was stored as another type: a number is never converted (`5` is not found as a `u8`).
-- `#[max_body_size(..)]` is a built-in attribute macro: `#[name(value)]` is `#[attr(name = value)]` with the value typed as the macro declares, and it needs no import of `attr`. They are all declared in `attr_aliases!` in `asp_dot_rust_macros/src/lib.rs`, a new one is one more entry there (`name: type`, with its doc comment) and, if you want it in `asp_dot_rust::controller`, a line in the `pub use` of `src/controller/mod.rs`.
+- `#[max_body_size(..)]` is a built-in attribute macro: `#[name(value)]` is `#[attr(name = value)]` with the value typed as the macro declares, and it needs no import of `attr`. They are all declared in `for_each_attr_alias!` in `asp_dot_rust_macros/src/controller/extra_attribute.rs`: a new one is one more entry there (`name: type`, with its doc comment) and nothing else. If you want it in `asp_dot_rust::controller`, add its name to the `pub use` of `src/controller/mod.rs`.
 - The key `max_body_size` is the request body limit of the route, see below.
 
 ## Request body limit per route

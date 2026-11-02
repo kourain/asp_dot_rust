@@ -7,7 +7,7 @@ use syn::{Attribute, Expr, ItemImpl, LitStr, Token, punctuated::Punctuated};
 use crate::utils::compiler_error::create_compiler_error;
 
 /// A built-in attribute macro: `#[name(value)]` is `#[attr(name = value)]`, with the value typed as `ty`.
-/// They are all declared in one place, `attr_aliases!` in `lib.rs`.
+/// They are all declared in one place, `for_each_attr_alias!` in `extra_attribute.rs`.
 pub(crate) struct AttrAlias {
     pub name: &'static str,
     pub ty: &'static str,
@@ -29,7 +29,7 @@ fn alias_pair(alias: &AttrAlias, name_span: proc_macro2::Span, value: &proc_macr
 /// the result is the same attribute.
 pub(crate) fn create_attr(args: TokenStream, item: TokenStream, name: &str) -> TokenStream {
     let item = attr(item, name);
-    let Some(alias) = crate::ATTR_ALIASES.iter().find(|alias| alias.name == name) else {
+    let Some(alias) = crate::controller::extra_attribute::ATTR_ALIASES.iter().find(|alias| alias.name == name) else {
         return create_compiler_error(&proc_macro2::TokenStream::new(), format!("#[{}] is not declared in attr_aliases!", name));
     };
     let args = proc_macro2::TokenStream::from(args);
@@ -123,24 +123,4 @@ pub(crate) fn merged_attribute_calls(impl_entries: &[AttrEntry], method_entries:
             quote! { .with_attribute(#key, #value) }
         })
         .collect()
-}
-
-/// Declares the built-in attribute macros. `#[name(value)]` is `#[attr(name = value)]` with the value typed as the given type,
-/// `#[controller_route]` reads them like `#[attr]`. To add one, add an entry here: `name: type`, with the doc comment of the macro.
-macro_rules! attr_aliases {
-    ($( $(#[$meta:meta])* $name:ident : $ty:ty ),* $(,)?) => {
-        $(
-            $(#[$meta])*
-            #[proc_macro_attribute]
-            pub fn $name(args: TokenStream, item: TokenStream) -> TokenStream {
-                controller::attribute::create_attr(args, item, stringify!($name))
-            }
-        )*
-        mod controller::extra_attribute {
-            /// Every built-in attribute macro.
-            pub(crate) const ATTR_ALIASES: &[controller::attribute::AttrAlias] = &[
-                $( controller::attribute::AttrAlias { name: stringify!($name), ty: stringify!($ty) } ),*
-                ];
-        };
-    }
 }
