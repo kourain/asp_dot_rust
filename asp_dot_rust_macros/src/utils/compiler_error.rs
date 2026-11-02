@@ -6,12 +6,18 @@ pub fn create_compiler_error(ty: &impl ToTokens, message: impl Into<String>) -> 
     return syn::Error::new_spanned(ty, message.into()).into_compile_error().into();
 }
 
+/// Creates a compiler error `TokenStream` for the given type and message.
+pub fn create_compiler_error_from_token_stream(tokens: &TokenStream, message: impl Into<String>) -> TokenStream {
+    let tokens2 = proc_macro2::TokenStream::from(tokens.clone());
+    syn::Error::new_spanned(tokens2, message.into()).into_compile_error().into()
+}
+
 /// Converts a type to a string representation, removing spaces.
 pub fn token_type_to_string(ty: &impl ToTokens) -> String {
     token_to_string(ty).replace(" ", "")
 }
 
 /// Converts a token to a string representation.
-pub fn token_to_string(token: &impl  ToTokens) -> String {
+pub fn token_to_string(token: &impl ToTokens) -> String {
     quote::quote!(#token).to_string()
 }

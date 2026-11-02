@@ -5,6 +5,7 @@ mod utils;
 
 use proc_macro::TokenStream;
 
+use crate::controller::extra_attribute::{define_attr_alias_macros, for_each_attr_alias};
 use crate::dependency_injection::flags::InjectFlags;
 
 /// using the controller_route attribute to define a controller and its routes
@@ -58,23 +59,10 @@ pub fn route(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// Read them with `http_context.request.route_attribute::<u8>("rate_limit")`.
 #[proc_macro_attribute]
 pub fn attr(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::attribute::attr(item, "attr")
+    controller::attribute::attr(&_args, item, "attr")
 }
 
-/// Defines the built-in attribute macros of `controller::extra_attribute`, where the list is. They are defined here because a
-/// `#[proc_macro_attribute]` has to be at the root of the crate.
-macro_rules! define_attr_alias_macros {
-    ($( $(#[$meta:meta])* $name:ident : $ty:ty ),* $(,)?) => {
-        $(
-            $(#[$meta])*
-            #[proc_macro_attribute]
-            pub fn $name(args: TokenStream, item: TokenStream) -> TokenStream {
-                controller::attribute::create_attr(args, item, stringify!($name))
-            }
-        )*
-    };
-}
-controller::extra_attribute::for_each_attr_alias!(define_attr_alias_macros);
+for_each_attr_alias!(define_attr_alias_macros);
 
 /// registers a function as a GET route handler <br>
 /// Example usage:

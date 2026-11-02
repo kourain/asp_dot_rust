@@ -7,6 +7,30 @@
 
 use super::attribute::AttrAlias;
 
+/// Defines the built-in attribute macros of `controller::extra_attribute`, where the list is. They are defined here because a
+/// `#[proc_macro_attribute]` has to be at the root of the crate.
+macro_rules! define_attr_alias_macros {
+    ($( $(#[$meta:meta])* $name:ident : $ty:ty ),* $(,)?) => {
+        $(
+            $(#[$meta])*
+            #[proc_macro_attribute]
+            pub fn $name(args: TokenStream, item: TokenStream) -> TokenStream {
+                controller::attribute::create_attr(args, item, stringify!($name))
+            }
+        )*
+    };
+}
+
+macro_rules! define_attr_alias_table {
+    ($( $(#[$meta:meta])* $name:ident : $ty:ty ),* $(,)?) => {
+        /// Every built-in attribute macro.
+        pub(crate) const ATTR_ALIASES: &[AttrAlias] = &[
+            $( AttrAlias { name: stringify!($name), ty: stringify!($ty) } ),*
+        ];
+    };
+}
+for_each_attr_alias!(define_attr_alias_table);
+
 /// Calls `$callback!` with the whole list of built-in attribute macros.
 macro_rules! for_each_attr_alias {
     ($callback:ident) => {
@@ -25,14 +49,6 @@ macro_rules! for_each_attr_alias {
         }
     };
 }
-pub(crate) use for_each_attr_alias;
 
-macro_rules! define_attr_alias_table {
-    ($( $(#[$meta:meta])* $name:ident : $ty:ty ),* $(,)?) => {
-        /// Every built-in attribute macro.
-        pub(crate) const ATTR_ALIASES: &[AttrAlias] = &[
-            $( AttrAlias { name: stringify!($name), ty: stringify!($ty) } ),*
-        ];
-    };
-}
-for_each_attr_alias!(define_attr_alias_table);
+pub(crate) use define_attr_alias_macros;
+pub(crate) use for_each_attr_alias;

@@ -4,7 +4,7 @@ use syn::ext::IdentExt;
 use syn::spanned::Spanned;
 use syn::{Attribute, Expr, ItemImpl, LitStr, Token, punctuated::Punctuated};
 
-use crate::utils::compiler_error::create_compiler_error;
+use crate::utils::compiler_error::{create_compiler_error, create_compiler_error_from_token_stream};
 
 /// A built-in attribute macro: `#[name(value)]` is `#[attr(name = value)]`, with the value typed as `ty`.
 /// They are all declared in one place, `for_each_attr_alias!` in `extra_attribute.rs`.
@@ -28,7 +28,7 @@ fn alias_pair(alias: &AttrAlias, name_span: proc_macro2::Span, value: &proc_macr
 /// `#[controller_route]` expands first and reads the alias itself with `alias_to_attr` (it can not see what this macro generates),
 /// the result is the same attribute.
 pub(crate) fn create_attr(args: TokenStream, item: TokenStream, name: &str) -> TokenStream {
-    let item = attr(item, name);
+    let item = attr(&args, item, name);
     let Some(alias) = crate::controller::extra_attribute::ATTR_ALIASES.iter().find(|alias| alias.name == name) else {
         return create_compiler_error(&proc_macro2::TokenStream::new(), format!("#[{}] is not declared in attr_aliases!", name));
     };
@@ -54,12 +54,9 @@ fn alias_to_attr(attr: &Attribute, alias: &AttrAlias, owner: &str) -> Result<Att
 
 /// `#[attr(...)]` and `#[max_body_size(...)]` are read by `#[controller_route]`, which removes the ones on the impl. One that reaches this macro
 /// on an impl was written above `#[controller_route]`, which would have expanded first and dropped it, so it is an error.
-pub(crate) fn attr(item: TokenStream, name: &str) -> TokenStream {
-    if let Ok(input_impl) = syn::parse::<ItemImpl>(item.clone()) {
-        return create_compiler_error(
-            &input_impl.self_ty,
-            format!("#[{}(...)] on a controller impl must be written below #[controller_route], not above it", name),
-        );
+pub(crate) fn attr(args: &TokenStream, item: TokenStream, name: &str) -> TokenStream {
+    if let Ok(_) = syn::parse::<ItemImpl>(item.clone()) {
+        return create_compiler_error_from_token_stream(args, format!("#[{}(...)] on a controller impl must be written below #[controller_route], not above it", name));
     }
     item
 }

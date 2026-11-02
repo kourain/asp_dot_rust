@@ -107,6 +107,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
         };
 
         let method_name = &impl_method.sig.ident;
+        let method_name_lit = LitStr::new(&method_name.to_string(), method_name.span());
         let is_async = impl_method.sig.asyncness.is_some();
 
         let method_entries = match parse_attr_entries(&impl_method.attrs, &format!("`{}`", method_name)) {
@@ -114,11 +115,11 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
             Err(error) => return error,
         };
         let attribute_calls = merged_attribute_calls(&impl_entries, &method_entries);
+        let mut is_route = false;
 
         for attr in impl_method.attrs.iter().filter(|attr| is_route_attr(attr)) {
             let route_ident = attr.path().segments.last().unwrap().ident.to_string();
-
-            let method_name_lit = LitStr::new(&method_name.to_string(), method_name.span());
+            is_route = true;
             if route_ident == "route" {
                 let values;
                 if let Ok(val) = attr.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated) {
@@ -163,7 +164,6 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                 }
 
                 push_route_registration(&mut action_route_registrations, &method_name_lit, method_lit, &path_lit, &attribute_calls);
-                push_match_route(&mut match_routes, &method_name_lit, method_name, is_async);
             } else {
                 let path_lit: LitStr;
                 if let Ok(val) = attr.parse_args() {
@@ -174,8 +174,13 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                 let http_method_string = route_ident.to_uppercase();
                 let http_method = LitStr::new(&http_method_string, attr.span());
                 push_route_registration(&mut action_route_registrations, &method_name_lit, vec![http_method], &path_lit, &attribute_calls);
-                push_match_route(&mut match_routes, &method_name_lit, method_name, is_async);
             };
+        }
+        if is_route {
+            if &method_name.to_string() == "new" {
+                return create_compiler_error(method_name, "fn `new` is DependencyInjectFn, cann't use as a route");
+            }
+            push_match_route(&mut match_routes, &method_name_lit, method_name, is_async);
         }
     }
 
