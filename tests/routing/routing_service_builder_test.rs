@@ -79,3 +79,47 @@ fn build_succeeds_for_non_conflicting_routes() {
     let _ = builder.build();
     assert!(true);
 }
+
+#[test]
+fn with_attribute_replaces_the_value_of_the_same_key() {
+    let route = ActionRoute::new("index", vec!["get"], "").with_attribute("level", 1u8).with_attribute("level", 2u8);
+    assert_eq!(route.route_attribute_map.len(), 1);
+    assert_eq!(route.route_attribute_map["level"].downcast_ref::<u8>(), Some(&2));
+}
+
+#[test]
+fn resolved_route_has_its_attributes_stored_as_their_own_type() {
+    use asp_dot_rust::services::routing::RoutingResult;
+    let mut builder = RoutingServiceBuilder::default();
+    builder.register_controller::<ControllerA>(
+        "home",
+        vec![ActionRoute::new("index", vec!["get"], "").with_attribute("level", 5u8).with_attribute("zone", "main").with_attribute("ratio", 0.5f32)],
+    );
+    let service = builder.build();
+    let uri: http::Uri = "/home".parse().unwrap();
+    let RoutingResult::Found(route) = service.resolve(&uri, &http::Method::GET).router_info else {
+        panic!("the route must be found");
+    };
+    assert_eq!(route.attributes().get::<u8>("level"), Some(5));
+    // another type is not a match, a number is not converted
+    assert_eq!(route.attributes().get::<i32>("level"), None);
+    assert_eq!(route.attributes().get::<&'static str>("zone"), Some("main"));
+    assert_eq!(route.attributes().get::<f32>("ratio"), Some(0.5));
+    assert_eq!(route.attributes().get::<u8>("missing"), None);
+    assert!(route.attributes().contains("zone") && !route.attributes().contains("missing"));
+}
+
+#[test]
+fn max_body_size_as_usize_is_accepted() {
+    let mut builder = RoutingServiceBuilder::default();
+    builder.register_controller::<ControllerA>("home", vec![ActionRoute::new("index", vec!["get"], "").with_attribute("max_body_size", 1024usize)]);
+    let _ = builder.build();
+}
+
+#[test]
+#[should_panic(expected = "Attribute `max_body_size` of")]
+fn max_body_size_that_is_not_a_usize_panics_at_startup() {
+    let mut builder = RoutingServiceBuilder::default();
+    // 1024 is an i32 here: it would be ignored when a request comes in, so it is refused when the route is registered
+    builder.register_controller::<ControllerA>("home", vec![ActionRoute::new("index", vec!["get"], "").with_attribute("max_body_size", 1024)]);
+}

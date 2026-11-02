@@ -1,7 +1,4 @@
-use crate::services::routing::{
-    RoutingResult,
-    routing_result::{ResolvedRoute, RoutingInfo},
-};
+use crate::services::routing::{Route, RoutingResult, routing_result::ResolvedRoute};
 use asp_dot_rust_macros::DependencyInjectableService;
 use matchit::Router;
 use std::{
@@ -14,7 +11,7 @@ use std::{
 pub struct RoutingService {
     /// key: "route", value: HashMap<http_method, resolved controller action info>
     #[di(default)]
-    pub(crate) _router: Router<HashMap<http::Method, Arc<RoutingInfo>>>,
+    pub(crate) _router: Router<HashMap<http::Method, Arc<Route>>>,
 }
 
 impl RoutingService {

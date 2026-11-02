@@ -1,10 +1,7 @@
 use crate::{
     controller::{ActionRoute, Routing},
     dependency_injection::DependencyInjectableController,
-    services::routing::{
-        ControllerCollect, RoutingService,
-        routing_result::{ControllerInvoke, RoutingInfo},
-    },
+    services::routing::{ControllerInvoke, MAX_BODY_SIZE_ATTRIBUTE, Route, RouteAttribute, RouteAttributeMap, RoutingService},
 };
 use asp_dot_rust_macros::DependencyInjectableService;
 use std::{
@@ -19,35 +16,30 @@ use std::{
 pub struct RoutingServiceBuilder {
     /// key: "route", value: HashMap<http_method, resolved controller action info>
     #[di(default)]
-    _router: HashMap<String, HashMap<http::Method, Arc<RoutingInfo>>>,
+    _router: HashMap<String, HashMap<http::Method, Arc<Route>>>,
     #[di(default)]
     _registered_controllers: HashSet<TypeId>,
 }
 
 impl RoutingServiceBuilder {
-    pub fn register_controller<T>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>) -> ControllerCollect
+    pub fn register_controller<T>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>)
     where
         T: DependencyInjectableController + Routing + Send + 'static,
     {
-        let controller_invoker: Arc<ControllerInvoke> = Arc::new(|http_context: &mut crate::http_context::HttpContext, action_name: &'static str| {
+        let controller_invoker: ControllerInvoke = |http_context: &mut crate::http_context::HttpContext, action_name: &'static str| {
             Box::pin(async move {
                 let is_valid = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
                 let mut controller = T::inject(http_context, is_valid.clone());
                 controller.routing(action_name).await;
                 is_valid.store(false, std::sync::atomic::Ordering::Release);
             })
-        });
+        };
         if !self._registered_controllers.insert(TypeId::of::<T>()) {
             panic!("Registered Controller {} twice", std::any::type_name::<T>());
         }
         for action in action_routes {
             let route = Self::join_route(root_route, action.route);
-            self.add_controller_route::<T>(route, action.method, action.action_name, controller_invoker.clone());
-        }
-        ControllerCollect {
-            type_id: TypeId::of::<T>(),
-            type_name: std::any::type_name::<T>(),
-            controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
+            self.add_controller_route::<T>(route, action.method, action.action_name, action.route_attribute_map, controller_invoker.clone());
         }
     }
 
@@ -70,14 +62,19 @@ impl RoutingServiceBuilder {
         format!("/{root}/{action}")
     }
 
-    pub fn add_controller_route<T>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str, invoker: Arc<ControllerInvoke>)
+    pub fn add_controller_route<T>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str, route_attr_map: RouteAttributeMap, invoker: ControllerInvoke)
     where
         T: DependencyInjectableController + Routing + Send + 'static,
     {
-        let route_info = Arc::new(RoutingInfo {
+        // a limit that is not a usize would be ignored when a request comes in, refuse it at startup
+        if route_attr_map.get(MAX_BODY_SIZE_ATTRIBUTE).is_some_and(|value| !value.is::<usize>()) {
+            panic!("Attribute `{}` of {}::{} must be a usize (the limit in bytes)", MAX_BODY_SIZE_ATTRIBUTE, std::any::type_name::<T>(), action_name);
+        }
+        let route_info = Arc::new(Route {
             controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
             controller_type_name: std::any::type_name::<T>(),
             action_name,
+            route_attr: RouteAttribute::new(route_attr_map),
             invoke_async: invoker,
         });
 
@@ -87,7 +84,10 @@ impl RoutingServiceBuilder {
                     // Route already exists, update it
                     let http_method = http::Method::from_str(&method.to_uppercase()).unwrap();
                     if let Some(old) = exist_route.insert(http_method, route_info.clone()) {
-                        panic!("Doublicate route {}, method {} at {}::{}", route, method, old.controller_type_name, old.action_name)
+                        panic!(
+                            "Doublicate route \"{}\", method {} at \"{}::{}\" and \"{}::{}\"",
+                            route, method, old.controller_type_name, old.action_name, route_info.controller_type_name, route_info.action_name
+                        )
                     }
                 }
             }

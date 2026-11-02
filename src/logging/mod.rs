@@ -6,12 +6,13 @@ pub use log_level::LogLevel;
 pub use logger::Logger;
 pub use loginfo::{LogCommand, LogInfo};
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 
 type LogSender = broadcast::Sender<LogCommand>;
 pub type LogReceiver = broadcast::Receiver<LogCommand>;
+static LOG_CHANNEL_CAPACITY: AtomicU64 = AtomicU64::new(4096); // default capacity of log channel, can be changed with LOGGER::set_logger_capacity()
 
 static LOG_SENDER: OnceLock<LogSender> = OnceLock::new();
 static LOG_RUNNING: AtomicBool = AtomicBool::new(true);
@@ -95,7 +96,7 @@ impl LOGGER {
     fn get_sender() -> &'static LogSender {
         LOG_SENDER.get_or_init(|| {
             // Fallback if not initialized (shouldn't happen in normal usage)
-            let (tx, rx) = broadcast::channel::<LogCommand>(1_000_000);
+            let (tx, rx) = broadcast::channel::<LogCommand>(LOG_CHANNEL_CAPACITY.load(Ordering::Relaxed) as usize);
             Self::start_default_logger(Some(rx));
             tx
         })
@@ -116,6 +117,20 @@ impl LOGGER {
         Self::use_default_logger(false);
     }
 
+    /// set the capacity of the log channel, you must call this at top of main() before any logging occurs
+    /// ```no_run
+    /// use asp_dot_rust::logging::LOGGER;
+    /// use asp_dot_rust::Application;
+    /// #[tokio::main]
+    /// async fn main() {
+    ///   LOGGER::set_logger_capacity(4096);
+    ///   Application::new("").build().run().await;
+    /// }
+    /// ```
+    pub fn set_logger_capacity(capacity: u64) {
+        LOG_CHANNEL_CAPACITY.store(capacity, Ordering::Release);
+    }
+
     fn use_default_logger(true_or_false: bool) {
         if true_or_false {
             DEFAULT_LOG_ENABLE.store(true, Ordering::Release);
@@ -129,57 +144,64 @@ impl LOGGER {
         if !DEFAULT_LOG_ENABLE.load(Ordering::Relaxed) || DEFAULT_LOG_RUNNING.swap(true, Ordering::SeqCst) {
             return; // Already initialized
         }
-        let mut rx;
-        if let Some(_rx) = _rx {
-            rx = _rx;
-        } else {
-            rx = Self::spawn_log_receiver();
-        }
-        // Spawn background logging task
-        tokio::spawn(async move {
-            let mut logger = Logger::new();
-            loop {
-                let received = rx.recv().await;
-                if DEFAULT_LOG_ENABLE.load(Ordering::Relaxed) {
-                    match received {
-                        Ok(command) => match command {
-                            LogCommand::Log(log_info) => {
-                                logger.write_log(&log_info).await;
-                            }
-                            LogCommand::SetLogFormat(format) => {
-                                logger.set_log_format(format);
-                            }
-                            LogCommand::SetTimeFormat(format) => {
-                                logger.set_date_time_format(format);
-                            }
-                            LogCommand::SetLogLevel(level) => {
-                                logger.set_level(level);
-                            }
-                            LogCommand::SetEnable(_) => {
-                                // Do nothing, handled by outer loop
-                            }
-                            LogCommand::SetDefaultLogger(enable) => {
-                                DEFAULT_LOG_ENABLE.store(enable, Ordering::Release);
-                            }
-                            LogCommand::SetUseColorOutput(enable) => {
-                                logger.set_use_color_output(enable);
-                            }
-                        },
-                        Err(RecvError::Lagged(missed)) => {
-                            let log = LogInfo {
-                                timestamp: chrono::Utc::now(),
-                                level: LogLevel::Error,
-                                message: format!("LOGGER Missed {} log messages due to lag", missed),
-                            };
-                            logger.write_log(&log).await;
-                        }
-                        Err(RecvError::Closed) => {}
-                    }
-                } else {
-                    break;
-                }
+        // Do not create another thread when no tokio runtime is active
+        if let Ok(handler) = tokio::runtime::Handle::try_current() {
+            let mut rx;
+            if let Some(_rx) = _rx {
+                rx = _rx;
+            } else {
+                rx = Self::spawn_log_receiver();
             }
-            DEFAULT_LOG_RUNNING.store(false, Ordering::Release);
-        });
+            // Run it on its own thread with a small current-thread runtime instead of `tokio::spawn`.
+            let log_task = async move {
+                let mut logger = Logger::new();
+                loop {
+                    let received = rx.recv().await;
+                    if DEFAULT_LOG_ENABLE.load(Ordering::Relaxed) {
+                        match received {
+                            Ok(command) => match command {
+                                LogCommand::Log(log_info) => {
+                                    logger.write_log(&log_info).await;
+                                }
+                                LogCommand::SetLogFormat(format) => {
+                                    logger.set_log_format(format);
+                                }
+                                LogCommand::SetTimeFormat(format) => {
+                                    logger.set_date_time_format(format);
+                                }
+                                LogCommand::SetLogLevel(level) => {
+                                    logger.set_level(level);
+                                }
+                                LogCommand::SetEnable(_) => {
+                                    // Do nothing, handled by outer loop
+                                }
+                                LogCommand::SetDefaultLogger(enable) => {
+                                    DEFAULT_LOG_ENABLE.store(enable, Ordering::Release);
+                                }
+                                LogCommand::SetUseColorOutput(enable) => {
+                                    logger.set_use_color_output(enable);
+                                }
+                            },
+                            Err(RecvError::Lagged(missed)) => {
+                                let log = LogInfo {
+                                    timestamp: chrono::Utc::now(),
+                                    level: LogLevel::Error,
+                                    message: format!("LOGGER Missed {} log messages due to lag", missed),
+                                };
+                                logger.write_log(&log).await;
+                            }
+                            Err(RecvError::Closed) => break,
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                DEFAULT_LOG_RUNNING.store(false, Ordering::Release);
+            };
+            handler.spawn(log_task);
+        } else {
+            eprintln!("LOGGER warning: default logger was not started because no tokio runtime is running");
+            return;
+        }
     }
 }

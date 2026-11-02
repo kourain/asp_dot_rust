@@ -1,4 +1,4 @@
-use asp_dot_rust::{configuration::StartupAppConfiguration};
+use asp_dot_rust::{ApplicationBuilder, configuration::StartupAppConfiguration};
 
 fn args(raw: &[&str]) -> StartupAppConfiguration {
     StartupAppConfiguration::default().parse(raw.iter().map(|s| s.to_string()))
@@ -58,4 +58,23 @@ async fn get_parsed_returns_none_for_an_invalid_value() {
 async fn get_parsed_returns_none_for_a_missing_key() {
     let cli = args(&["--http-port", "8080"]);
     assert_eq!(cli.get_parsed::<u16>("https-port"), None);
+}
+
+fn create_args_str(list: &[&str]) -> Vec<String> {
+    list.iter().map(|s| s.to_string()).collect()
+}
+
+#[tokio::test]
+async fn https_port_flag_does_not_panic_and_http_port_still_applies() {
+    let mut builder = ApplicationBuilder::new("Args");
+    builder.with_custom_args(create_args_str(&["--http-port", "18911", "--https-port", "18912"]));
+    assert!(builder.http_port.contains(&18911));
+    assert!(builder.https_port.contains(&18912));
+}
+
+#[tokio::test]
+#[should_panic(expected = "already in use by HTTP")]
+async fn https_port_conflicting_with_http_port_is_still_rejected() {
+    let mut builder = ApplicationBuilder::new("Args");
+    builder.with_custom_args(create_args_str(&["--http-port", "18913", "--https-port", "18913"]));
 }
