@@ -5,6 +5,7 @@ mod utils;
 
 use proc_macro::TokenStream;
 
+use crate::controller::extra_attribute::{define_attr_alias_macros, for_each_attr_alias};
 use crate::dependency_injection::flags::InjectFlags;
 
 /// using the controller_route attribute to define a controller and its routes
@@ -35,8 +36,33 @@ pub fn controller_route(args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn route(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::routing::http_action(item, "")
+    controller::http_action(item, "")
 }
+
+/// sets attributes of a route as `key = value` pairs. The value is any expression of a type that is `Send + Sync + 'static`
+/// (a number, a bool, a `&'static str`), it is stored as that type and has to be read back as exactly that type: `5` is an `i32`, `5u8` a `u8`. <br>
+/// On an action it sets them for all the routes of the action. On the controller impl, below `#[controller_route]`,
+/// it sets them for all the routes of the controller, an attribute with the same key on an action overrides it.
+///
+/// ```no_run
+/// #[controller_route("files")]
+/// #[attr(rate_limit = 100, zone = "files")]
+/// impl FilesController {
+///     #[get("/list")]
+///     pub async fn list(&self) -> impl ActionResult { "list" }
+///
+///     #[post("/upload")]
+///     #[attr(rate_limit = 5u8, audit = true)]
+///     pub async fn upload(&self) -> impl ActionResult { "upload" }
+/// }
+/// ```
+/// Read them with `http_context.request.route_attribute::<u8>("rate_limit")`.
+#[proc_macro_attribute]
+pub fn attr(_args: TokenStream, item: TokenStream) -> TokenStream {
+    controller::attribute::attr(&_args, item, "attr")
+}
+
+for_each_attr_alias!(define_attr_alias_macros);
 
 /// registers a function as a GET route handler <br>
 /// Example usage:
@@ -46,7 +72,7 @@ pub fn route(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn get(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::routing::http_action(item, "GET")
+    controller::http_action(item, "GET")
 }
 
 /// registers a function as a POST route handler <br>
@@ -57,7 +83,7 @@ pub fn get(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn post(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::routing::http_action(item, "POST")
+    controller::http_action(item, "POST")
 }
 
 /// registers a function as a PUT route handler <br>
@@ -68,7 +94,7 @@ pub fn post(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn put(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::routing::http_action(item, "PUT")
+    controller::http_action(item, "PUT")
 }
 
 /// registers a function as a DELETE route handler <br>
@@ -79,7 +105,7 @@ pub fn put(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::routing::http_action(item, "DELETE")
+    controller::http_action(item, "DELETE")
 }
 
 /// registers a function as a PATCH route handler <br>
@@ -90,7 +116,7 @@ pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn patch(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::routing::http_action(item, "PATCH")
+    controller::http_action(item, "PATCH")
 }
 
 /// registers a function as an OPTIONS route handler <br>
@@ -101,7 +127,7 @@ pub fn patch(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn options(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::routing::http_action(item, "OPTIONS")
+    controller::http_action(item, "OPTIONS")
 }
 
 /// registers a function as a HEAD route handler <br>
@@ -112,7 +138,7 @@ pub fn options(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::routing::http_action(item, "HEAD")
+    controller::http_action(item, "HEAD")
 }
 
 /// inject service and config <br>

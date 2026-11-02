@@ -3,14 +3,12 @@ use quote::quote;
 use syn::spanned::Spanned;
 use syn::{Attribute, Expr, ExprLit, ImplItem, ItemImpl, Lit, LitStr, Token, parse_macro_input, punctuated::Punctuated};
 
+use crate::controller::attribute::{is_attr_attr, merged_attribute_calls, parse_attr_entries};
 use crate::utils::compiler_error::create_compiler_error;
 use crate::utils::find_crate::asp_dot_rust_crate_path;
 
 const HTTP_METHOD: [&str; 7] = ["get", "post", "put", "delete", "patch", "options", "head"];
 
-pub(crate) fn http_action(item: TokenStream, _method: &str) -> TokenStream {
-    item
-}
 
 fn is_route_attr(attr: &Attribute) -> bool {
     attr.path().is_ident("get")
@@ -50,14 +48,14 @@ fn list_lit_str_from_expr(expr: &Expr) -> Option<Vec<LitStr>> {
     }
 }
 
-fn push_route_registration(registrations: &mut Vec<proc_macro2::TokenStream>, method_name_lit: &LitStr, http_method: Vec<LitStr>, path_lit: &LitStr) {
+fn push_route_registration(registrations: &mut Vec<proc_macro2::TokenStream>, method_name_lit: &LitStr, http_method: Vec<LitStr>, path_lit: &LitStr, attributes: &[proc_macro2::TokenStream]) {
     let main_crate_path = asp_dot_rust_crate_path();
     registrations.push(quote! {
         #main_crate_path::controller::ActionRoute::new(
             #method_name_lit,
             vec![#(#http_method),*],
             #path_lit,
-        )
+        ) #(#attributes)*
     });
 }
 
@@ -96,6 +94,11 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
     let self_ty = input_impl.self_ty.as_ref();
     let controller_bootstrap_name = syn::Ident::new(&format!("__asp_register_{}", quote! {#self_ty}), input_impl.span());
     let controller_bootstrap_fn_name = syn::Ident::new(&format!("__asp_register_{}_routes", quote! {#self_ty}), input_impl.span());
+    let impl_has_attr = input_impl.attrs.iter().any(is_attr_attr);
+    let impl_entries = match parse_attr_entries(&input_impl.attrs, "the controller impl") {
+        Ok(entries) => entries,
+        Err(error) => return error,
+    };
     let mut action_route_registrations = Vec::new();
     let mut match_routes = Vec::new();
     for impl_item in &input_impl.items {
@@ -104,12 +107,19 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
         };
 
         let method_name = &impl_method.sig.ident;
+        let method_name_lit = LitStr::new(&method_name.to_string(), method_name.span());
         let is_async = impl_method.sig.asyncness.is_some();
+
+        let method_entries = match parse_attr_entries(&impl_method.attrs, &format!("`{}`", method_name)) {
+            Ok(entries) => entries,
+            Err(error) => return error,
+        };
+        let attribute_calls = merged_attribute_calls(&impl_entries, &method_entries);
+        let mut is_route = false;
 
         for attr in impl_method.attrs.iter().filter(|attr| is_route_attr(attr)) {
             let route_ident = attr.path().segments.last().unwrap().ident.to_string();
-
-            let method_name_lit = LitStr::new(&method_name.to_string(), method_name.span());
+            is_route = true;
             if route_ident == "route" {
                 let values;
                 if let Ok(val) = attr.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated) {
@@ -153,8 +163,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                     return create_compiler_error(attr, format!("Route path in #[route] must be a string literal on `{}`", method_name));
                 }
 
-                push_route_registration(&mut action_route_registrations, &method_name_lit, method_lit, &path_lit);
-                push_match_route(&mut match_routes, &method_name_lit, method_name, is_async);
+                push_route_registration(&mut action_route_registrations, &method_name_lit, method_lit, &path_lit, &attribute_calls);
             } else {
                 let path_lit: LitStr;
                 if let Ok(val) = attr.parse_args() {
@@ -164,13 +173,25 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                 }
                 let http_method_string = route_ident.to_uppercase();
                 let http_method = LitStr::new(&http_method_string, attr.span());
-                push_route_registration(&mut action_route_registrations, &method_name_lit, vec![http_method], &path_lit);
-                push_match_route(&mut match_routes, &method_name_lit, method_name, is_async);
+                push_route_registration(&mut action_route_registrations, &method_name_lit, vec![http_method], &path_lit, &attribute_calls);
             };
+        }
+        if is_route {
+            if &method_name.to_string() == "new" {
+                return create_compiler_error(method_name, "fn `new` is DependencyInjectFn, cann't use as a route");
+            }
+            push_match_route(&mut match_routes, &method_name_lit, method_name, is_async);
         }
     }
 
-    let input_impl_tokens = proc_macro2::TokenStream::from(original_input);
+    // the #[attr] of the impl are consumed here, left in the output they would expand on the impl and fail
+    let input_impl_tokens = if impl_has_attr {
+        let mut cleaned_impl = input_impl.clone();
+        cleaned_impl.attrs.retain(|attr| !is_attr_attr(attr));
+        quote! { #cleaned_impl }
+    } else {
+        proc_macro2::TokenStream::from(original_input)
+    };
 
     let expanded = quote! {
         use #main_crate_path::http_context::HttpHeader;
