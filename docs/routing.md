@@ -134,6 +134,7 @@ impl FilesController {
 - `#[attr]` on the impl has to be below `#[controller_route]`; above it, it is a compile error.
 - Read them in an action or a middleware: `request.route_attribute::<u8>("rate_limit")`, `request.route_attributes()` (`None` when the request resolved to no route) or `route.attributes()` on a resolved `Route`.
 - `get::<T>` returns `None` when the key is missing or the value was stored as another type: a number is never converted (`5` is not found as a `u8`).
+- `#[max_body_size(..)]` is a built-in attribute macro: `#[name(value)]` is `#[attr(name = value)]` with the value typed as the macro declares, and it needs no import of `attr`. They are all declared in `attr_aliases!` in `asp_dot_rust_macros/src/lib.rs`, a new one is one more entry there (`name: type`, with its doc comment) and, if you want it in `asp_dot_rust::controller`, a line in the `pub use` of `src/controller/mod.rs`.
 - The key `max_body_size` is the request body limit of the route, see below.
 
 ## Request body limit per route
@@ -154,7 +155,7 @@ impl FilesController {
 }
 ```
 
-- The size is a `usize` whichever form you use (`5` is read as a `usize` here), a negative value or another type is a compile error. An `ActionRoute` built by hand with `with_attribute("max_body_size", ..)` of another type makes the application panic at startup.
+- `#[max_body_size(5)]` reads `5` as a `usize`, a negative value or another type is a compile error. The long form `#[attr(max_body_size = ..)]` keeps the type you write (`5` is an `i32`), so write `5usize`: any other type makes the application panic at startup (so does an `ActionRoute` built by hand with `with_attribute("max_body_size", ..)` of another type).
 - The limit is chosen when the request is created. `http_context.request.max_body_size` tells the one in use.
 - A declared `Content-Length` over the limit is refused with 413, the body is not read.
 - `http_context.request.body` is a `Limited<Incoming>`: reading more than the limit (chunked body, or no declared length) fails with `http_body_util::LengthLimitError`. The action decides what to answer.

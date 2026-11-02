@@ -61,19 +61,18 @@ pub fn attr(_args: TokenStream, item: TokenStream) -> TokenStream {
     controller::attribute::attr(item, "attr")
 }
 
-/// sets the maximum size of the request body of a route, in bytes: it is the attribute `#[attr(max_body_size = <bytes>)]`.
-/// A route without it uses `max_request_body_size` of `HyperConfig`. <br>
-/// Like `#[attr]`, on an action it applies to all its routes, and on the controller impl (below `#[controller_route]`) it is the default
-/// of all the routes of the controller, an action can override it. The size is a `usize` (a negative value or another type is a compile error).
-/// Example usage:
-///
-/// ```no_run
-/// #[post("/upload")]
-/// #[max_body_size(10 * 1024 * 1024)]
-/// ```
-#[proc_macro_attribute]
-pub fn max_body_size(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::attribute::attr(item, "max_body_size")
+crate::attr_aliases! {
+    /// sets the maximum size of the request body of a route, in bytes: it is the attribute `#[attr(max_body_size = <bytes>)]`.
+    /// A route without it uses `max_request_body_size` of `HyperConfig`. <br>
+    /// Like `#[attr]`, on an action it applies to all its routes, and on the controller impl (below `#[controller_route]`) it is the default
+    /// of all the routes of the controller, an action can override it. The size is a `usize` (a negative value or another type is a compile error).
+    /// Example usage:
+    ///
+    /// ```no_run
+    /// #[post("/upload")]
+    /// #[max_body_size(10 * 1024 * 1024)]
+    /// ```
+    max_body_size: usize,
 }
 
 /// registers a function as a GET route handler <br>

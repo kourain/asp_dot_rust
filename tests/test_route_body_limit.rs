@@ -6,7 +6,7 @@ use std::time::Duration;
 use asp_dot_rust::{
     ApplicationBuilder, api_controller,
     configuration::HyperConfig,
-    controller::{ActionResult, max_body_size, post, route},
+    controller::{ActionResult, attr, max_body_size, post, route},
     http_context::HttpContextRef,
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -111,9 +111,9 @@ mod controller_level {
             "override"
         }
 
-        // the long form of #[max_body_size(7)], an unsuffixed number is a usize here too
+        // the long form of #[max_body_size(7)], the value has to be a usize here: `7` alone would be an i32, an unsuffixed number is a usize here too
         #[post("/by_attr")]
-        #[attr(max_body_size = 7)]
+        #[attr(max_body_size = 7usize)]
         pub async fn by_attr(&self) -> impl ActionResult {
             "by_attr"
         }
