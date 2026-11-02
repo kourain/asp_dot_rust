@@ -1,6 +1,6 @@
 [package]
 name = "asp_dot_rust"
-version = "0.2.8"
+version = "0.2.9"
 edition = "2024"
 authors = ["kourain <maiquyen16503@gmail.com>"]
 license = "MIT"
@@ -15,7 +15,7 @@ chrono = "0.4.45"
 
 [dependencies]
 arc-swap = "1.9.3"
-async-compression = { version = "0.4.50", features = [
+async-compression = { version = "0.4.52", features = [
     "tokio",
     "gzip",
     "zlib",
@@ -55,4 +55,4 @@ uuid = { version = "1.29.0", features = ["v7"] }
 ulid = "3.0.0"
 urlencoding = "2.1.3"
 
-asp_dot_rust_macros = { version = "0.2.6", path = "asp_dot_rust_macros" }
+asp_dot_rust_macros = { version = "0.2.7", path = "asp_dot_rust_macros" }
