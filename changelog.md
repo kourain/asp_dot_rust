@@ -5,11 +5,13 @@
 - Fixed: with several ports only the first one was served (ip and port were zipped), now every ip is served on every port.
 - Fixed: `with_any_ip` failed on a host without IPv6 or when `[::]` already covers IPv4; `0.0.0.0` is bound first and `[::]` is skipped with a warning if it can not be bound.
 - `max_request_headers_size` (431) and `max_request_body_size` (413, by the declared `Content-Length`) are now applied.
-- `#[max_body_size(bytes)]` sets the request body limit of a route, routes without it use `max_request_body_size`. `HttpRequest::body` is now `Limited<Incoming>` and `HttpRequest::max_body_size` tells the limit in use. See `docs/routing.md`.
+- `#[max_body_size(bytes)]` sets the request body limit of a route (it is the route attribute `max_body_size`, so it can also be set on the controller impl as a default), routes without it use `max_request_body_size`. `HttpRequest::body` is now `Limited<Incoming>` and `HttpRequest::max_body_size` tells the limit in use. See `docs/routing.md`.
+- `#[attr(key = value, ...)]` sets attributes of a route, on the controller impl as defaults for its routes or on an action to override a key. A value is stored as its own type and read back as exactly that type (`5` is an `i32`, `5u8` a `u8`) with `HttpRequest::route_attribute::<T>(key)`, `HttpRequest::route_attributes()` or `Route::attributes()`. See `docs/routing.md`.
 
 ### Breaking changes 0.2.9
 
-- `HttpRequest::body` is `Limited<Incoming>` (was `Incoming`) and `HttpRequest::from_http`, `ActionRoute`, `Route` and `add_controller_route` take or have the body limit of the route.
+- `HttpRequest::body` is `Limited<Incoming>` (was `Incoming`) and `HttpRequest::from_http` takes the body limit of the request.
+- `RouteAttribute::get` takes a `&str` key (was `&'static str`).
 
 ## 0.2.8
 

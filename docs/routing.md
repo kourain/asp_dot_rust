@@ -111,16 +111,50 @@ the same "what methods exist at this path" question independently of a
 specific request's method; it's used by the CORS middleware to compute
 `Access-Control-Allow-Methods`.
 
-## Request body limit per route
+## Route attributes
 
-`max_request_body_size` of `HyperConfig` is the default limit. Set `#[max_body_size(bytes)]` on an action to give its route its own limit (any `usize` expression, also above the default). It applies to every method of the route.
+`#[attr(key = value, ...)]` attaches `key = value` pairs to a route. The value is any expression of a type that is `Send + Sync + 'static` (a number, a bool, a `&'static str`). It is stored as its own type and read back as exactly that type: `5` is an `i32`, `5u8` a `u8`, `0.5` an `f64`, `0.5f32` an `f32`.
 
 ```rust
-#[post("/upload")]
-#[max_body_size(10 * 1024 * 1024)]
-pub async fn upload(&mut self) -> impl ActionResult { /* ... */ }
+#[controller_route("files")]
+#[attr(rate_limit = 100, zone = "files")] // below #[controller_route]: the default of every route of the controller
+#[controller_inject]
+impl FilesController {
+    #[get("/list")]               // rate_limit = 100 (i32), zone = "files"
+    pub async fn list(&self) -> impl ActionResult { "list" }
+
+    #[post("/upload")]
+    #[attr(rate_limit = 5u8, audit = true)]   // rate_limit replaced (now a u8), audit added, zone kept
+    pub async fn upload(&self) -> impl ActionResult { "upload" }
+}
 ```
 
+- Several `#[attr]` can be put on an impl or an action. A key can be set once on each of them, a second time is a compile error.
+- An attribute on an action replaces the attribute with the same key of the impl, the value can be of another type. It applies to every route of the action.
+- `#[attr]` on the impl has to be below `#[controller_route]`; above it, it is a compile error.
+- Read them in an action or a middleware: `request.route_attribute::<u8>("rate_limit")`, `request.route_attributes()` (`None` when the request resolved to no route) or `route.attributes()` on a resolved `Route`.
+- `get::<T>` returns `None` when the key is missing or the value was stored as another type: a number is never converted (`5` is not found as a `u8`).
+- The key `max_body_size` is the request body limit of the route, see below.
+
+## Request body limit per route
+
+`max_request_body_size` of `HyperConfig` is the default limit. `#[max_body_size(bytes)]` gives a route its own limit, it is the same as `#[attr(max_body_size = bytes)]`, so it follows the rules of route attributes: on an action it applies to all its routes, below `#[controller_route]` it is the default of all the routes of the controller and an action can override it.
+
+```rust
+#[controller_route("files")]
+#[max_body_size(1024 * 1024)]                     // default of the controller
+#[controller_inject]
+impl FilesController {
+    #[post("/note")]
+    pub async fn note(&mut self) -> impl ActionResult { /* ... */ }      // 1 MiB
+
+    #[post("/upload")]
+    #[max_body_size(10 * 1024 * 1024)]            // this action: 10 MiB
+    pub async fn upload(&mut self) -> impl ActionResult { /* ... */ }
+}
+```
+
+- The size is a `usize` whichever form you use (`5` is read as a `usize` here), a negative value or another type is a compile error. An `ActionRoute` built by hand with `with_attribute("max_body_size", ..)` of another type makes the application panic at startup.
 - The limit is chosen when the request is created. `http_context.request.max_body_size` tells the one in use.
 - A declared `Content-Length` over the limit is refused with 413, the body is not read.
 - `http_context.request.body` is a `Limited<Incoming>`: reading more than the limit (chunked body, or no declared length) fails with `http_body_util::LengthLimitError`. The action decides what to answer.

@@ -42,6 +42,19 @@ impl HttpRequest {
             routing_info,
         }
     }
+    /// The attributes of the route this request resolved to, `None` when it resolved to no route (not found, method not allowed).
+    pub fn route_attributes(&self) -> Option<&crate::services::routing::RouteAttribute> {
+        match &self.routing_info.router_info {
+            crate::services::routing::RoutingResult::Found(route) => Some(&route.route_attr),
+            _ => None,
+        }
+    }
+
+    /// The value of the route attribute `key` when it was stored as exactly the type `T`, see `RouteAttribute::get`.
+    pub fn route_attribute<T: Send + Sync + Clone + 'static>(&self, key: &str) -> Option<T> {
+        self.route_attributes().and_then(|attributes| attributes.get(key))
+    }
+
     pub fn path(&self) -> &str {
         self.uri.path()
     }

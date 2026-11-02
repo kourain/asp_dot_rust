@@ -3,7 +3,7 @@ use crate::{
     configuration::HyperConfig,
     http_context::{HttpContext, http_request::HttpRequest, http_response::HttpResponse},
     logging::LOGGER,
-    services::routing::{ResolvedRoute, RoutingResult, RoutingService},
+    services::routing::{MAX_BODY_SIZE_ATTRIBUTE, ResolvedRoute, RoutingResult, RoutingService},
 };
 use futures::{FutureExt, future::Either};
 use hyper::service::service_fn;
@@ -23,7 +23,7 @@ fn headers_size(headers: &http::HeaderMap) -> usize {
 /// The body limit of the request: the limit of the route it resolves to, or `max_request_body_size` when the route has none.
 fn max_body_size_of(route: &ResolvedRoute, limits: &HyperConfig) -> usize {
     match &route.router_info {
-        RoutingResult::Found(info) => info.route_attr.get::<usize>("max_request_body_size").unwrap_or(limits.max_request_body_size),
+        RoutingResult::Found(info) => info.route_attr.get::<usize>(MAX_BODY_SIZE_ATTRIBUTE).unwrap_or(limits.max_request_body_size),
         _ => limits.max_request_body_size,
     }
 }

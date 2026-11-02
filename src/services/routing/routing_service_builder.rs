@@ -1,7 +1,7 @@
 use crate::{
     controller::{ActionRoute, Routing},
     dependency_injection::DependencyInjectableController,
-    services::routing::{ControllerInvoke, Route, RouteAttribute, RouteAttributeMap, RoutingService},
+    services::routing::{ControllerInvoke, MAX_BODY_SIZE_ATTRIBUTE, Route, RouteAttribute, RouteAttributeMap, RoutingService},
 };
 use asp_dot_rust_macros::DependencyInjectableService;
 use std::{
@@ -66,6 +66,10 @@ impl RoutingServiceBuilder {
     where
         T: DependencyInjectableController + Routing + Send + 'static,
     {
+        // a limit that is not a usize would be ignored when a request comes in, refuse it at startup
+        if route_attr_map.get(MAX_BODY_SIZE_ATTRIBUTE).is_some_and(|value| !value.is::<usize>()) {
+            panic!("Attribute `{}` of {}::{} must be a usize (the limit in bytes)", MAX_BODY_SIZE_ATTRIBUTE, std::any::type_name::<T>(), action_name);
+        }
         let route_info = Arc::new(Route {
             controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
             controller_type_name: std::any::type_name::<T>(),

@@ -27,4 +27,11 @@ impl ActionRoute {
             route_attribute_map: HashMap::default(),
         }
     }
+
+    /// Sets an attribute of this route, an attribute with the same key is replaced.
+    /// The value is stored as its own type, `RouteAttribute::get::<T>` reads it back with exactly that type.
+    pub fn with_attribute<V: std::any::Any + Send + Sync + 'static>(mut self, key: &'static str, value: V) -> Self {
+        self.route_attribute_map.insert(key, Box::new(value));
+        self
+    }
 }

@@ -40,11 +40,13 @@ impl LimitController {
     }
 
     #[post("/small")]
+    #[max_body_size(10)]
     pub async fn small(&self) -> impl ActionResult {
         "small"
     }
 
     // the limit may be any expression of usize, and be above the default limit
+    #[max_body_size(10 * 100)]
     #[post("/big")]
     pub async fn big(&self) -> impl ActionResult {
         "big"
@@ -81,6 +83,46 @@ impl LimitController {
     #[post("/value_default")]
     pub async fn value_default(&self) -> impl ActionResult {
         self.http_context.request.path()
+    }
+}
+
+/// The limit set on the controller impl is the default of its routes, an action overrides it.
+mod controller_level {
+    use super::*;
+
+    api_controller!(pub LevelController {});
+
+    #[controller_route("level")]
+    #[max_body_size(20)]
+    #[controller_inject]
+    impl LevelController {
+        fn new(http_context: HttpContextRef) -> Self {
+            Self { http_context }
+        }
+
+        #[post("/inherit")]
+        pub async fn inherit(&self) -> impl ActionResult {
+            "inherit"
+        }
+
+        #[post("/override")]
+        #[max_body_size(5)]
+        pub async fn override_limit(&self) -> impl ActionResult {
+            "override"
+        }
+
+        // the long form of #[max_body_size(7)], an unsuffixed number is a usize here too
+        #[post("/by_attr")]
+        #[attr(max_body_size = 7)]
+        pub async fn by_attr(&self) -> impl ActionResult {
+            "by_attr"
+        }
+
+        // the limit is a route attribute like any other
+        #[post("/as_attribute")]
+        pub async fn as_attribute(&self) -> impl ActionResult {
+            format!("{:?}", self.http_context.request.route_attribute::<usize>("max_body_size"))
+        }
     }
 }
 
@@ -176,4 +218,26 @@ async fn chunked_body_is_cut_at_the_limit_of_the_route() {
     // the same body is under the default limit of a route without its own
     assert_eq!(post_chunked(port, "/read_default", 50).await, (200, "ok".into()));
     assert_eq!(post_chunked(port, "/read_default", DEFAULT_LIMIT + 1).await, (200, "limit".into()));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn limit_of_the_controller_is_the_default_of_its_routes() {
+    let port = start_server().await;
+    assert_eq!(post_sized(port, "/level/inherit", 20).await, (200, "inherit".into()));
+    assert_eq!(post_sized(port, "/level/inherit", 21).await.0, 413);
+    assert_eq!(post_sized(port, "/level/as_attribute", 0).await, (200, "Some(20)".into()));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn limit_of_an_action_overrides_the_one_of_the_controller() {
+    let port = start_server().await;
+    assert_eq!(post_sized(port, "/level/override", 5).await, (200, "override".into()));
+    assert_eq!(post_sized(port, "/level/override", 6).await.0, 413);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn max_body_size_attribute_is_the_same_as_the_short_form() {
+    let port = start_server().await;
+    assert_eq!(post_sized(port, "/level/by_attr", 7).await, (200, "by_attr".into()));
+    assert_eq!(post_sized(port, "/level/by_attr", 8).await.0, 413);
 }
