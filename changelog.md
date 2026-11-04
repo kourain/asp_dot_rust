@@ -2,6 +2,9 @@
 
 ## 0.2.9
 
+- Model binding: action parameters `FromRoute<T>`, `FromQuery<T>`, `FromOptionQuery<T>`, `FromBody<T>`, `FromForm<T>` are resolved by the `#[controller_route]` macro (argument name = key). Route miss/parse → 404; query/body/form miss/parse or Content-Type mismatch → 422. At most one `FromBody` or `FromForm` per action. `String` body is raw UTF-8; other types use serde. See `docs/model_binding.md`.
+- Dependencies: `serde_json` 1.0.154, `quick-xml` 0.42.0 (`serialize`), `serde_urlencoded` 0.7.1.
+
 - Fixed: with several ports only the first one was served (ip and port were zipped), now every ip is served on every port.
 - Fixed: `with_any_ip` failed on a host without IPv6 or when `[::]` already covers IPv4; `0.0.0.0` is bound first and `[::]` is skipped with a warning if it can not be bound.
 - `max_request_headers_size` (431) and `max_request_body_size` (413, by the declared `Content-Length`) are now applied.

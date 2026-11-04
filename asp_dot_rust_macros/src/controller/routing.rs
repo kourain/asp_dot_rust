@@ -3,12 +3,12 @@ use quote::quote;
 use syn::spanned::Spanned;
 use syn::{Attribute, Expr, ExprLit, ImplItem, ItemImpl, Lit, LitStr, Token, parse_macro_input, punctuated::Punctuated};
 
+use crate::controller::action_params::{generate_bind_code, parse_action_params};
 use crate::controller::attribute::{is_attr_attr, merged_attribute_calls, parse_attr_entries};
 use crate::utils::compiler_error::create_compiler_error;
 use crate::utils::find_crate::asp_dot_rust_crate_path;
 
 const HTTP_METHOD: [&str; 7] = ["get", "post", "put", "delete", "patch", "options", "head"];
-
 
 fn is_route_attr(attr: &Attribute) -> bool {
     attr.path().is_ident("get")
@@ -59,16 +59,24 @@ fn push_route_registration(registrations: &mut Vec<proc_macro2::TokenStream>, me
     });
 }
 
-fn push_match_route(routes: &mut Vec<proc_macro2::TokenStream>, method_name_lit: &LitStr, method_name: &syn::Ident, is_async: bool) {
+fn push_match_route(
+    routes: &mut Vec<proc_macro2::TokenStream>,
+    method_name_lit: &LitStr,
+    method_name: &syn::Ident,
+    is_async: bool,
+    bind_lets: proc_macro2::TokenStream,
+    bind_args: &[proc_macro2::TokenStream],
+) {
     let invoke = if is_async {
-        quote! { self.#method_name().await }
+        quote! { self.#method_name(#(#bind_args),*).await }
     } else {
-        quote! { self.#method_name() }
+        quote! { self.#method_name(#(#bind_args),*) }
     };
 
     routes.push(quote! {
         #method_name_lit =>
         {
+            #bind_lets
             let (body, content_type, status_code) = {
                 let action_result = #invoke;
                 let body = action_result.get_body_async().await;
@@ -180,7 +188,12 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
             if &method_name.to_string() == "new" {
                 return create_compiler_error(method_name, "fn `new` is DependencyInjectFn, cann't use as a route");
             }
-            push_match_route(&mut match_routes, &method_name_lit, method_name, is_async);
+            let params = match parse_action_params(&impl_method.sig.inputs, method_name) {
+                Ok(p) => p,
+                Err(e) => return e,
+            };
+            let (bind_lets, bind_args) = generate_bind_code(&params);
+            push_match_route(&mut match_routes, &method_name_lit, method_name, is_async, bind_lets, &bind_args);
         }
     }
 
