@@ -13,7 +13,10 @@ pub mod macros {
     pub use asp_dot_rust_macros::*;
 }
 pub mod prelude {
-    pub use crate::controller::{ActionResult, controller_inject, controller_route, delete, get, head, options, patch, post, put, route};
+    pub use crate::controller::{
+        ActionResult, BindError, FromBody, FromForm, FromOptionQuery, FromQuery, FromRoute,
+        controller_inject, controller_route, delete, get, head, options, patch, post, put, route,
+    };
     pub use crate::dependency_injection::{Cfg, CfgReload, CfgRequire, Serv};
     pub use crate::http_context::{HttpContext, HttpContextRef};
     pub use crate::middleware::Middleware;
