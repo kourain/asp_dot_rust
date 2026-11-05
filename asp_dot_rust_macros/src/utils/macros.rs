@@ -1,10 +1,19 @@
-macro_rules! try_get_or_error {
-    (expr) => {
-        let path_expr;
-        if let Some(val) = route_iter.next() {
-            path_expr = val;
-        } else {
-            return create_compiler_error(attr, "Missing route method or path in #[route]");
+macro_rules! some_or_error {
+    ($option:expr, $target:expr, $message:expr) => {
+        match $option {
+            Some(value) => value,
+            None => return $crate::utils::compiler_error::create_compiler_error($target, $message),
         }
     };
 }
+
+macro_rules! ok_or_error {
+    ($result:expr, $target:expr, $message:expr) => {
+        match $result {
+            Ok(value) => value,
+            Err(_) => return $crate::utils::compiler_error::create_compiler_error($target, $message),
+        }
+    };
+}
+
+pub(crate) use {ok_or_error, some_or_error};

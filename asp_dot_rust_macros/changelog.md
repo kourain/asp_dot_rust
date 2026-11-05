@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.8
+
+- `#[controller_route]` add model binding for action parameters: `FromRoute<T>`, `FromQuery<T>`, `FromOptionQuery<T>`, `FromBody<T>`, and `FromForm<T>`.
+- Refactor route attribute parsing with reusable `some_or_error!` and `ok_or_error!` macros to reduce repeated parsing and error-handling branches.
+
 ## 0.2.7
 
 - Built-in attribute macros such as `#[max_body_size(..)]` are `#[attr(name = value)]` with a typed value; they are declared in one place (`for_each_attr_alias!` in `controller/extra_attribute.rs` of the macros crate) and need no import of `attr`.

@@ -58,4 +58,4 @@ uuid = { version = "1.29.0", features = ["v7"] }
 ulid = "3.0.0"
 urlencoding = "2.1.3"
 
-asp_dot_rust_macros = { version = "0.2.7", path = "asp_dot_rust_macros" }
+asp_dot_rust_macros = { version = "0.2.8", path = "asp_dot_rust_macros" }
