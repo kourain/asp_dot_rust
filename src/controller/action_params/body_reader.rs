@@ -1,26 +1,18 @@
 use crate::http_context::http_request::HttpRequest;
 use crate::http_context::HttpHeader;
-use http_body_util::BodyExt;
 
 use super::error::BindError;
 
-/// Read the entire request body into a byte vector, respecting `max_body_size`.
+/// Read the request body from the current position to the end.
 ///
-/// Uses `BodyExt::frame` on `&mut Limited<Incoming>` so the body is not moved out of the request.
+/// The body is buffered in memory (ASP.NET-style). After a successful read the position is at
+/// the end; call `request.seek_body(0)` to read the same bytes again.
 pub async fn read_body_bytes(request: &mut HttpRequest) -> Result<Vec<u8>, BindError> {
-    let mut out = Vec::new();
-    loop {
-        match request.body.frame().await {
-            Some(Ok(frame)) => {
-                if let Ok(data) = frame.into_data() {
-                    out.extend_from_slice(&data);
-                }
-            }
-            Some(Err(e)) => return Err(BindError::BodyRead(e.to_string())),
-            None => break,
-        }
-    }
-    Ok(out)
+    request
+        .body
+        .read_to_end()
+        .await
+        .map_err(|e| BindError::BodyRead(e.to_string()))
 }
 
 /// Return the media type part of Content-Type (without parameters), lowercased.
