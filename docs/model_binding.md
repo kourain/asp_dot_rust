@@ -75,3 +75,19 @@ impl UsersController {
 ## Errors
 
 `BindError` carries the message written as `text/plain` body. Status codes: route → 404, query/body/form → 422, body read failure → 400.
+
+## Body buffering (multiple reads)
+
+`hyper` delivers the body as a one-shot stream. ASP.Rust can buffer it in memory, like ASP.NET `HttpRequest.EnableBuffering`:
+
+```rust
+self.http_context.request.enable_buffering().await.unwrap();
+// first read (FromBody / read_body_bytes)
+self.http_context.request.seek_body(0).unwrap();
+// second read of the same bytes
+```
+
+- `enable_buffering` loads the stream into memory (no-op if already buffered).
+- `seek_body(0)` resets the read position.
+- `FromBody` / `FromForm` call `read_body_bytes`, which buffers on first use; seek to `0` before binding again if the same request must be parsed twice.
+- `request.body` is `RequestBody` (`Stream` or `Buffered`), not raw `Limited<Incoming>`.

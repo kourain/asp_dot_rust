@@ -51,16 +51,10 @@ impl RequestBody {
     /// Seek the read cursor (only when buffered). `pos` may be `0..=len`.
     pub fn seek(&mut self, pos: usize) -> io::Result<()> {
         match self {
-            Self::Stream(_) => Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "request body is not buffered; call enable_buffering first",
-            )),
+            Self::Stream(_) => Err(io::Error::new(io::ErrorKind::Unsupported, "request body is not buffered; call enable_buffering first")),
             Self::Buffered { data, position } => {
                 if pos > data.len() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "seek position past end of buffered body",
-                    ));
+                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "seek position past end of buffered body"));
                 }
                 *position = pos;
                 Ok(())
@@ -69,15 +63,9 @@ impl RequestBody {
     }
 
     /// Read the next body frame (stream or remaining buffered slice).
-    pub async fn frame(
-        &mut self,
-    ) -> Option<Result<Frame<Bytes>, Box<dyn std::error::Error + Send + Sync>>> {
+    pub async fn frame(&mut self) -> Option<Result<Frame<Bytes>, Box<dyn std::error::Error + Send + Sync>>> {
         match self {
-            Self::Stream(limited) => match limited.frame().await {
-                Some(Ok(frame)) => Some(Ok(frame)),
-                Some(Err(e)) => Some(Err(Box::new(e))),
-                None => None,
-            },
+            Self::Stream(limited) => limited.frame().await,
             Self::Buffered { data, position } => {
                 if *position >= data.len() {
                     return None;
@@ -90,19 +78,11 @@ impl RequestBody {
     }
 
     /// Drain the stream into memory and keep a seekable buffer. No-op if already buffered.
-    pub async fn enable_buffering(
-        &mut self,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn enable_buffering(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if matches!(self, Self::Buffered { .. }) {
             return Ok(());
         }
-        let Self::Stream(limited) = std::mem::replace(
-            self,
-            Self::Buffered {
-                data: Bytes::new(),
-                position: 0,
-            },
-        ) else {
+        let Self::Stream(limited) = std::mem::replace(self, Self::Buffered { data: Bytes::new(), position: 0 }) else {
             return Ok(());
         };
 
@@ -115,14 +95,11 @@ impl RequestBody {
                         out.extend_from_slice(&data);
                     }
                 }
-                Some(Err(e)) => return Err(Box::new(e)),
+                Some(Err(e)) => return Err(e),
                 None => break,
             }
         }
-        *self = Self::Buffered {
-            data: Bytes::from(out),
-            position: 0,
-        };
+        *self = Self::Buffered { data: Bytes::from(out), position: 0 };
         Ok(())
     }
 
