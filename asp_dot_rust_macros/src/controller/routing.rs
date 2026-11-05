@@ -7,6 +7,7 @@ use crate::controller::action_params::{generate_bind_code, parse_action_params};
 use crate::controller::attribute::{is_attr_attr, merged_attribute_calls, parse_attr_entries};
 use crate::utils::compiler_error::create_compiler_error;
 use crate::utils::find_crate::asp_dot_rust_crate_path;
+use crate::utils::macros::{ok_or_error, some_or_error};
 
 const HTTP_METHOD: [&str; 7] = ["get", "post", "put", "delete", "patch", "options", "head"];
 
@@ -129,56 +130,32 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
             let route_ident = attr.path().segments.last().unwrap().ident.to_string();
             is_route = true;
             if route_ident == "route" {
-                let values;
-                if let Ok(val) = attr.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated) {
-                    values = val;
-                } else {
-                    return create_compiler_error(attr, format!("Invalid #[route(...)] on `{}`", method_name));
-                }
+                let values = ok_or_error!(
+                    attr.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated),
+                    attr,
+                    format!("Invalid #[route(...)] on `{}`", method_name)
+                );
 
                 let mut route_iter = values.iter();
-                let method_expr;
-                if let Some(val) = route_iter.next() {
-                    method_expr = val;
-                } else {
-                    return create_compiler_error(attr, "Missing HTTP method or path in #[route]");
-                }
+                let method_expr = some_or_error!(route_iter.next(), attr, "Missing HTTP method or path in #[route]");
+                let path_expr = some_or_error!(route_iter.next(), attr, "Missing route method or path in #[route]");
 
-                let path_expr;
-                if let Some(val) = route_iter.next() {
-                    path_expr = val;
-                } else {
-                    return create_compiler_error(attr, "Missing route method or path in #[route]");
-                }
-
-                let method_lit;
-                if let Some(val) = list_lit_str_from_expr(method_expr) {
-                    method_lit = val;
-                    for method in method_lit.iter() {
-                        let method_str = method.token().to_string();
-                        if is_http_method(method_str.trim_matches('"').to_string()) == false {
-                            return create_compiler_error(attr, format!("Invalid HTTP method `{}` in #[route] on `{}`", method_str, method_name));
-                        }
+                let method_lit = some_or_error!(
+                    list_lit_str_from_expr(method_expr),
+                    attr,
+                    format!("HTTP method in #[route] must be a string literal on `{}`", method_name)
+                );
+                for method in method_lit.iter() {
+                    let method_str = method.token().to_string();
+                    if is_http_method(method_str.trim_matches('"')) == false {
+                        return create_compiler_error(attr, format!("Invalid HTTP method `{}` in #[route] on `{}`", method_str, method_name));
                     }
-                } else {
-                    return create_compiler_error(attr, format!("HTTP method in #[route] must be a string literal on `{}`", method_name));
                 }
 
-                let path_lit;
-                if let Some(val) = lit_str_from_expr(path_expr) {
-                    path_lit = val;
-                } else {
-                    return create_compiler_error(attr, format!("Route path in #[route] must be a string literal on `{}`", method_name));
-                }
-
+                let path_lit = some_or_error!(lit_str_from_expr(path_expr), attr, format!("Route path in #[route] must be a string literal on `{}`", method_name));
                 push_route_registration(&mut action_route_registrations, &method_name_lit, method_lit, &path_lit, &attribute_calls);
             } else {
-                let path_lit: LitStr;
-                if let Ok(val) = attr.parse_args() {
-                    path_lit = val;
-                } else {
-                    return create_compiler_error(attr, format!("Invalid #[{}(...)] on `{}`", route_ident, method_name));
-                }
+                let path_lit: LitStr = ok_or_error!(attr.parse_args(), attr, format!("Invalid #[{}(...)] on `{}`", route_ident, method_name));
                 let http_method_string = route_ident.to_uppercase();
                 let http_method = LitStr::new(&http_method_string, attr.span());
                 push_route_registration(&mut action_route_registrations, &method_name_lit, vec![http_method], &path_lit, &attribute_calls);
