@@ -5,27 +5,23 @@ use crate::{
 };
 use rustls::ServerConfig;
 use std::{collections::HashSet, net::IpAddr, sync::Arc};
-use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
 pub(crate) async fn hyper_server_tls(ips: &HashSet<IpAddr>, https_ports: HashSet<u16>, app_service_provider: Arc<ServiceProviderScope>, middleware_pipeline: MiddlewareNext, tls_config: Arc<ServerConfig>) -> std::io::Result<()> {
     let acceptor = TlsAcceptor::from(tls_config);
 
-    // Same Cartesian-product binding strategy as the plain HTTP listener.
-    let bindings: Vec<_> = ips.iter().flat_map(|ip| https_ports.iter().map(move |port| (*ip, *port))).collect();
+    let listeners = super::hyper_server::bind_listeners(ips, https_ports, "HTTPS").await?;
 
     let routing_service = app_service_provider.get_service::<RoutingService>().await;
     let configuration_service = app_service_provider.get_service::<ConfigurationService>().await;
     let hypercfg = configuration_service.get::<crate::configuration::HyperConfig>();
-    futures::future::try_join_all(bindings.into_iter().map(|(ip, port)| {
+    futures::future::try_join_all(listeners.into_iter().map(|listener| {
         let acceptor = acceptor.clone();
         let routing_service = routing_service.clone();
         let hypercfg = hypercfg.clone();
         let app_service_provider = app_service_provider.clone();
         let middleware_pipeline = middleware_pipeline.clone();
         async move {
-            let listener = TcpListener::bind((ip, port)).await?;
-            LOGGER::info(format!("HTTPS server listening on {}:{}", if ip.is_ipv4() { "IPv4" } else { "IPv6" }, port));
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {

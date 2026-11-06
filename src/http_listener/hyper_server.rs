@@ -10,35 +10,38 @@ use std::{
 };
 use tokio::net::TcpListener;
 
-pub(crate) async fn hyper_server(ips: &HashSet<IpAddr>, http_ports: HashSet<u16>, app_service_provider: Arc<ServiceProviderScope>, middleware_pipeline: MiddlewareNext) -> std::io::Result<()> {
-    let listeners = {
-        // Every ip is served on every port. The order is fixed (IPv4 first), so the result never depends on HashSet order.
-        let mut ips: Vec<IpAddr> = ips.iter().copied().collect();
-        ips.sort_by_key(|ip| (ip.is_ipv6(), *ip));
-        let mut ports: Vec<u16> = http_ports.into_iter().collect();
-        ports.sort_unstable();
-        let ipv4_any_is_served = ips.contains(&IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+/// Binds a listener for every (ip, port) combination. Shared by the HTTP and HTTPS servers.
+pub(crate) async fn bind_listeners(ips: &HashSet<IpAddr>, ports: HashSet<u16>, scheme: &str) -> std::io::Result<Vec<TcpListener>> {
+    // Every ip is served on every port. The order is fixed (IPv4 first), so the result never depends on HashSet order.
+    let mut ips: Vec<IpAddr> = ips.iter().copied().collect();
+    ips.sort_by_key(|ip| (ip.is_ipv6(), *ip));
+    let mut ports: Vec<u16> = ports.into_iter().collect();
+    ports.sort_unstable();
+    let ipv4_any_is_served = ips.contains(&IpAddr::V4(Ipv4Addr::UNSPECIFIED));
 
-        // Bind one after another: on a dual-stack host `[::]` also takes the IPv4 port, so `0.0.0.0` has to be bound first
-        let mut listeners = Vec::new();
-        for ip in ips {
-            for port in &ports {
-                let port = *port;
-                match TcpListener::bind((ip, port)).await {
-                    Ok(listener) => {
-                        LOGGER::info(format!("HTTP server listening on {}:{}", if ip.is_ipv4() { "IPv4" } else { "IPv6" }, port));
-                        listeners.push(listener);
-                    }
-                    // `[::]` is optional when `0.0.0.0` is served: the host has no IPv6, or `[::]` is the same socket as `0.0.0.0`
-                    Err(error) if ip == IpAddr::V6(Ipv6Addr::UNSPECIFIED) && ipv4_any_is_served => {
-                        LOGGER::warn(format!("Skip listening on {}:{}: {}", ip, port, error));
-                    }
-                    Err(error) => return Err(error),
+    // Bind one after another: on a dual-stack host `[::]` also takes the IPv4 port, so `0.0.0.0` has to be bound first
+    let mut listeners = Vec::new();
+    for ip in ips {
+        for port in &ports {
+            let port = *port;
+            match TcpListener::bind((ip, port)).await {
+                Ok(listener) => {
+                    LOGGER::info(format!("{} server listening on {}:{}", scheme, if ip.is_ipv4() { "IPv4" } else { "IPv6" }, port));
+                    listeners.push(listener);
                 }
+                // `[::]` is optional when `0.0.0.0` is served: the host has no IPv6, or `[::]` is the same socket as `0.0.0.0`
+                Err(error) if ip == IpAddr::V6(Ipv6Addr::UNSPECIFIED) && ipv4_any_is_served => {
+                    LOGGER::warn(format!("Skip listening on {}:{}: {}", ip, port, error));
+                }
+                Err(error) => return Err(error),
             }
         }
-        listeners
-    };
+    }
+    Ok(listeners)
+}
+
+pub(crate) async fn hyper_server(ips: &HashSet<IpAddr>, http_ports: HashSet<u16>, app_service_provider: Arc<ServiceProviderScope>, middleware_pipeline: MiddlewareNext) -> std::io::Result<()> {
+    let listeners = bind_listeners(ips, http_ports, "HTTP").await?;
 
     let routing_service = app_service_provider.get_service::<RoutingService>().await;
     let hypercfg = {
