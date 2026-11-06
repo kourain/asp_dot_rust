@@ -1,12 +1,14 @@
 use std::{
-    any::{Any, TypeId, type_name},
+    any::{TypeId, type_name},
     collections::HashMap,
-    sync::{Arc, OnceLock},
+    sync::Arc,
 };
+
+use tokio::sync::OnceCell;
 
 use crate::{
     dependency_injection::DependencyInjectableService,
-    services::service_provider::{ServiceInstance, ServiceType},
+    services::service_provider::{ServiceInstance, ServiceInstanceType, ServiceType},
 };
 pub struct ServiceProviderScope {
     _inner_map: HashMap<TypeId, ServiceInstance>,
@@ -22,14 +24,17 @@ impl ServiceProviderScope {
         let type_id = TypeId::of::<T>();
         match self._inner_map.get(&type_id) {
             Some(instance) => match instance.service_type {
-                ServiceType::Singleton | ServiceType::Scope => {
-                    instance
-                        .instance
-                        .get_or_init(|| Arc::new(T::inject(self)))
-                        .clone()
-                        .downcast::<T>()
-                        .expect("Type mismatch when downcasting service")
-                }
+                ServiceType::Singleton | ServiceType::Scope => tokio::task::spawn_blocking(|| async {
+                    instance.instance.get_or_try_init(|| async {
+                        let sv = T::inject(self);
+                        sv.on_service_created().await
+                    });
+                    Arc::new(sv);
+                })
+                .await
+                .clone()
+                .downcast::<T>()
+                .expect("Type mismatch when downcasting service"),
                 ServiceType::Transient => Arc::new(T::inject(self)),
             },
             None => {
@@ -50,7 +55,7 @@ impl ServiceProviderScope {
             let type_name = type_name::<T>();
             panic!("{type_name} already exist in ServiceProviderScope")
         }
-        let instance: Arc<OnceLock<Arc<dyn Any + Send + Sync>>> = Arc::new(OnceLock::new());
+        let instance: Arc<ServiceInstanceType> = Arc::new(OnceCell::new());
         _ = instance.set(service);
         self._inner_map.insert(type_id, ServiceInstance { service_type, instance });
     }
@@ -63,7 +68,7 @@ impl ServiceProviderScope {
             type_id,
             ServiceInstance {
                 service_type: ServiceType::Singleton,
-                instance: Arc::new(OnceLock::new()),
+                instance: Arc::new(OnceCell::new()),
             },
         );
     }
@@ -76,7 +81,7 @@ impl ServiceProviderScope {
             type_id,
             ServiceInstance {
                 service_type: ServiceType::Scope,
-                instance: Arc::new(OnceLock::new()),
+                instance: Arc::new(OnceCell::new()),
             },
         );
     }
@@ -89,7 +94,7 @@ impl ServiceProviderScope {
             type_id,
             ServiceInstance {
                 service_type: ServiceType::Transient,
-                instance: Arc::new(OnceLock::new()),
+                instance: Arc::new(OnceCell::new()),
             },
         );
     }
