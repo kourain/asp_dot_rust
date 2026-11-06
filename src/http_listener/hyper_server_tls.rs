@@ -5,23 +5,20 @@ use crate::{
 };
 use rustls::ServerConfig;
 use std::sync::Arc;
-use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 
 pub(crate) async fn hyper_server_tls(app: &Arc<Application>, tls_config: Arc<ServerConfig>) -> std::io::Result<()> {
     let acceptor = TlsAcceptor::from(tls_config);
 
-    // Same Cartesian-product binding strategy as the plain HTTP listener.
-    let bindings: Vec<_> = app.ip.iter().flat_map(|ip| app.https_port.iter().map(move |port| (*ip, *port))).collect();
+    // Same binding strategy as the plain HTTP listener (every ip on every port, `[::]` is optional)
+    let listeners = crate::http_listener::hyper_server::bind_listeners(app, app.https_port.iter().copied(), "HTTPS").await?;
 
-    futures::future::try_join_all(bindings.into_iter().map(|(ip, port)| {
+    futures::future::try_join_all(listeners.into_iter().map(|listener| {
         let acceptor = acceptor.clone();
         let routing_service = app.service_provider.get_service::<RoutingService>();
         let configuration_service = app.service_provider.get_service::<ConfigurationService>();
         let hypercfg = configuration_service.get::<crate::configuration::HyperConfig>().unwrap_or_default();
         async move {
-            let listener = TcpListener::bind((ip, port)).await?;
-            LOGGER::info(format!("HTTPS server listening on {}:{}", if ip.is_ipv4() { "IPv4" } else { "IPv6" }, port));
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {

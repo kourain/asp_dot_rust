@@ -9,11 +9,12 @@ use std::{
 };
 use tokio::net::TcpListener;
 
-pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> {
+/// Binds a listener for every (ip, port) combination. Shared by the HTTP and HTTPS servers.
+pub(crate) async fn bind_listeners(app: &Application, ports: impl IntoIterator<Item = u16>, scheme: &str) -> std::io::Result<Vec<TcpListener>> {
     // Every ip is served on every port. The order is fixed (IPv4 first), so the result never depends on HashSet order.
     let mut ips: Vec<IpAddr> = app.ip.iter().copied().collect();
     ips.sort_by_key(|ip| (ip.is_ipv6(), *ip));
-    let mut ports: Vec<u16> = app.http_port.iter().copied().collect();
+    let mut ports: Vec<u16> = ports.into_iter().collect();
     ports.sort_unstable();
     let ipv4_any_is_served = app.ip.contains(&IpAddr::V4(Ipv4Addr::UNSPECIFIED));
 
@@ -24,7 +25,7 @@ pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> 
             let port = *port;
             match TcpListener::bind((ip, port)).await {
                 Ok(listener) => {
-                    LOGGER::info(format!("HTTP server listening on {}:{}", if ip.is_ipv4() { "IPv4" } else { "IPv6" }, port));
+                    LOGGER::info(format!("{} server listening on {}:{}", scheme, if ip.is_ipv4() { "IPv4" } else { "IPv6" }, port));
                     listeners.push(listener);
                 }
                 // `[::]` is optional when `0.0.0.0` is served: the host has no IPv6, or `[::]` is the same socket as `0.0.0.0`
@@ -35,6 +36,11 @@ pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> 
             }
         }
     }
+    Ok(listeners)
+}
+
+pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> {
+    let listeners = bind_listeners(app, app.http_port.iter().copied(), "HTTP").await?;
 
     let routing_service = app.service_provider.get_service::<RoutingService>();
     let configuration_service = app.service_provider.get_service::<ConfigurationService>();
