@@ -64,17 +64,18 @@ fn create_args_str(list: &[&str]) -> Vec<String> {
     list.iter().map(|s| s.to_string()).collect()
 }
 
+/// `--https-port` without `--tls-cert` and `--tls-key` only logs a warning: the HTTPS port is skipped and HTTP keeps working.
 #[tokio::test]
-async fn https_port_flag_does_not_panic_and_http_port_still_applies() {
+async fn https_port_flag_without_tls_files_is_skipped_and_http_port_still_applies() {
     let mut builder = ApplicationBuilder::new("Args");
     builder.with_custom_args(create_args_str(&["--http-port", "18911", "--https-port", "18912"]));
     assert!(builder.http_port.contains(&18911));
-    assert!(builder.https_port.contains(&18912));
+    assert!(!builder.https_port.contains(&18912));
 }
 
 #[tokio::test]
 #[should_panic(expected = "already in use by HTTP")]
 async fn https_port_conflicting_with_http_port_is_still_rejected() {
     let mut builder = ApplicationBuilder::new("Args");
-    builder.with_custom_args(create_args_str(&["--http-port", "18913", "--https-port", "18913"]));
+    builder.with_custom_args(create_args_str(&["--http-port", "18913", "--https-port", "18913", "--tls-cert", "missing_cert.pem", "--tls-key", "missing_key.pem"]));
 }
