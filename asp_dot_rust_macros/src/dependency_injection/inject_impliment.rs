@@ -53,7 +53,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
         if let FnArg::Typed(PatType { ty, .. }) = arg {
             if let Some(inner) = extract_wrapper_inner(ty, "Serv")
             {
-                let arg = quote! { #main_crate_path::dependency_injection::Serv(service_scope.get_service::<#inner>()) };
+                let arg = quote! { #main_crate_path::dependency_injection::Serv(service_scope.get_service::<#inner>().await) };
                 call_args.push(arg);
                 inner_types.push(inner.clone());
             } else if let Some(inner) = extract_wrapper_inner(ty, "CfgRequire")
@@ -61,20 +61,20 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                 let arg = quote! { #main_crate_path::dependency_injection::CfgRequire(configuration_service.require::<#inner>()) };
                 call_args.push(arg);
                 inner_types.push(inner.clone());
-                configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
+                configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>().await; };
             } else if let Some(inner) = extract_wrapper_inner(ty, "CfgReload")
             {
                 let missing_msg = format!("CfgReload<{}> was never registered via configure_reload::<{}>(...)", quote!(#inner), quote!(#inner));
                 let arg = quote! { #main_crate_path::dependency_injection::CfgReload(configuration_service.get_reload::<#inner>().expect(#missing_msg)) };
                 call_args.push(arg);
                 inner_types.push(inner.clone());
-                configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
+                configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>().await; };
             } else if let Some(inner) = extract_wrapper_inner(ty, "Cfg")
             {
                 let arg = quote! { #main_crate_path::dependency_injection::Cfg(configuration_service.get::<#inner>()) };
                 call_args.push(arg);
                 inner_types.push(inner.clone());
-                configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
+                configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>().await; };
             } else if flag.contains(InjectFlags::INJECT_CONTROLLER) {
                 let http_inject_type = get_http_inject_type(ty);
                 if http_inject_type != HttpInjectType::None {
@@ -124,8 +124,9 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
     } else {
         expanded = quote! {
             #input
+            #[#main_crate_path::async_trait::async_trait]
             impl #main_crate_path::dependency_injection::DependencyInjectableService for #self_ty {
-                fn inject(
+                async fn inject(
                     service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope
                 ) -> Self {
                     #http_context_inject

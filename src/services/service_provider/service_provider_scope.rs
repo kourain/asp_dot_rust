@@ -17,25 +17,29 @@ impl ServiceProviderScope {
     pub(crate) fn new() -> Self {
         Self { _inner_map: HashMap::new() }
     }
-    pub fn get_service<T>(&self) -> Arc<T>
+    pub async fn get_service<T>(&self) -> Arc<T>
     where
         T: DependencyInjectableService + Sized + Send + Sync + 'static,
     {
         let type_id = TypeId::of::<T>();
         match self._inner_map.get(&type_id) {
             Some(instance) => match instance.service_type {
-                ServiceType::Singleton | ServiceType::Scope => tokio::task::spawn_blocking(|| async {
-                    instance.instance.get_or_try_init(|| async {
-                        let sv = T::inject(self);
-                        sv.on_service_created().await
-                    });
-                    Arc::new(sv);
-                })
-                .await
-                .clone()
-                .downcast::<T>()
-                .expect("Type mismatch when downcasting service"),
-                ServiceType::Transient => Arc::new(T::inject(self)),
+                ServiceType::Singleton | ServiceType::Scope => {
+                    let arc_any = instance
+                        .instance
+                        .get_or_init(|| async {
+                            let mut sv = T::inject(self).await;
+                            sv.on_service_created().await;
+                            Arc::new(sv) as Arc<dyn std::any::Any + Send + Sync>
+                        })
+                        .await;
+                    arc_any.clone().downcast::<T>().expect("Type mismatch when downcasting service")
+                }
+                ServiceType::Transient => {
+                    let mut sv = T::inject(self).await;
+                    sv.on_service_created().await;
+                    Arc::new(sv)
+                }
             },
             None => {
                 panic!("Service {} not found in scope", std::any::type_name::<T>());
@@ -56,7 +60,7 @@ impl ServiceProviderScope {
             panic!("{type_name} already exist in ServiceProviderScope")
         }
         let instance: Arc<ServiceInstanceType> = Arc::new(OnceCell::new());
-        _ = instance.set(service);
+        let _ = instance.set(service as Arc<dyn std::any::Any + Send + Sync>);
         self._inner_map.insert(type_id, ServiceInstance { service_type, instance });
     }
     pub fn add_singleton<T>(&mut self)

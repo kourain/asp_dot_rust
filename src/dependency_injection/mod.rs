@@ -8,13 +8,18 @@ pub use inventory;
 
 #[async_trait::async_trait]
 pub trait DependencyInjectableService: Send + Sync + 'static {
-    fn inject(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
+    async fn inject(
+        service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope,
+    ) -> Self
     where
         Self: Sized;
     async fn on_service_created(&mut self) {}
 }
 pub trait DependencyInjectableController: Send + Sync + 'static {
-    fn inject(http_context: &mut crate::http_context::HttpContext, is_valid: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self
+    fn inject(
+        http_context: &mut crate::http_context::HttpContext,
+        is_valid: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self
     where
         Self: Sized;
 }

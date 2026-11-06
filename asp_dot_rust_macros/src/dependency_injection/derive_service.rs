@@ -59,8 +59,9 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
         Fields::Unit => {
             // no fields at all -- nothing to resolve, no dependency edges
             return quote! {
+                #[#main_crate_path::async_trait::async_trait]
                 impl #main_crate_path::dependency_injection::DependencyInjectableService for #ident {
-                    fn inject(_service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+                    async fn inject(_service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
                         Self
                     }
                 }
@@ -94,21 +95,21 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
         let di_default = extract_di_options(field);
 
         if let Some(inner) = extract_wrapper_inner(ty, "Serv") {
-            field_inits.push(quote! { #field_ident: #main_crate_path::dependency_injection::Serv(service_scope.get_service::<#inner>()) });
+            field_inits.push(quote! { #field_ident: #main_crate_path::dependency_injection::Serv(service_scope.get_service::<#inner>().await) });
             inner_types.push(inner);
         } else if let Some(inner) = extract_wrapper_inner(ty, "CfgRequire") {
             field_inits.push(quote! { #field_ident: #main_crate_path::dependency_injection::CfgRequire(configuration_service.require::<#inner>()) });
             inner_types.push(inner.clone());
-            configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
+            configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>().await; };
         } else if let Some(inner) = extract_wrapper_inner(ty, "CfgReload") {
             let missing_msg = format!("CfgReload<{}> was never registered via configure::<{}>(...)", quote!(#inner), quote!(#inner));
             field_inits.push(quote! { #field_ident: #main_crate_path::dependency_injection::CfgReload(configuration_service.get_reload::<#inner>().expect(#missing_msg)) });
             inner_types.push(inner.clone());
-            configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
+            configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>().await; };
         } else if let Some(inner) = extract_wrapper_inner(ty, "Cfg") {
             field_inits.push(quote! { #field_ident: #main_crate_path::dependency_injection::Cfg(configuration_service.get::<#inner>()) });
             inner_types.push(inner.clone());
-            configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
+            configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>().await; };
         } else {
             field_inits.push(quote! { #field_ident: Default::default() });
             if !di_default.contains(DIPropOption::DEFAULT) {
@@ -133,8 +134,9 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
     }
 
     quote! {
+        #[#main_crate_path::async_trait::async_trait]
         impl #main_crate_path::dependency_injection::DependencyInjectableService for #ident {
-            fn inject(service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+            async fn inject(service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
                 #configuration_service
                 #(#field_warnings)*
                 Self { #(#field_inits),* }

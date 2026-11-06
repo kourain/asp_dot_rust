@@ -7,7 +7,7 @@ pub enum ServiceType {
     Scope,
     Transient,
 }
-pub(crate) type  ServiceInstanceType = OnceCell<Arc<dyn Any + Send + Sync>>;
+pub(crate) type ServiceInstanceType = OnceCell<Arc<dyn Any + Send + Sync>>;
 pub(crate) struct ServiceInstance {
     pub service_type: ServiceType,
     pub instance: Arc<ServiceInstanceType>,

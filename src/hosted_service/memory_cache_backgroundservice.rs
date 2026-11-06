@@ -23,9 +23,10 @@ impl BackGroundService for MemoryCacheBackgroundService {
         }
     }
 }
+#[async_trait::async_trait]
 impl DependencyInjectableService for MemoryCacheBackgroundService {
-    fn inject(service_scope: &ServiceProviderScope) -> Self {
-        let memcache = service_scope.get_service::<MemoryCacheService>();
+    async fn inject(service_scope: &ServiceProviderScope) -> Self {
+        let memcache = service_scope.get_service::<MemoryCacheService>().await;
         MemoryCacheBackgroundService {
             memcache,
             release_after_seconds: AtomicU64::new(60),

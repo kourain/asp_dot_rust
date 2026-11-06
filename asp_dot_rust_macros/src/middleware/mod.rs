@@ -19,7 +19,7 @@ fn resolve_param(ty: &Type, main_crate_path: &TokenStream2) -> Option<Resolved> 
     let di = quote!(#main_crate_path::dependency_injection);
     if let Some(inner) = extract_wrapper_inner(ty, "Serv") {
         return Some(Resolved {
-            expr: quote! { #di::Serv(service_scope.get_service::<#inner>()) },
+            expr: quote! { #di::Serv(service_scope.get_service::<#inner>().await) },
             inner: inner.clone(),
             needs_configuration: false,
         });
@@ -80,7 +80,7 @@ pub(crate) fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
     let new_fn = find_fn("new");
     let mw = quote!(#main_crate_path::middleware);
     let scope_ty = quote!(#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope);
-    let config_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>(); };
+    let config_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>().await; };
 
     // ---- startup: `new` parameters, resolved once when the pipeline is built
     let mut startup_args: Vec<TokenStream2> = Vec::new();
@@ -156,9 +156,9 @@ pub(crate) fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
 
     quote! {
         #input
-        #[#main_crate_path::__async_trait::async_trait]
+        #[#main_crate_path::async_trait::async_trait]
         impl #mw::Middleware for #self_ty {
-            fn inject(service_scope: &#scope_ty, next: #mw::MiddlewareNext) -> Self {
+            async fn inject(service_scope: &#scope_ty, next: #mw::MiddlewareNext) -> Self {
                 #startup_config
                 #construct
             }
