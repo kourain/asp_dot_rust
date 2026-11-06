@@ -1,16 +1,15 @@
 use crate::{Application, configuration::RequestTimeoutConfiguration, dependency_injection::CfgRequire, http_context::HttpContext, logging::LOGGER, macros::middleware, middleware::MiddlewareNext};
-use std::sync::Arc;
 
 pub struct RequestTimeoutMiddleware {
     next: MiddlewareNext,
-    request_timeout_config: Arc<RequestTimeoutConfiguration>,
+    request_timeout_config: CfgRequire<RequestTimeoutConfiguration>,
 }
 #[middleware]
 impl RequestTimeoutMiddleware {
     fn new(next: MiddlewareNext, request_timeout_cfg: CfgRequire<RequestTimeoutConfiguration>) -> RequestTimeoutMiddleware {
         Self {
             next,
-            request_timeout_config: request_timeout_cfg.unwrap_or_default(),
+            request_timeout_config: request_timeout_cfg,
         }
     }
     async fn invoke_async(&self, http_context: &mut HttpContext) {

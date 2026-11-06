@@ -82,7 +82,7 @@ impl ApplicationBuilder {
 
     /// Same as `with_args`, but takes the arguments explicitly (used by tests).
     pub fn with_custom_args(&mut self, args: Vec<String>) -> &mut Self {
-        let mut old_cli = self.configuration.get::<StartupAppConfiguration>().map(|c| c.deref().clone()).unwrap_or_default();
+        let mut old_cli = self.configuration.get::<StartupAppConfiguration>().map_or_default(|c| c.deref().clone());
         let new_cli = old_cli.parse(args);
 
         self.set_ip(&new_cli);

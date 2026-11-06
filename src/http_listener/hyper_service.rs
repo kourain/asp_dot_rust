@@ -62,7 +62,7 @@ pub(crate) async fn hyper_service<S>(
     client_socket_addr: SocketAddr,
     local_listen_socket_addr: SocketAddr,
     app: Arc<Application>,
-    routing_service: Arc<RoutingService>,
+    routing_service: Serv<RoutingService>,
     hypercfg: Arc<HyperConfig>,
 ) -> std::io::Result<()>
 where

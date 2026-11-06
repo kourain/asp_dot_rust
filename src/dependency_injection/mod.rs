@@ -9,7 +9,7 @@ pub use inventory;
 #[async_trait::async_trait]
 pub trait DependencyInjectableService: Send + Sync + 'static {
     async fn inject(
-        service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope,
+        service_scope: &crate::services::service_provider::ServiceProviderScope,
     ) -> Self
     where
         Self: Sized;
