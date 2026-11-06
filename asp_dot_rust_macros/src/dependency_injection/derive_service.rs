@@ -60,7 +60,7 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
             // no fields at all -- nothing to resolve, no dependency edges
             return quote! {
                 impl #main_crate_path::dependency_injection::DependencyInjectableService for #ident {
-                    fn inject(_service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+                    fn inject(_service_scope: &#main_crate_path::services::service_provider::ServiceProviderScope) -> Self {
                         Self
                     }
                 }
@@ -134,7 +134,7 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
 
     quote! {
         impl #main_crate_path::dependency_injection::DependencyInjectableService for #ident {
-            fn inject(service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
+            fn inject(service_scope: &#main_crate_path::services::service_provider::ServiceProviderScope) -> Self {
                 #configuration_service
                 #(#field_warnings)*
                 Self { #(#field_inits),* }
