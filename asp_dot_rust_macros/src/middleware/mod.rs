@@ -15,18 +15,17 @@ struct Resolved {
     needs_configuration: bool,
 }
 
-fn resolve_param(ty: &Type, main_crate_path: &TokenStream2) -> Option<Resolved> {
-    let di = quote!(#main_crate_path::dependency_injection);
+fn resolve_param(ty: &Type) -> Option<Resolved> {
     if let Some(inner) = extract_wrapper_inner(ty, "Serv") {
         return Some(Resolved {
-            expr: quote! { #di::Serv(service_scope.get_service::<#inner>().await) },
+            expr: quote! { service_scope.get_service::<#inner>().await },
             inner: inner.clone(),
             needs_configuration: false,
         });
     }
     if let Some(inner) = extract_wrapper_inner(ty, "CfgRequire") {
         return Some(Resolved {
-            expr: quote! { #di::CfgRequire(configuration_service.require::<#inner>()) },
+            expr: quote! { configuration_service.require::<#inner>() },
             inner: inner.clone(),
             needs_configuration: true,
         });
@@ -34,14 +33,14 @@ fn resolve_param(ty: &Type, main_crate_path: &TokenStream2) -> Option<Resolved> 
     if let Some(inner) = extract_wrapper_inner(ty, "CfgReload") {
         let missing_msg = format!("CfgReload<{}> was never registered via configure_reload::<{}>(...)", quote!(#inner), quote!(#inner));
         return Some(Resolved {
-            expr: quote! { #di::CfgReload(configuration_service.get_reload::<#inner>().expect(#missing_msg)) },
+            expr: quote! { configuration_service.get_reload::<#inner>().expect(#missing_msg) },
             inner: inner.clone(),
             needs_configuration: true,
         });
     }
     if let Some(inner) = extract_wrapper_inner(ty, "Cfg") {
         return Some(Resolved {
-            expr: quote! { #di::Cfg(configuration_service.get::<#inner>()) },
+            expr: quote! { configuration_service.get::<#inner>() },
             inner: inner.clone(),
             needs_configuration: true,
         });
@@ -97,7 +96,7 @@ pub(crate) fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
                 if is_middleware_next(ty) {
                     startup_args.push(quote! { next });
                     has_next = true;
-                } else if let Some(resolved) = resolve_param(ty, &main_crate_path) {
+                } else if let Some(resolved) = resolve_param(ty) {
                     startup_args.push(resolved.expr);
                     inner_types.push(resolved.inner);
                     if resolved.needs_configuration {
@@ -136,7 +135,7 @@ pub(crate) fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
     let mut request_config = quote! {};
     for (index, arg) in inputs.enumerate() {
         let FnArg::Typed(PatType { ty, .. }) = arg else { continue };
-        let Some(resolved) = resolve_param(ty, &main_crate_path) else {
+        let Some(resolved) = resolve_param(ty) else {
             return create_compiler_error(
                 ty,
                 format!(
@@ -156,7 +155,7 @@ pub(crate) fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
 
     quote! {
         #input
-        #[#main_crate_path::async_trait::async_trait]
+        #[#main_crate_path::third_party::async_trait::async_trait]
         impl #mw::Middleware for #self_ty {
             async fn inject(service_scope: &#scope_ty, next: #mw::MiddlewareNext) -> Self {
                 #startup_config

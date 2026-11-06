@@ -124,7 +124,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
     } else {
         expanded = quote! {
             #input
-            #[#main_crate_path::async_trait::async_trait]
+            #[#main_crate_path::third_party::async_trait::async_trait]
             impl #main_crate_path::dependency_injection::DependencyInjectableService for #self_ty {
                 async fn inject(
                     service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope

@@ -7,8 +7,8 @@ async fn singleton_returns_the_same_instance_on_every_call() {
     let mut builder = ApplicationBuilder::new("TestSingleton");
     builder.service.add_singleton::<CounterService>();
 
-    let first = builder.service.get_service::<CounterService>();
-    let second = builder.service.get_service::<CounterService>();
+    let first = builder.service.get_service::<CounterService>().await;
+    let second = builder.service.get_service::<CounterService>().await;
 
     assert!(Arc::ptr_eq(&first, &second), "Singleton must resolve to the same Arc on every call");
     assert_eq!(first.id, second.id, "Singleton must not be constructed more than once");
@@ -19,8 +19,8 @@ async fn transient_returns_a_new_instance_on_every_call() {
     let mut builder = ApplicationBuilder::new("TestTransient");
     builder.service.add_transient::<CounterService>();
 
-    let first = builder.service.get_service::<CounterService>();
-    let second = builder.service.get_service::<CounterService>();
+    let first = builder.service.get_service::<CounterService>().await;
+    let second = builder.service.get_service::<CounterService>().await;
 
     assert!(!Arc::ptr_eq(&first, &second), "Transient must resolve to a new Arc on every call");
     assert_ne!(first.id, second.id, "Transient must construct a fresh instance every time");
@@ -32,13 +32,13 @@ async fn scope_shares_the_instance_within_one_scope_but_not_across_scopes() {
     builder.service.add_scope::<CounterService>();
 
     // Two calls within the same scope must return the same instance.
-    let root_first = builder.service.get_service::<CounterService>();
-    let root_second = builder.service.get_service::<CounterService>();
+    let root_first = builder.service.get_service::<CounterService>().await;
+    let root_second = builder.service.get_service::<CounterService>().await;
     assert!(Arc::ptr_eq(&root_first, &root_second), "Scope must share the instance within the same scope");
 
     // A fresh scope (e.g. a new incoming request) must get its own instance.
     let child_scope = builder.service.create_scope();
-    let child_first = child_scope.get_service::<CounterService>();
+    let child_first = child_scope.get_service::<CounterService>().await;
 
     assert!(!Arc::ptr_eq(&root_first, &child_first), "A new scope must not reuse the instance created in a previous scope");
 }
@@ -49,8 +49,8 @@ async fn nested_dependency_resolves_through_the_same_scope() {
     builder.service.add_singleton::<CounterService>();
     builder.service.add_singleton::<WrapperService>();
 
-    let wrapper = builder.service.get_service::<WrapperService>();
-    let direct = builder.service.get_service::<CounterService>();
+    let wrapper = builder.service.get_service::<WrapperService>().await;
+    let direct = builder.service.get_service::<CounterService>().await;
 
     assert!(
         Arc::ptr_eq(&wrapper.inner, &direct),
@@ -64,8 +64,8 @@ async fn di_default_fields_are_defaulted_while_dependencies_still_inject() {
     builder.service.add_singleton::<CounterService>();
     builder.service.add_singleton::<DiDefaultService>();
 
-    let service = builder.service.get_service::<DiDefaultService>();
-    let direct = builder.service.get_service::<CounterService>();
+    let service = builder.service.get_service::<DiDefaultService>().await;
+    let direct = builder.service.get_service::<CounterService>().await;
 
     assert_eq!(service.label, String::default(), "A #[di(default)] field must be built with Default::default()");
     assert_eq!(service.call_count, u32::default(), "A #[di(default)] field must be built with Default::default()");
@@ -90,5 +90,5 @@ async fn get_service_panics_when_the_type_was_never_registered() {
     let builder = ApplicationBuilder::new("TestUnregisteredService");
     // CounterService was never added to the scope, so this must panic rather
     // than silently returning a default value.
-    let _ = builder.service.get_service::<CounterService>();
+    let _ = builder.service.get_service::<CounterService>().await;
 }

@@ -59,7 +59,7 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
         Fields::Unit => {
             // no fields at all -- nothing to resolve, no dependency edges
             return quote! {
-                #[#main_crate_path::async_trait::async_trait]
+                #[#main_crate_path::third_party::async_trait::async_trait]
                 impl #main_crate_path::dependency_injection::DependencyInjectableService for #ident {
                     async fn inject(_service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
                         Self
@@ -134,7 +134,7 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
     }
 
     quote! {
-        #[#main_crate_path::async_trait::async_trait]
+        #[#main_crate_path::third_party::async_trait::async_trait]
         impl #main_crate_path::dependency_injection::DependencyInjectableService for #ident {
             async fn inject(service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
                 #configuration_service

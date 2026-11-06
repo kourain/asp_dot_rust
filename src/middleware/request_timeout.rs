@@ -10,7 +10,7 @@ impl RequestTimeoutMiddleware {
     fn new(next: MiddlewareNext, request_timeout_cfg: CfgRequire<RequestTimeoutConfiguration>) -> RequestTimeoutMiddleware {
         Self {
             next,
-            request_timeout_config: request_timeout_cfg.unwrap(),
+            request_timeout_config: request_timeout_cfg.unwrap_or_default(),
         }
     }
     async fn invoke_async(&self, http_context: &mut HttpContext) {
