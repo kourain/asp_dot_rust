@@ -6,7 +6,7 @@ use crate::{
     http_listener::hyper_server,
     logging::LOGGER,
     middleware::{app_middlewares::ApplicationMiddlewares},
-    services::service_provider::service_provider_scope::ServiceProviderScope,
+    services::{configuration::ConfigurationService, service_provider::service_provider_scope::ServiceProviderScope},
 };
 
 pub struct Application {
@@ -15,6 +15,7 @@ pub struct Application {
     pub(crate) ip: HashSet<IpAddr>,
     pub(crate) http_port: HashSet<u16>,
     pub(crate) https_port: HashSet<u16>,
+    pub configuration: Arc<ConfigurationService>,
     pub service_provider: ServiceProviderScope,
     pub(crate) _middlewares: ApplicationMiddlewares,
     pub(crate) _hosted_services: ApplicationHostedService,

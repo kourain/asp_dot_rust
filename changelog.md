@@ -1,5 +1,15 @@
 # Change log
 
+## Unreleased
+
+- `ApplicationBuilder::configuration` is now a `ConfigurationServiceBuilder` (add values, load TOML, `configure*`); `ApplicationBuilder::build()` turns it into a read-only `ConfigurationService` kept as `Application::configuration` and registered in the service container.
+- `ConfigurationService::get` returns `Cfg<T>`, `require` returns `CfgRequire<T>`, `get_reload` returns `Option<CfgReload<T>>`; the DI macros no longer wrap the result again.
+
+### Breaking changes (unreleased)
+
+- `insert`, `configure`, `configure_optional`, `configure_reload`, `add_toml_cfg` and `add_optional_toml_cfg` moved from `ConfigurationService` to `ConfigurationServiceBuilder`.
+- `ConfigurationService` is no longer `Default` and cannot be constructed by the container.
+
 ## 0.2.9
 
 - Fixed: with several ports only the first one was served (ip and port were zipped), now every ip is served on every port.

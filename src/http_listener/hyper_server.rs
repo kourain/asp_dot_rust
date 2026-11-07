@@ -1,7 +1,7 @@
 use crate::{
     Application,
     logging::LOGGER,
-    services::{configuration::ConfigurationService, routing::RoutingService},
+    services::routing::RoutingService,
 };
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
@@ -37,8 +37,7 @@ pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> 
     }
 
     let routing_service = app.service_provider.get_service::<RoutingService>().await;
-    let configuration_service = app.service_provider.get_service::<ConfigurationService>().await;
-    let hypercfg = configuration_service.get::<crate::configuration::HyperConfig>().unwrap_or_default();
+    let hypercfg = app.configuration.get::<crate::configuration::HyperConfig>().unwrap_or_default();
     futures::future::try_join_all(listeners.into_iter().map(|listener| {
         let routing_service = routing_service.clone();
         let hypercfg = hypercfg.clone();

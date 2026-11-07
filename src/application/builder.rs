@@ -6,7 +6,7 @@ use crate::{
     logging::LOGGER,
     middleware::app_middlewares::ApplicationMiddlewares,
     services::{
-        configuration::ConfigurationService,
+        configuration::{ConfigurationService, ConfigurationServiceBuilder},
         service_provider::{ServiceType, service_provider_scope::ServiceProviderScope},
     },
     utils::build_info,
@@ -17,7 +17,7 @@ pub struct ApplicationBuilder {
     pub ip: HashSet<IpAddr>,
     pub http_port: HashSet<u16>,
     pub https_port: HashSet<u16>,
-    pub configuration: ConfigurationService,
+    pub configuration: ConfigurationServiceBuilder,
     pub service: ServiceProviderScope,
     pub(crate) hosted_services: ApplicationHostedService,
 }
@@ -29,7 +29,7 @@ impl ApplicationBuilder {
             ip: HashSet::new(),
             http_port: HashSet::new(),
             https_port: HashSet::new(),
-            configuration: ConfigurationService::default(),
+            configuration: ConfigurationServiceBuilder::default(),
             service: ServiceProviderScope::new(),
             hosted_services: Vec::new(),
         };
@@ -81,13 +81,15 @@ impl ApplicationBuilder {
 
     pub fn build(self) -> Application {
         let mut service = self.service;
-        service.add_instance::<ConfigurationService>(Arc::new(self.configuration), ServiceType::Singleton);
+        let configuration = Arc::new(self.configuration.build());
+        service.add_instance::<ConfigurationService>(configuration.clone(), ServiceType::Singleton);
         service.check_dependency_cycles();
         Application {
             name: self.name,
             ip: self.ip,
             http_port: self.http_port,
             https_port: self.https_port,
+            configuration,
             service_provider: service,
             _middlewares: ApplicationMiddlewares::new(),
             _hosted_services: self.hosted_services,

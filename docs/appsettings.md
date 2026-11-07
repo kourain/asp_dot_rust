@@ -1,7 +1,7 @@
 # App Settings (TOML Configuration)
 
 ASP.Rust supports loading typed configuration sections from TOML files
-through `ConfigurationService`, inspired by ASP.NET Core's
+through `ConfigurationServiceBuilder`, inspired by ASP.NET Core's
 `appsettings.json` + `IOptions<T>` pattern. A TOML file is parsed into raw
 tables first, then individual top-level sections are bound into strongly
 typed Rust structs on demand via `serde`.
@@ -10,10 +10,10 @@ typed Rust structs on demand via `serde`.
 
 | Concept | Type | Purpose |
 | ------- | ---- | ------- |
-| Raw file store | `ConfigurationService::add_toml_cfg` | Reads and parses a TOML file into a `toml::Table`, keyed internally by its path. Can be called multiple times to load several files. |
-| Section binding | `ConfigurationService::configure::<T>(section)` | Looks up a top-level table named `section` across every loaded file, deserializes it into `T`, and registers `T` in the same `ConfigurationService` used for regular configuration objects. |
+| Raw file store | `ConfigurationServiceBuilder::add_toml_cfg` | Reads and parses a TOML file into a `toml::Table`, keyed internally by its path. Can be called multiple times to load several files. |
+| Section binding | `ConfigurationServiceBuilder::configure::<T>(section)` | Looks up a top-level table named `section` across every loaded file, deserializes it into `T`, and registers `T` in the same builder used for regular configuration objects. |
 | Typed config object | any `T: DeserializeOwned + Default + Debug + Clone + Send + Sync + 'static` | The Rust struct a section is bound to, e.g. `RateLimitConfiguration`, `JwtAuthConfiguration`, or an app-defined type. |
-| Consumption | `ConfigurationService::get::<T>()` or `Cfg<T>` constructor parameter | Same retrieval path already used for configuration registered with `insert::<T>()` — see `docs/dependency_injection.md`. |
+| Consumption | `ConfigurationService::get::<T>()` or `Cfg<T>` constructor parameter | Read-only service built by `ApplicationBuilder::build()` and kept as `Application::configuration`; values added with `insert::<T>()` are read the same way — see `docs/dependency_injection.md`. |
 
 ## Loading a TOML file and binding a section
 
@@ -142,10 +142,17 @@ impl RateLimiterService {
 
 | Method | On | Description |
 | ------ | -- | ----------- |
-| `add_toml_cfg(path)` | `ConfigurationService` | Read and parse a TOML file, storing it under `path`. Panics if the file cannot be read, and panics if it exists but fails to parse. |
-| `add_optional_toml_cfg(path)` | `ConfigurationService` | Same as `add_toml_cfg`, except a file that cannot be read is only logged as a warning (no panic, no table added for that path); an existing-but-malformed file still panics. |
-| `load_main_toml()` | `ConfigurationService` | Shortcut for `add_toml_cfg("./appsettings.toml")`. |
-| `configure::<T>(section)` | `ConfigurationService` | Deserialize the `section` table from every loaded file into `T` and register it (falls back to `T::default()` if the section is absent anywhere). Panics if the section exists but does not match `T`. |
-| `insert::<T>(config)` | `ConfigurationService` | Register a configuration value directly, bypassing TOML. Logs a warning if `T` was already registered. |
-| `get::<T>()` | `ConfigurationService` | Retrieve a previously registered configuration value, whether it came from `insert` or `configure`. Returns `None` if `T` was never registered. |
-| `contains::<T>()` | `ConfigurationService` | Check whether a configuration value of type `T` is registered. |
+| `add_toml_cfg(path)` | `ConfigurationServiceBuilder` | Read and parse a TOML file, storing it under `path`. Panics if the file cannot be read, and panics if it exists but fails to parse. |
+| `add_optional_toml_cfg(path)` | `ConfigurationServiceBuilder` | Same as `add_toml_cfg`, except a file that cannot be read is only logged as a warning (no panic, no table added for that path); an existing-but-malformed file still panics. |
+| `load_main_toml()` | `ConfigurationServiceBuilder` | Shortcut for `add_toml_cfg("./appsettings.toml")`. |
+| `configure::<T>(section)` | `ConfigurationServiceBuilder` | Deserialize the `section` table from every loaded file into `T` and register it (falls back to `T::default()` if the section is absent anywhere). Panics if the section exists but does not match `T`. |
+| `insert::<T>(config)` | `ConfigurationServiceBuilder` | Register a configuration value directly, bypassing TOML. Logs a warning if `T` was already registered. |
+| `get::<T>()` | `ConfigurationServiceBuilder` | Read a value registered so far, as `Option<Arc<T>>` (used by tests and builder code before `build()`). |
+| `get::<T>()` | `ConfigurationService` | Retrieve a registered configuration value as `Cfg<T>`; `Cfg(None)` if `T` was never registered. |
+| `require::<T>()` | `ConfigurationService` | Same as `get`, as `CfgRequire<T>`; panics if `T` was never registered. |
+| `get_reload::<T>()` | `ConfigurationService` | `Some(CfgReload<T>)` for a section bound with `configure_reload::<T>()`, otherwise `None`. |
+| `contains::<T>()` | both | Check whether a configuration value of type `T` is registered. |
+
+## Builder and read-only service
+
+`ApplicationBuilder::configuration` is a `ConfigurationServiceBuilder`, the only place values can be added or replaced. `ApplicationBuilder::build()` turns it into a `ConfigurationService` that has no setters, stores it in `Application::configuration` and registers the same instance in the service container.

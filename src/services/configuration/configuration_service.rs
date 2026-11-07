@@ -1,34 +1,48 @@
-use crate::{dependency_injection::{Cfg, CfgRequire}, logging::LOGGER, utils::path::get_real_path};
+use crate::{
+    dependency_injection::{Cfg, CfgReload, CfgRequire, DependencyInjectableService},
+    logging::LOGGER,
+    services::service_provider::service_provider_scope::ServiceProviderScope,
+    utils::path::get_real_path,
+};
 use arc_swap::ArcSwap;
-use asp_dot_rust_macros::DependencyInjectableService;
-use serde::de::DeserializeOwned;
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
-    fmt::Debug,
     sync::{Arc, RwLock},
 };
 
 /// Reload closure for one `configure_reload::<T>()` section: given the
 /// freshly re-read tables, re-parses the section and `.store()`s the result
 /// into the matching `ArcSwap<T>` already sitting in `_inner`.
-type ReloadFn = Box<dyn Fn(&HashMap<String, toml::Table>, &HashMap<TypeId, Arc<dyn Any + Send + Sync>>) + Send + Sync>;
+pub(super) type ReloadFn = Box<dyn Fn(&HashMap<String, toml::Table>, &HashMap<TypeId, Arc<dyn Any + Send + Sync>>) + Send + Sync>;
 
-struct ReloadEntry {
+pub(super) struct ReloadEntry {
     #[allow(dead_code)] // kept for future diagnostics / logging
-    section: String,
-    reload_fn: ReloadFn,
+    pub(super) section: String,
+    pub(super) reload_fn: ReloadFn,
 }
-#[derive(DependencyInjectableService, Default)]
+
+/// Read-only view of the application configuration.
+///
+/// It is created by `ConfigurationServiceBuilder::build()` when
+/// `ApplicationBuilder::build()` runs, so values can no longer be added or
+/// replaced after the application is built. The only state that still moves
+/// is a section bound with `configure_reload::<T>()`, refreshed by `reload_all()`.
 pub struct ConfigurationService {
-    #[di(default)]
-    _inner: HashMap<TypeId, Arc<dyn Any + Send + Sync>>,
+    pub(super) _inner: HashMap<TypeId, Arc<dyn Any + Send + Sync>>,
     // RwLock so `reload_all()` can run through `&self`, e.g. from a background
     // task holding `Arc<ConfigurationService>` after the app has started.
-    #[di(default)]
-    _toml_tables: RwLock<HashMap<String, toml::Table>>,
-    #[di(default)]
-    _reload_sections: RwLock<HashMap<TypeId, ReloadEntry>>,
+    pub(super) _toml_tables: RwLock<HashMap<String, toml::Table>>,
+    pub(super) _reload_sections: HashMap<TypeId, ReloadEntry>,
+}
+
+// The container never builds this service: `ApplicationBuilder::build()` registers the
+// finished instance, so resolving it from a scope where it was not registered is a bug.
+#[async_trait::async_trait]
+impl DependencyInjectableService for ConfigurationService {
+    async fn inject(_service_scope: &ServiceProviderScope) -> Self {
+        panic!("ConfigurationService is created by ApplicationBuilder::build and can not be constructed by the service container")
+    }
 }
 
 impl ConfigurationService {
@@ -40,30 +54,10 @@ impl ConfigurationService {
         self._inner.contains_key(&TypeId::of::<T>())
     }
 
-    /// insert a configuration of type T, if the configuration of type T already exists, it will be replaced
-    pub fn insert<T>(&mut self, config: T)
-    where
-        T: Clone + Send + Sync + 'static,
-    {
-        if self._inner.contains_key(&TypeId::of::<T>()) {
-            LOGGER::warn(format!("Replace configuration of type {} already exists", std::any::type_name::<T>()));
-        }
-        self._inner.insert(TypeId::of::<T>(), Arc::new(config));
-    }
-
-    /// insert a configuration of type T, replacing any existing one without logging a warning
-    /// (for internal callers that replace a value on purpose)
-    pub(crate) fn replace<T>(&mut self, config: T)
-    where
-        T: Clone + Send + Sync + 'static,
-    {
-        self._inner.insert(TypeId::of::<T>(), Arc::new(config));
-    }
-
-    /// get a configuration of type T, if the configuration of type T does not exist, return None
+    /// get a configuration of type T, if the configuration of type T does not exist, return `Cfg(None)`
     pub fn get<T>(&self) -> Cfg<T>
     where
-        T: Clone + Send + Sync + 'static,
+        T: Send + Sync + 'static,
     {
         match self._inner.get(&TypeId::of::<T>()) {
             Some(config) => Cfg(config.clone().downcast::<T>().ok()),
@@ -72,177 +66,25 @@ impl ConfigurationService {
     }
 
     /// get a configuration of type T, panic if it was never registered
-    /// (via `insert`, `configure`, or `configure_optional`)
+    /// (via `insert`, `configure`, or `configure_optional` on the builder)
     pub fn require<T>(&self) -> CfgRequire<T>
     where
-        T: 'static + Send + Sync + Clone,
+        T: Send + Sync + 'static,
     {
-        match self.get::<T>().0
-        {
+        match self.get::<T>().0 {
             Some(val) => CfgRequire(val),
-            None => panic!("Configuration of type {} is required but was never registered", std::any::type_name::<T>())
+            None => panic!("Configuration of type {} is required but was never registered", std::any::type_name::<T>()),
         }
     }
 
-    /// load default toml configuration file, if the file does not exist, it will be ignored
-    pub(crate) fn load_default_toml(&mut self) {
-        self.add_optional_toml_cfg("./appsettings.toml");
-    }
-
-    /// add a toml configuration file, if the file does not exist, it will panic
-    pub fn add_toml_cfg(&mut self, path: impl AsRef<str>) -> &mut Self {
-        match get_real_path(&path) {
-            Some(path) => match std::fs::read_to_string(&path) {
-                Ok(data) => match data.parse() {
-                    Ok(toml_table) => {
-                        self._toml_tables.write().unwrap().insert(path, toml_table);
-                    }
-                    Err(e) => panic!("Failed to parse {} file {}", path, e),
-                },
-                Err(_) => {
-                    panic!("Failed to read configuration file {}", path);
-                }
-            },
-            None => {
-                panic!("Failed to read configuration file {}", path.as_ref());
-            }
-        }
-        self
-    }
-
-    /// add a toml configuration file, if the file does not exist, it will be ignored
-    pub fn add_optional_toml_cfg(&mut self, path: impl AsRef<str>) -> &mut Self {
-        match get_real_path(&path) {
-            Some(path) => match std::fs::read_to_string(&path) {
-                Ok(data) => match data.parse() {
-                    Ok(toml_table) => {
-                        self._toml_tables.write().unwrap().insert(path, toml_table);
-                    }
-                    Err(e) => panic!("Failed to parse {} file {}", path, e),
-                },
-                Err(_) => {
-                    LOGGER::warn(format!("Failed to read configuration file {}", path));
-                }
-            },
-            None => {
-                LOGGER::warn(format!("Failed to find configuration file {}", path.as_ref()));
-            }
-        };
-        self
-    }
-
-    /// parse `section` out of every loaded toml table into `T`, panicking if
-    /// it is present but malformed. Returns `None` if the section was not
-    /// found in any loaded file (caller decides whether that's a panic or a
-    /// fallback to `T::default()`).
-    fn try_build_section<T>(&self, key: &str) -> Option<T>
+    /// retrieve a section registered via `configure_reload::<T>()` on the builder,
+    /// `None` if it was never registered
+    pub fn get_reload<T>(&self) -> Option<CfgReload<T>>
     where
-        T: DeserializeOwned + Default + Debug + Clone + Send + Sync + 'static,
+        T: Send + Sync + 'static,
     {
-        let mut config = None;
-        for (path, table) in self._toml_tables.read().unwrap().iter() {
-            let Some(value) = table.get(key) else {
-                continue;
-            };
-            match value.clone().try_into::<T>() {
-                Ok(val) => config = Some(val),
-                Err(_) => panic!("Failed to parse [{}] of toml {} as {}", key, path, std::any::type_name::<T>()),
-            }
-        }
-        config
-    }
-
-    /// configure a configuration of type T from the toml configuration file, if the configuration of type T does not exist, it will panic
-    pub fn configure<T>(&mut self, section: impl AsRef<str>) -> &mut Self
-    where
-        T: DeserializeOwned + Default + Debug + Clone + Send + Sync + 'static,
-    {
-        let key = section.as_ref();
-        match self.try_build_section::<T>(key) {
-            Some(config) => {
-                LOGGER::trace(format!("Add TOML Config for: {}", std::any::type_name::<T>()));
-                LOGGER::verbose(format!("{} = {:#?}", std::any::type_name::<T>(), config.clone()));
-                self.insert(config);
-            }
-            None => panic!("Failed to find [{}] in any loaded toml configuration", key),
-        }
-        self
-    }
-
-    /// configure a configuration of type T from the toml configuration file, if the configuration of type T does not exist, it will be ignored
-    pub fn configure_optional<T>(&mut self, section: impl AsRef<str>) -> &mut Self
-    where
-        T: DeserializeOwned + Default + Debug + Clone + Send + Sync + 'static,
-    {
-        let key = section.as_ref();
-        match self.try_build_section::<T>(key) {
-            Some(config) => {
-                LOGGER::trace(format!("Add TOML Config for: {}", std::any::type_name::<T>()));
-                LOGGER::verbose(format!("{} = {:#?}", std::any::type_name::<T>(), config.clone()));
-                self.insert(config);
-            }
-            None => {
-                LOGGER::warn(format!("Failed to find [{}] in any loaded toml configuration", key));
-                self.insert(T::default());
-            }
-        }
-        self
-    }
-
-    /// bind `section` into a hot-reloadable `ArcSwap<T>`. Panics if the
-    /// section is not found in any loaded file (same as `configure::<T>()`).
-    /// Retrieve it later via `CfgReload<T>` (macro-injected) or `get_reload::<T>()`.
-    pub fn configure_reload<T>(&mut self, section: impl AsRef<str>) -> &mut Self
-    where
-        T: DeserializeOwned + Default + Debug + Clone + Send + Sync + 'static,
-    {
-        let key = section.as_ref().to_string();
-        let Some(initial) = self.try_build_section::<T>(&key) else {
-            panic!("Failed to find [{}] in any loaded toml configuration", key);
-        };
-        LOGGER::trace(format!("Add reloadable TOML Config for: {}", std::any::type_name::<T>()));
-        let swap = Arc::new(ArcSwap::from_pointee(initial));
-        self._inner.insert(TypeId::of::<ArcSwap<T>>(), swap as Arc<dyn Any + Send + Sync>);
-
-        let key_for_closure = key.clone();
-        self._reload_sections.write().unwrap().insert(
-            TypeId::of::<ArcSwap<T>>(),
-            ReloadEntry {
-                section: key,
-                reload_fn: Box::new(move |tables, inner| {
-                    let Some(any_swap) = inner.get(&TypeId::of::<ArcSwap<T>>()) else {
-                        return;
-                    };
-                    let Ok(swap) = any_swap.clone().downcast::<ArcSwap<T>>() else {
-                        return;
-                    };
-                    for (path, table) in tables.iter() {
-                        let Some(value) = table.get(&key_for_closure) else {
-                            continue;
-                        };
-                        match value.clone().try_into::<T>() {
-                            Ok(new_val) => {
-                                swap.store(Arc::new(new_val));
-                                LOGGER::trace(format!("Reloaded TOML Config for: {}", std::any::type_name::<T>()));
-                            }
-                            Err(e) => LOGGER::warn(format!(
-                                "Skipped reload of [{}] from {}: failed to parse as {} ({})",
-                                key_for_closure,
-                                path,
-                                std::any::type_name::<T>(),
-                                e
-                            )),
-                        }
-                    }
-                }),
-            },
-        );
-        self
-    }
-
-    /// retrieve a section registered via `configure_reload::<T>()`
-    pub fn get_reload<T: 'static + Send + Sync>(&self) -> Option<Arc<ArcSwap<T>>> {
-        self._inner.get(&TypeId::of::<ArcSwap<T>>())?.clone().downcast::<ArcSwap<T>>().ok()
+        let config = self._inner.get(&TypeId::of::<ArcSwap<T>>())?;
+        CfgReload::<T>::downcast(config).ok()
     }
 
     /// Re-read every file loaded via `add_toml_cfg`/`add_optional_toml_cfg`
@@ -271,7 +113,7 @@ impl ConfigurationService {
             }
         }
         let tables = self._toml_tables.read().unwrap();
-        for entry in self._reload_sections.read().unwrap().values() {
+        for entry in self._reload_sections.values() {
             (entry.reload_fn)(&tables, &self._inner);
         }
     }

@@ -163,7 +163,8 @@ If the field needs real construction logic rather than just a default, use
 
 ## Injecting configuration
 
-Configuration is resolved from the application's `ConfigurationService`
+Configuration is resolved from the application's read-only `ConfigurationService`
+(built from `ApplicationBuilder::configuration`, a `ConfigurationServiceBuilder`)
 rather than the service container, via three wrapper types depending on how
 missing configuration should be handled:
 
@@ -171,7 +172,7 @@ missing configuration should be handled:
 | ------- | ------------- | -------------------- |
 | `Cfg<T>` | `ConfigurationService::get::<T>()` | `Cfg(None)` |
 | `CfgRequire<T>` | `ConfigurationService::require::<T>()` | panics |
-| `CfgReload<T>` | `ConfigurationService::get_reload::<T>()` | panics (only valid if `T` was bound with `configure_reload::<T>()`) |
+| `CfgReload<T>` | `ConfigurationService::get_reload::<T>()` | panics (only valid if `T` was bound with `configure_reload::<T>()` on the builder) |
 
 ```rust
 use asp_dot_rust::dependency_injection::{Cfg, CfgRequire};
