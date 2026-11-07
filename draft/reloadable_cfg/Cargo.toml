@@ -1,0 +1,13 @@
+[package]
+name = "reloadable_cfg"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+arc-swap = "1.9.3"
+async-trait = "0.1.92"
+toml = "1.1.8"
+serde = { version = "1.0.229", features = ["derive"] }
+tokio = { version = "1.54.1", features = ["full"] }
+notify = "8.2.1"
+
