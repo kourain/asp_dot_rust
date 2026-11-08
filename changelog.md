@@ -1,93 +1,144 @@
 # Change log
 
+## 0.2.10
+
+### 0.2.10 New
+
+- Model binding: action parameters `FromRoute<T>`, `FromQuery<T>`, `FromOptionQuery<T>`, `FromBody<T>`, `FromForm<T>` are resolved by the `#[controller_route]` macro (argument name = key). Route miss/parse → 404; query/body/form miss/parse or Content-Type mismatch → 422. At most one `FromBody` or `FromForm` per action. `String` body is raw UTF-8; other types use serde. See `docs/model_binding.md`.
+- Request body buffering: `HttpRequest::enable_buffering` loads the body into memory; `seek_body(0)` rewinds for another read (ASP.NET EnableBuffering). `request.body` is `RequestBody` (`Stream` | `Buffered`).
+- Dependencies: `serde_json` 1.0.154, `quick-xml` 0.42.0 (`serialize`), `serde_urlencoded` 0.7.1.
+
+### 0.2.10 Change
+
+| old | new | why |
+| --- | --- | --- |
+| body limit only inside `Limited` | `HttpRequest::max_body_size` on the request | so the action can read the limit in use for that request |
+
+### 0.2.10 Breaking Change
+
+| old | new | why |
+| --- | --- | --- |
+| `HttpRequest::body: Limited<Incoming>` | `HttpRequest::body: RequestBody` (`Stream` \| `Buffered`) | allow buffering and `seek_body(0)` so the body can be read more than once |
+
 ## 0.2.9
 
-- Fixed: with several ports only the first one was served (ip and port were zipped), now every ip is served on every port.
-- Fixed: `with_any_ip` failed on a host without IPv6 or when `[::]` already covers IPv4; `0.0.0.0` is bound first and `[::]` is skipped with a warning if it can not be bound.
+### 0.2.9 New
+
 - `max_request_headers_size` (431) and `max_request_body_size` (413, by the declared `Content-Length`) are now applied.
-- `#[max_body_size(bytes)]` sets the request body limit of a route (it is the route attribute `max_body_size`, so it can also be set on the controller impl as a default), routes without it use `max_request_body_size`. `HttpRequest::body` is now `Limited<Incoming>` and `HttpRequest::max_body_size` tells the limit in use. See `docs/routing.md`.
+- `#[max_body_size(bytes)]` sets the request body limit of a route (it is the route attribute `max_body_size`, so it can also be set on the controller impl as a default), routes without it use `max_request_body_size`. See `docs/routing.md`.
 - Built-in attribute macros such as `#[max_body_size(..)]` are `#[attr(name = value)]` with a typed value; they are declared in one place (`for_each_attr_alias!` in `controller/extra_attribute.rs` of the macros crate) and need no import of `attr`.
 - `#[attr(key = value, ...)]` sets attributes of a route, on the controller impl as defaults for its routes or on an action to override a key. A value is stored as its own type and read back as exactly that type (`5` is an `i32`, `5u8` a `u8`) with `HttpRequest::route_attribute::<T>(key)`, `HttpRequest::route_attributes()` or `Route::attributes()`. See `docs/routing.md`.
 
-### Breaking changes 0.2.9
+### 0.2.9 Fix
 
-- `HttpRequest::body` is `Limited<Incoming>` (was `Incoming`) and `HttpRequest::from_http` takes the body limit of the request.
-- `RouteAttribute::get` takes a `&str` key (was `&'static str`).
+- Fixed: with several ports only the first one was served (ip and port were zipped), now every ip is served on every port.
+- Fixed: `with_any_ip` failed on a host without IPv6 or when `[::]` already covers IPv4; `0.0.0.0` is bound first and `[::]` is skipped with a warning if it can not be bound.
+
+### 0.2.9 Breaking Change
+
+| old | new | why |
+| --- | --- | --- |
+| `HttpRequest::body: Incoming` | `HttpRequest::body: Limited<Incoming>`; `from_http` takes the body limit | enforce per-request body size limit |
+| `RouteAttribute::get(&'static str)` | `RouteAttribute::get(&str)` | allow non-static attribute keys |
 
 ## 0.2.8
 
+### 0.2.8 New
+
 - Stream response: a complete response (controller result, `response.body`) is written into the stream when the pipeline ends; other data is sent with `response.write_async(bytes)`. See `docs/stream_response.md`.
 - Response API in the style of ASP.NET: `has_started` (HasStarted), `start_async` (StartAsync), `write_async` (WriteAsync), `complete_async` (CompleteAsync) and `HttpContext::abort` (Abort). `write_bytes_async` writes owned bytes without copying them.
-- The pipeline now runs in its own task only when it waits after the head is sent.
-- A response with status 204 or 304 no longer has `Content-Length`.
 
-### Breaking changes 0.2.8
+### 0.2.8 Change
 
-- `HttpResponse::write_async` takes `impl AsRef<[u8]>` and, like the other write methods, now really writes to the connection and returns `std::io::Result<()>`.
-- `write_headers_async` is now `start_async`, `write_response_async` is now `complete_async`, `write_body_async` is removed.
-- Removed `HttpResponse::keep_alive` and `move_to_http_response`; the connection is managed by hyper.
+| old | new | why |
+| --- | --- | --- |
+| pipeline always in one task | pipeline runs in its own task only when it waits after the head is sent | avoid an extra task when the response is complete |
+| status 204 / 304 could still get `Content-Length` | no `Content-Length` for 204 or 304 | match HTTP rules for bodies |
+
+### 0.2.8 Breaking Change
+
+| old | new | why |
+| --- | --- | --- |
+| `write_async` did not truly write to the connection | `write_async(impl AsRef<[u8]>) -> io::Result<()>` writes to the connection | real streaming like ASP.NET WriteAsync |
+| `write_headers_async` / `write_response_async` / `write_body_async` | `start_async` / `complete_async`; `write_body_async` removed | clearer ASP.NET-style names |
+| `HttpResponse::keep_alive`, `move_to_http_response` | removed | connection is managed by hyper |
 
 ## 0.2.7
 
+### 0.2.7 New
+
 - Middleware in the style of ASP.NET: it holds the next middleware (`MiddlewareNext`) given to its constructor and the pipeline is built once at run. See `docs/middleware.md`.
-- New `#[middleware]` on `impl T { fn new(next, ..); async fn invoke_async(&self, ctx, ..) }`, it generates `Middleware`, `Middleware` and `Middleware`. Parameters of `invoke_async` are injected on every request(as scoped from HttpContext).
-- `add_middleware_instance` is replaced by `add_middleware_factory`. The macro `middleware!` bodies call `next.call_async(ctx)`.
-- Removed the per request `LOGGER::trace` of each middleware.
+- New `#[middleware]` on `impl T { fn new(next, ..); async fn invoke_async(&self, ctx, ..) }`, it generates `Middleware`, `Middleware` and `Middleware`. Parameters of `invoke_async` are injected on every request (as scoped from HttpContext).
 - New `CompressionMiddleware` (`app.use_compression()`): gzip, deflate, brotli and zstd response compression chosen from `Accept-Encoding`, built on `async-compression`. See `docs/compression.md`.
 - New `CompressionConfiguration` and `CompressionLevel` (`enable_gzip`, `enable_deflate`, `enable_brotli`, `enable_zstd`, `min_size`, `level`), can be bound from a TOML section.
 
-### Breaking changes 0.2.6
+### 0.2.7 Change
 
-- now you must write middleware like asp.net core
+| old | new | why |
+| --- | --- | --- |
+| `add_middleware_instance` | `add_middleware_factory` | pipeline is built once; middleware holds `MiddlewareNext` |
+| `middleware!` bodies and per-request `LOGGER::trace` of each middleware | `next.call_async(ctx)`; per-request trace removed | less noise, clearer next-call style |
+
+### 0.2.7 Breaking Change
+
+| old | new | why |
+| --- | --- | --- |
+| previous middleware registration style | ASP.NET Core style (`MiddlewareNext`, factory registration) | one pipeline model aligned with ASP.NET |
 
 ## 0.2.6
 
-- fix logging disable `LOGGER::disable()` at start not work
+### 0.2.6 Fix
+
+- Fixed: logging disable via `LOGGER::disable()` at start did not work.
 
 ## 0.2.5
 
-### Logging
+### 0.2.5 New
 
-- `LOGGER::set_enable(bool)` is replaced by `LOGGER::enable()` / `LOGGER::disable()`. Disabling no longer tears down the background logger task, so re-enabling resumes logging correctly.
 - `LOGGER::enable_default_logger()` / `LOGGER::disable_default_logger()` let you turn off the built-in console sink while still sending logs to your own receiver via `LOGGER::spawn_log_receiver()`.
-- `LOGGER::with_time(bool)` is removed; every log entry now always carries a timestamp.
-- Default log format simplified to `[{level}] {timestamp} {message}`.
 - `HttpRequest` now carries a `request_id: Ulid` (per request) and `connection_id: Arc<Ulid>` (shared across all requests on the same keep-alive connection), currently surfaced in the "Unhandled panic" error log line.
-
-### HTTP server
-
 - New `HyperConfig` settings: `header_read_timeout`, `http2_keep_alive_interval`, `http2_keep_alive_timeout` (seconds; default 10 / 20 / 10). HTTP/1.1 connections now time out while waiting for request headers, and HTTP/2 connections use PING-based keep-alive to detect dead peers. Falls back to `HyperConfig::default()` if not explicitly registered.
-- `Application::run()` now panics with a clear error message if the HTTP listener fails to bind or serve, instead of silently ignoring the error.
-
-### Breaking changes 0.2.5
-
-- `AspDotRustHttpHeader` trait is renamed to `HttpHeader`.
-- `http_context::http_context` and `http_context::http_header` are no longer public modules; use the re-exported `http_context::HttpContext`  `http_context::HttpHeader` instead.
-- `LOGGER::set_enable(bool)`, `LOGGER::with_time(bool)`, `LOGGER::with_request_id(bool)`, and `LOGGER::with_connection_id(bool)` are removed (see Logging section above for replacements).
-
-### Internal changes 0.2.5
-
-- `AuthorizeMiddleware` now derives `DependencyInjectableService` via macro instead of a manual `impl`.
 - Added `HttpHeader::append_str` / `append_string` to append a header value instead of replacing it.
+
+### 0.2.5 Change
+
+| old | new | why |
+| --- | --- | --- |
+| `LOGGER::set_enable(bool)` | `LOGGER::enable()` / `LOGGER::disable()` | disable no longer tears down the background logger task |
+| log format with optional time | default `[{level}] {timestamp} {message}`; time always on | simpler, consistent format |
+| `Application::run()` ignored listener bind/serve errors | panics with a clear message | fail fast at startup |
+| manual `AuthorizeMiddleware` DI | derives `DependencyInjectableService` | less boilerplate |
+
+### 0.2.5 Breaking Change
+
+| old | new | why |
+| --- | --- | --- |
+| `AspDotRustHttpHeader` | `HttpHeader` | shorter public name |
+| public `http_context::http_context` / `http_context::http_header` modules | re-exports `HttpContext` / `HttpHeader` only | hide internal module layout |
+| `LOGGER::set_enable`, `with_time`, `with_request_id`, `with_connection_id` | removed (see New / Change) | simpler logger API; timestamp always present |
 
 ## 0.2.4
 
-### Routing
+### 0.2.4 New
 
 - Dynamic path parameters (`/{id}`) are now supported and extracted per request into `http_context.request.routing_info.path_params`.
 - Route resolution now distinguishes `404 Not Found` from `405 Method Not Allowed` instead of collapsing both into one outcome. A `405` response now also sets the `Allow` header with the methods that are actually registered for that path.
-- `RoutingServiceBuilder::build()` now panics immediately, with the conflicting route and the underlying error, if two routes conflict on their dynamic path segments (e.g. `/{id}` vs `/{name}` at the same position). Previously such a conflict was silently dropped and the affected route would 404 at request time with no indication why.
-- Query string parsing now percent-decodes both the key and the value (previously only the value was decoded), and a flag-style parameter with no `=` (e.g. `?debug`) is now kept with an empty-string value instead of being silently dropped.
 - `#[controller_route]` can now be used with no argument for an empty root prefix, instead of requiring `#[controller_route("")]`.
-
-### Breaking changes 0.2.4
-
-- `HttpRequest`: `path: String` and `version: http::Version` fields are replaced by `uri: http::Uri` and `http_version: http::Version`; the `method()`, `uri()`, `version()`, `headers()`, `headers_mut()`, and `body_mut()` getter methods are removed in favor of public fields and `path()`/`query_string()` helpers. `client_addr`/`local_addr` are renamed to `client_socket_addr`/`local_socket_addr`. A new `routing_info: ResolvedRoute` field carries the result of route resolution.
-- `HttpContext`: the `routing_info: Option<ResolvedRoute>` field is removed; routing is now resolved before the request is constructed and lives on `HttpRequest::routing_info` instead.
-- `HttpResponse`: the unused `version: http::Version` field is removed.
-
-### Internal changes 0.2.4
-
 - Added unit tests for `RoutingServiceBuilder` and `RoutingService` (duplicate route/controller panics, route conflict panics, path parameter extraction, query string parsing, `404`/`405` resolution, `get_allowed_methods`).
-- Reduced per-request allocations in the routing path (`use less memory`).
 - `HttpResponse` sends a `Server: ASP.RS` header by default.
+
+### 0.2.4 Change
+
+| old | new | why |
+| --- | --- | --- |
+| conflicting dynamic segments dropped silently | `RoutingServiceBuilder::build()` panics with the conflict | catch route design errors at startup |
+| query decode only values; flags without `=` dropped | decode key and value; flag without `=` kept as `""` | correct query semantics |
+| higher per-request routing allocations | reduced allocations on the routing path | lower memory use per request |
+
+### 0.2.4 Breaking Change
+
+| old | new | why |
+| --- | --- | --- |
+| `HttpRequest` path/version getters; `client_addr` / `local_addr` | public `uri` / `http_version`; `path()` / `query_string()`; `client_socket_addr` / `local_socket_addr`; `routing_info` | clearer fields; routing resolved before request is built |
+| `HttpContext::routing_info` | removed; lives on `HttpRequest::routing_info` | single place for route resolution |
+| `HttpResponse::version` | removed | unused |
