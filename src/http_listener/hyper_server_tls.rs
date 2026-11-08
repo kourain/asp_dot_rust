@@ -1,0 +1,73 @@
+use crate::{
+    Application,
+    logging::LOGGER,
+    services::{configuration::ConfigurationService, routing::RoutingService},
+};
+use rustls::ServerConfig;
+use std::sync::Arc;
+use tokio_rustls::TlsAcceptor;
+
+pub(crate) async fn hyper_server_tls(app: &Arc<Application>, tls_config: Arc<ServerConfig>) -> std::io::Result<()> {
+    let acceptor = TlsAcceptor::from(tls_config);
+
+    // Same binding strategy as the plain HTTP listener (every ip on every port, `[::]` is optional)
+    let listeners = crate::http_listener::hyper_server::bind_listeners(app, app.https_port.iter().copied(), "HTTPS").await?;
+
+    futures::future::try_join_all(listeners.into_iter().map(|listener| {
+        let acceptor = acceptor.clone();
+        async move {
+            let routing_service = app.service_provider.get_service::<RoutingService>().await;
+            let configuration_service = app.service_provider.get_service::<ConfigurationService>().await;
+            let hypercfg = configuration_service.get::<crate::configuration::HyperConfig>().unwrap_or_default();
+            loop {
+                match listener.accept().await {
+                    Ok((stream, _)) => {
+                        let (client_addr, local_addr) = match (stream.peer_addr(), stream.local_addr()) {
+                            (Ok(c), Ok(l)) => (c, l),
+                            (Err(e), _) | (_, Err(e)) => {
+                                LOGGER::warn(format!("Failed to read socket address, dropping connection: {}", e));
+                                continue;
+                            }
+                        };
+                        let app = app.clone();
+                        let routing_service = routing_service.clone();
+                        let hypercfg = hypercfg.clone();
+                        let acceptor = acceptor.clone();
+                        tokio::spawn(async move {
+                            // Perform the TLS handshake before handing the connection to hyper.
+                            // A failed handshake (bad client, port scan, expired cert on the
+                            // client's trust store, etc.) must only drop this one connection,
+                            // never crash the accept loop.
+                            match acceptor.accept(stream).await {
+                                Ok(tls_stream) => {
+                                    if let Err(e) = crate::http_listener::hyper_service::hyper_service(tls_stream, client_addr, local_addr, app, routing_service, hypercfg).await {
+                                        LOGGER::error(format!("Error occurred: {}", e));
+                                    }
+                                }
+                                Err(e) => {
+                                    LOGGER::warn(format!("TLS handshake failed with {}: {}", client_addr, e));
+                                }
+                            };
+                        });
+                    }
+                    Err(error) => {
+                        match error.kind() {
+                            std::io::ErrorKind::ConnectionAborted | std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe => {
+                                LOGGER::warn(format!("TCP connection aborted: {}", error));
+                                continue;
+                            }
+                            _ => {
+                                LOGGER::error(format!("Failed to accept TCP connection: {}", error));
+                                continue;
+                            }
+                        }
+                        #[allow(unreachable_code)]
+                        return Err::<(), std::io::Error>(error);
+                    }
+                }
+            }
+        }
+    }))
+    .await?;
+    Ok(())
+}

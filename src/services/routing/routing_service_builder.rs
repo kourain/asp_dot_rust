@@ -1,9 +1,9 @@
 use crate::{
     controller::{ActionRoute, Routing},
     dependency_injection::DependencyInjectableController,
+    macros::DependencyInjectableService,
     services::routing::{ControllerInvoke, MAX_BODY_SIZE_ATTRIBUTE, Route, RouteAttribute, RouteAttributeMap, RoutingService},
 };
-use asp_dot_rust_macros::DependencyInjectableService;
 use std::{
     any::TypeId,
     collections::{HashMap, HashSet},

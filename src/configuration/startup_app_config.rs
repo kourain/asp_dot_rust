@@ -1,6 +1,5 @@
-use std::{collections::HashMap, env, ops::Deref, str::FromStr};
-
 use crate::{application::ApplicationBuilder, logging::LOGGER};
+use std::{collections::HashMap, env, ops::Deref, str::FromStr};
 
 /// Recognized token forms, parsed left to right in a single pass:
 /// - `--key=value`
@@ -83,7 +82,7 @@ impl ApplicationBuilder {
 
     /// Same as `with_args`, but takes the arguments explicitly (used by tests).
     pub fn with_custom_args(&mut self, args: Vec<String>) -> &mut Self {
-        let mut old_cli = self.configuration.get::<StartupAppConfiguration>().map(|c| c.deref().clone()).unwrap_or_default();
+        let mut old_cli = self.configuration.get::<StartupAppConfiguration>().map_or_default(|c| c.deref().clone());
         let new_cli = old_cli.parse(args);
 
         self.set_ip(&new_cli);
@@ -107,7 +106,15 @@ impl ApplicationBuilder {
     }
     fn set_https_port(&mut self, cli: &StartupAppConfiguration) {
         if let Some(port) = cli.get_parsed::<u16>("https-port") {
-            self.with_https_port(port);
+            if let Some(cert_path) = cli.get("tls-cert") {
+                if let Some(key_path) = cli.get("tls-key") {
+                    self.with_https_port(port, cert_path, key_path);
+                } else {
+                    LOGGER::warn("--https-port was specified without a corresponding --tls-key");
+                }
+            } else {
+                LOGGER::warn("--https-port was specified without a corresponding --tls-cert");
+            }
         }
     }
 }

@@ -2,9 +2,9 @@ use async_trait::async_trait;
 use std::sync::atomic::AtomicU64;
 
 use crate::{
-    dependency_injection::{DependencyInjectableService, Serv}, hosted_service::BackGroundService, logging::LOGGER, services::{memory_cache::MemoryCacheService, service_provider::service_provider_scope::ServiceProviderScope},
+    dependency_injection::{DependencyInjectableService, Serv}, hosted_service::BackGroundService, logging::LOGGER, services::{memory_cache::MemoryCacheService, service_provider::ServiceProviderScope},
 };
-#[derive(Default)]
+
 pub struct MemoryCacheBackgroundService {
     memcache: Serv<MemoryCacheService>,
     release_after_seconds: AtomicU64,
