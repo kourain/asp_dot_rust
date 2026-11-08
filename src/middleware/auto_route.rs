@@ -11,7 +11,7 @@ use crate::{
 pub struct RoutingMiddleware;
 #[async_trait::async_trait]
 impl Middleware for RoutingMiddleware {
-    fn inject(_: &ServiceProviderScope, _: MiddlewareNext) -> Self {
+    async fn inject(_: &ServiceProviderScope, _: MiddlewareNext) -> Self {
         Self {}
     }
     async fn inject_invoke_async(&self, http_context: &mut HttpContext) {

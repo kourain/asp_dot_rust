@@ -1,6 +1,7 @@
 use crate::{
     Application,
     configuration::HyperConfig,
+    dependency_injection::Serv,
     http_context::{HttpContext, http_request::HttpRequest, http_response::HttpResponse},
     logging::LOGGER,
     services::routing::{MAX_BODY_SIZE_ATTRIBUTE, ResolvedRoute, RoutingResult, RoutingService},
@@ -45,7 +46,7 @@ fn exceeds_limits<B>(req: &http::Request<B>, limits: &HyperConfig, max_body_size
     None
 }
 
-pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: Arc<RoutingService>, hypercfg: Arc<HyperConfig>) -> std::io::Result<()> {
+pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: Serv<RoutingService>, hypercfg: Arc<HyperConfig>) -> std::io::Result<()> {
     let client_socket_addr = stream.peer_addr().unwrap();
     let local_listen_socket_addr = stream.local_addr().unwrap();
     let connection_id: Arc<Ulid> = Arc::new(Ulid::generate());

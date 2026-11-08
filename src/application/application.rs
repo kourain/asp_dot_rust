@@ -32,14 +32,15 @@ impl Application {
         if self.http_port.is_empty() {
             self.http_port.insert(8080);
         }
-        self._middlewares.build_pipeline(&self.service_provider);
+        self._middlewares.build_pipeline(&self.service_provider).await;
         let mut hosted_services_app = std::mem::take(&mut self._hosted_services); // clear hosted services from app since we're moving them to the async block
         let app = Arc::new(self);
         // let mut hosted_services_app = Vec::new();
-        while let Some((name, mut service)) = hosted_services_app.pop() {
+        while let Some((name, service)) = hosted_services_app.pop() {
+            let app_clone = app.clone();
             tokio::spawn(async move {
                 LOGGER::info(format!("Starting background service: {}", name));
-                service.invoke_async().await
+                service(&app_clone.service_provider).await.invoke_async().await
             });
         }
         if let Err(e) = hyper_server(&app).await {

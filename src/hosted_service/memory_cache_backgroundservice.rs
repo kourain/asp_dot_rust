@@ -1,16 +1,12 @@
 use async_trait::async_trait;
-use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
 use crate::{
-    dependency_injection::DependencyInjectableService,
-    hosted_service::BackGroundService,
-    logging::LOGGER,
-    services::{memory_cache::MemoryCacheService, service_provider::service_provider_scope::ServiceProviderScope},
+    dependency_injection::{DependencyInjectableService, Serv}, hosted_service::BackGroundService, logging::LOGGER, services::{memory_cache::MemoryCacheService, service_provider::service_provider_scope::ServiceProviderScope},
 };
 #[derive(Default)]
 pub struct MemoryCacheBackgroundService {
-    memcache: Arc<MemoryCacheService>,
+    memcache: Serv<MemoryCacheService>,
     release_after_seconds: AtomicU64,
 }
 #[async_trait]
@@ -23,9 +19,10 @@ impl BackGroundService for MemoryCacheBackgroundService {
         }
     }
 }
+#[async_trait::async_trait]
 impl DependencyInjectableService for MemoryCacheBackgroundService {
-    fn inject(service_scope: &ServiceProviderScope) -> Self {
-        let memcache = service_scope.get_service::<MemoryCacheService>();
+    async fn inject(service_scope: &ServiceProviderScope) -> Self {
+        let memcache = service_scope.get_service::<MemoryCacheService>().await;
         MemoryCacheBackgroundService {
             memcache,
             release_after_seconds: AtomicU64::new(60),

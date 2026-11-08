@@ -1,4 +1,4 @@
-use crate::{logging::LOGGER, utils::path::get_real_path};
+use crate::{dependency_injection::{Cfg, CfgRequire}, logging::LOGGER, utils::path::get_real_path};
 use arc_swap::ArcSwap;
 use asp_dot_rust_macros::DependencyInjectableService;
 use serde::de::DeserializeOwned;
@@ -61,24 +61,27 @@ impl ConfigurationService {
     }
 
     /// get a configuration of type T, if the configuration of type T does not exist, return None
-    pub fn get<T>(&self) -> Option<Arc<T>>
+    pub fn get<T>(&self) -> Cfg<T>
     where
         T: Clone + Send + Sync + 'static,
     {
         match self._inner.get(&TypeId::of::<T>()) {
-            Some(config) => config.clone().downcast::<T>().ok(),
-            None => None,
+            Some(config) => Cfg(config.clone().downcast::<T>().ok()),
+            None => Cfg(None),
         }
     }
 
     /// get a configuration of type T, panic if it was never registered
     /// (via `insert`, `configure`, or `configure_optional`)
-    pub fn require<T>(&self) -> Arc<T>
+    pub fn require<T>(&self) -> CfgRequire<T>
     where
         T: 'static + Send + Sync + Clone,
     {
-        self.get::<T>()
-            .unwrap_or_else(|| panic!("Configuration of type {} is required but was never registered", std::any::type_name::<T>()))
+        match self.get::<T>().0
+        {
+            Some(val) => CfgRequire(val),
+            None => panic!("Configuration of type {} is required but was never registered", std::any::type_name::<T>())
+        }
     }
 
     /// load default toml configuration file, if the file does not exist, it will be ignored

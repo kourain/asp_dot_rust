@@ -21,10 +21,13 @@ pub mod prelude {
     pub use crate::utils::ShareMutPtr;
 }
 pub mod utils;
+pub mod third_party {
+    pub use tokio;
+    pub use toml;
+    pub use async_trait;
+}
 
 pub use application::{Application, ApplicationBuilder};
 pub use inventory;
-#[doc(hidden)]
-pub use async_trait as __async_trait;
 
 pub type MutexAsync<T> = tokio::sync::Mutex<T>;
