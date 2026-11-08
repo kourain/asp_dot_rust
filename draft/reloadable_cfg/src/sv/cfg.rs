@@ -13,8 +13,6 @@ pub type EntryValue<T> = Arc<Option<ArcSwap<T>>>;
 pub enum CfgEntryAllowReloadFile {
     NotAllowed,
     Allowed(Vec<&'static str>),
-    /// Only allow files that match the regex pattern, e.g., `r"appsettings(dev|prod|stag)\.toml$"`
-    /// use {cwd} to represent the current working directory, e.g., `r"{cwd}appsettings(dev|prod|stag)\.toml$"`
     AllowedRegexPattern(Regex),
     AllowedAll,
 }
@@ -49,6 +47,7 @@ impl<T> Deref for CfgRequired<T> {
 }
 pub struct CfgEntry {
     value: EntryValue<BoxAny>,
+    type_name: &'static str,
     updatetor: Option<Box<dyn Fn(&toml::Value) -> Option<BoxAny> + Send + Sync>>,
     allow_file: CfgEntryAllowReloadFile,
 }
@@ -67,6 +66,7 @@ impl CfgEntry {
         let value = Arc::new(Some(ArcSwap::from_pointee(Arc::new(value) as BoxAny)));
         Self {
             value,
+            type_name: std::any::type_name::<T>(),
             updatetor: None,
             allow_file: CfgEntryAllowReloadFile::NotAllowed,
         }
@@ -82,7 +82,12 @@ impl CfgEntry {
             }
             None
         }) as Box<dyn Fn(&toml::Value) -> Option<BoxAny> + Send + Sync>);
-        Self { value, updatetor, allow_file }
+        Self {
+            value,
+            type_name: std::any::type_name::<T>(),
+            updatetor,
+            allow_file,
+        }
     }
     pub fn update_from_toml(&self, toml_value: &toml::Value, full_path_file: &str) {
         if let Some(updatetor) = &self.updatetor {
@@ -156,20 +161,7 @@ impl CfgService {
                         for entry in self._inner.values() {
                             entry.update_from_toml(&toml_value, file_path.to_str().unwrap_or_default());
                             //debug code
-                            print!(
-                                "updated: {}",
-                                entry
-                                    .value
-                                    .as_ref()
-                                    .as_ref()
-                                    .map(|arc_swap| {
-                                        let arc = arc_swap.load_full();
-                                        let any_arc = arc.as_ref().clone();
-                                        let type_name = std::any::type_name_of_val(any_arc.as_ref());
-                                        format!("type_name: {:?}", type_name)
-                                    })
-                                    .unwrap_or_default()
-                            );
+                            print!("updated: {}", entry.type_name);
                         }
                     }
                 }

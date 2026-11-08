@@ -8,7 +8,7 @@ mod sv;
 
 #[tokio::main]
 async fn main() {
-    let regex = regex::Regex::new(r"{cwd}appsettings(dev|prod|stag)\.toml$").unwrap();
+    let regex = regex::Regex::new(r"appsettings(dev|prod|stag)\.toml$").unwrap();
     let mut sv = sv::cfg::CfgService::default();
     sv.insert::<ReloadFileConfig>(|cfg| {
         cfg.list_files = vec!["appsettings.toml", "appsettings.dev.toml", "appsettings.prod.toml", "appsettings.stag.toml"];
