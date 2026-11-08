@@ -10,4 +10,5 @@ toml = "1.1.8"
 serde = { version = "1.0.229", features = ["derive"] }
 tokio = { version = "1.54.1", features = ["full"] }
 notify = "8.2.1"
-
+notify-debouncer-full = "0.7"
+regex = "1.13.1"

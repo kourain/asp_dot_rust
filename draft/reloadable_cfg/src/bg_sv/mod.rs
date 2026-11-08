@@ -1,1 +1,1 @@
-mod file_system_watcher;
+pub mod file_system_watcher;
