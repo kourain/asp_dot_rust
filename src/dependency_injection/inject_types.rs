@@ -56,6 +56,14 @@ macro_rules! define_service_wrapper {
                     ::std::option::Option::None => ::std::result::Result::Ok($name(::std::option::Option::None)),
                 }
             }
+            /// the configuration, panics if it was never registered
+            pub fn unwrap(self) -> Arc<T> {
+                self.0.expect("configuration was never registered")
+            }
+            /// the configuration, panics with `message` if it was never registered
+            pub fn expect(self, message: &str) -> Arc<T> {
+                self.0.expect(message)
+            }
             pub fn unwrap_or_default(self) -> Arc<T>
             where
                 T: Default,
@@ -112,6 +120,11 @@ macro_rules! define_service_wrapper {
                 T: ::std::marker::Send + ::std::marker::Sync + 'static,
             {
                 value.0.clone().downcast::<T>().map($name)
+            }
+            /// the inner `Arc<T>`
+            #[inline]
+            pub fn unwrap(self) -> Arc<T> {
+                self.0
             }
         }
 

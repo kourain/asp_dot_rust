@@ -8,6 +8,10 @@
 - Request body buffering: `HttpRequest::enable_buffering` loads the body into memory; `seek_body(0)` rewinds for another read (ASP.NET EnableBuffering). `request.body` is `RequestBody` (`Stream` | `Buffered`).
 - Dependencies: `serde_json` 1.0.154, `quick-xml` 0.42.0 (`serialize`), `serde_urlencoded` 0.7.1.
 
+### 0.2.10 Fix
+
+- Fixed: `Cfg::unwrap`, `Cfg::expect` and `CfgRequire::unwrap` were missing, `RequestTimeoutMiddleware` and `StartupAppConfiguration` did not compile.
+
 ### 0.2.10 Change
 
 | old | new | why |
