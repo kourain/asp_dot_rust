@@ -31,7 +31,7 @@ pub trait Middleware: Send + Sync {
     async fn inject_invoke_async(&self, http_context: &mut HttpContext);
 }
 
-/// Defines a middleware that has only the field `next`: `middleware!(pub Name, |ctx, next| { next.call_async(ctx).await; });`
+/// Defines a middleware that has only the field `next`: `middleware!(pub Name, |ctx, next| { next.next_async(ctx).await; });`
 #[macro_export]
 macro_rules! middleware {
     ($vis:vis $name:ident, |$ctx:ident, $next:ident| $body:block) => {
