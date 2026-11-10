@@ -25,22 +25,21 @@ fn resolve_param(ty: &Type) -> Option<Resolved> {
     }
     if let Some(inner) = extract_wrapper_inner(ty, "CfgRequire") {
         return Some(Resolved {
-            expr: quote! { configuration_service.require::<#inner>() },
+            expr: quote! { configuration_service.get::<#inner>().capture().unwrap() },
             inner: inner.clone(),
             needs_configuration: true,
         });
     }
     if let Some(inner) = extract_wrapper_inner(ty, "CfgReload") {
-        let missing_msg = format!("CfgReload<{}> was never registered via configure_reload::<{}>(...)", quote!(#inner), quote!(#inner));
         return Some(Resolved {
-            expr: quote! { configuration_service.get_reload::<#inner>().expect(#missing_msg) },
+            expr: quote! { configuration_service.get::<#inner>() },
             inner: inner.clone(),
             needs_configuration: true,
         });
     }
-    if let Some(inner) = extract_wrapper_inner(ty, "Cfg") {
+    if let Some(inner) = extract_wrapper_inner(ty, "CfgOption").or_else(|| extract_wrapper_inner(ty, "Cfg")) {
         return Some(Resolved {
-            expr: quote! { configuration_service.get::<#inner>() },
+            expr: quote! { configuration_service.get::<#inner>().capture() },
             inner: inner.clone(),
             needs_configuration: true,
         });
@@ -105,7 +104,7 @@ pub(crate) fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
                 } else {
                     return create_compiler_error(
                         ty,
-                        format!("Parameter must be MiddlewareNext, Serv<T>, Cfg<T>, CfgRequire<T> or CfgReload<T>, found: {}", token_type_to_string(ty)),
+                        format!("Parameter must be MiddlewareNext, Serv<T>, CfgOption<T>, CfgRequire<T> or CfgReload<T>, found: {}", token_type_to_string(ty)),
                     );
                 }
             }
@@ -139,7 +138,7 @@ pub(crate) fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
             return create_compiler_error(
                 ty,
                 format!(
-                    "Parameter of `invoke_async` must be Serv<T>, Cfg<T>, CfgRequire<T> or CfgReload<T>, found: {}",
+                    "Parameter of `invoke_async` must be Serv<T>, CfgOption<T>, CfgRequire<T> or CfgReload<T>, found: {}",
                     token_type_to_string(ty)
                 ),
             );

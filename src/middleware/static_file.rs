@@ -1,7 +1,7 @@
 use crate::{
     Application,
     configuration::StaticFileConfiguration,
-    dependency_injection::Cfg,
+    dependency_injection::CfgOption,
     http_context::http_header::HttpHeader,
     macros::middleware,
     middleware::MiddlewareNext,
@@ -15,7 +15,7 @@ pub struct StaticFileMiddleware {
 
 #[middleware]
 impl StaticFileMiddleware {
-    pub fn new(next: MiddlewareNext, config: Cfg<StaticFileConfiguration>) -> Self {
+    pub fn new(next: MiddlewareNext, config: CfgOption<StaticFileConfiguration>) -> Self {
         let config = config.unwrap_or_default();
         let static_dir_path = std::path::Path::new(&config.static_files_directory);
         if !static_dir_path.is_dir() {

@@ -1,22 +1,21 @@
 use crate::{
     Application,
     configuration::CorsConfiguration,
-    dependency_injection::{Cfg, Serv},
+    dependency_injection::{CfgOption, CfgRequire, Serv},
     http_context::{HttpContext, http_header::HttpHeader},
     macros::middleware,
     middleware::MiddlewareNext,
 };
 use http::header;
-use std::sync::Arc;
 
 pub struct CorsMiddleware {
     next: MiddlewareNext,
     routing_service: Serv<crate::services::routing::RoutingService>,
-    configuration: Arc<CorsConfiguration>,
+    configuration: CfgRequire<CorsConfiguration>,
 }
 #[middleware]
 impl CorsMiddleware {
-    pub fn new(next: MiddlewareNext, routing_service: Serv<crate::services::routing::RoutingService>, configuration: Cfg<CorsConfiguration>) -> Self {
+    pub fn new(next: MiddlewareNext, routing_service: Serv<crate::services::routing::RoutingService>, configuration: CfgOption<CorsConfiguration>) -> Self {
         Self {
             next,
             routing_service,

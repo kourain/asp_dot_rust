@@ -25,7 +25,7 @@ impl LogMiddleware {
 
 ## Dependency injection
 
-- Parameters of `new` after `next` are resolved once when the pipeline is built: `Serv<T>`, `Cfg<T>`, `CfgRequire<T>`, `CfgReload<T>`.
+- Parameters of `new` after `next` are resolved once when the pipeline is built: `Serv<T>`, `CfgOption<T>`, `CfgRequire<T>`, `CfgReload<T>`.
 - Parameters of `invoke_async` after `http_context` are resolved on every request from the request scope, with the same types.
 - Without `fn new` the struct must have only the field `next`.
 

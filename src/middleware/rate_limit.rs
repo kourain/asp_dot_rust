@@ -1,4 +1,4 @@
-use crate::{Application, configuration::RateLimitConfiguration, dependency_injection::Cfg, http_context::HttpContext, macros::middleware, middleware::MiddlewareNext};
+use crate::{Application, configuration::RateLimitConfiguration, dependency_injection::CfgOption, http_context::HttpContext, macros::middleware, middleware::MiddlewareNext};
 use dashmap::DashMap;
 
 pub struct RateLimitMiddleware {
@@ -11,7 +11,7 @@ pub struct RateLimitMiddleware {
 }
 #[middleware]
 impl RateLimitMiddleware {
-    pub fn new(next: MiddlewareNext, config: Cfg<RateLimitConfiguration>) -> Self {
+    pub fn new(next: MiddlewareNext, config: CfgOption<RateLimitConfiguration>) -> Self {
         let config = config.unwrap_or_default();
         RateLimitMiddleware {
             next,

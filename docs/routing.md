@@ -1,6 +1,6 @@
 # Routing
 
-ASP.Rust matches incoming requests to controller actions using
+ASP.RS matches incoming requests to controller actions using
 [`matchit`](https://crates.io/crates/matchit), the same radix-tree router
 used by `axum` and `hyper`'s own examples. Routes are collected at startup
 into a `RoutingServiceBuilder`, then compiled once into an immutable

@@ -1,6 +1,6 @@
 # Logging
 
-ASP.Rust ships a non-blocking, channel-based logger. Calling `LOGGER::info(...)`
+ASP.RS ships a non-blocking, channel-based logger. Calling `LOGGER::info(...)`
 (or any other level) never blocks the caller: the message is pushed onto a
 `tokio::sync::broadcast` channel and a background task formats and writes it
 to stdout/stderr. The same channel also carries configuration commands
