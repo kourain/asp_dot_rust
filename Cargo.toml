@@ -14,7 +14,7 @@ exclude = ["tests/"]
 chrono = "0.4.45"
 
 [dependencies]
-arc-swap = "1.9.4"
+arc-swap = "1.9.5"
 async-compression = { version = "0.4.52", features = [
     "tokio",
     "gzip",
@@ -57,7 +57,7 @@ quick-xml = { version = "0.42.0", features = ["serialize"] }
 serde_urlencoded = "0.7.1"
 tokio = { version = "1.54.1", features = ["full"] }
 toml = "1.2.1"
-uuid = { version = "1.29.1", features = ["v7"] }
+uuid = { version = "1.29.2", features = ["v7"] }
 ulid = "3.0.0"
 urlencoding = "2.1.3"
 

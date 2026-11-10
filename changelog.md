@@ -19,7 +19,7 @@
 
 ### 0.2.10 Change
 
-| old | new | why |
+| Old | New | Note |
 | --- | --- | --- |
 | body limit only inside `Limited` | `HttpRequest::max_body_size` on the request | so the action can read the limit in use for that request |
 | `Cfg<T>` | `CfgOption<T>` | `Cfg<T>` is a deprecated alias of `CfgOption<T>` and will be removed |
@@ -33,7 +33,7 @@
 
 ### 0.2.10 Breaking Change
 
-| old | new | why |
+| Old | New | Note |
 | --- | --- | --- |
 | `HttpRequest::body: Limited<Incoming>` | `HttpRequest::body: RequestBody` (`Stream` \| `Buffered`) | allow buffering and `seek_body(0)` so the body can be read more than once |
 | `DependencyInjectableService::inject(scope) -> Self` | `async fn inject(scope) -> Self` and `on_service_created` | a service can await while it is created, implement it with `third_party::async_trait` |
@@ -60,7 +60,7 @@
 
 ### 0.2.9 Breaking Change
 
-| old | new | why |
+| Old | New | Note |
 | --- | --- | --- |
 | `HttpRequest::body: Incoming` | `HttpRequest::body: Limited<Incoming>`; `from_http` takes the body limit | enforce per-request body size limit |
 | `RouteAttribute::get(&'static str)` | `RouteAttribute::get(&str)` | allow non-static attribute keys |
@@ -74,14 +74,14 @@
 
 ### 0.2.8 Change
 
-| old | new | why |
+| Old | New | Note |
 | --- | --- | --- |
 | pipeline always in one task | pipeline runs in its own task only when it waits after the head is sent | avoid an extra task when the response is complete |
 | status 204 / 304 could still get `Content-Length` | no `Content-Length` for 204 or 304 | match HTTP rules for bodies |
 
 ### 0.2.8 Breaking Change
 
-| old | new | why |
+| Old | New | Note |
 | --- | --- | --- |
 | `write_async` did not truly write to the connection | `write_async(impl AsRef<[u8]>) -> io::Result<()>` writes to the connection | real streaming like ASP.NET WriteAsync |
 | `write_headers_async` / `write_response_async` / `write_body_async` | `start_async` / `complete_async`; `write_body_async` removed | clearer ASP.NET-style names |
@@ -98,14 +98,14 @@
 
 ### 0.2.7 Change
 
-| old | new | why |
+| Old | New | Note |
 | --- | --- | --- |
 | `add_middleware_instance` | `add_middleware_factory` | pipeline is built once; middleware holds `MiddlewareNext` |
 | `middleware!` bodies and per-request `LOGGER::trace` of each middleware | `next.call_async(ctx)`; per-request trace removed | less noise, clearer next-call style |
 
 ### 0.2.7 Breaking Change
 
-| old | new | why |
+| Old | New | Note |
 | --- | --- | --- |
 | previous middleware registration style | ASP.NET Core style (`MiddlewareNext`, factory registration) | one pipeline model aligned with ASP.NET |
 
@@ -126,7 +126,7 @@
 
 ### 0.2.5 Change
 
-| old | new | why |
+| Old | New | Note |
 | --- | --- | --- |
 | `LOGGER::set_enable(bool)` | `LOGGER::enable()` / `LOGGER::disable()` | disable no longer tears down the background logger task |
 | log format with optional time | default `[{level}] {timestamp} {message}`; time always on | simpler, consistent format |
@@ -135,7 +135,7 @@
 
 ### 0.2.5 Breaking Change
 
-| old | new | why |
+| Old | New | Note |
 | --- | --- | --- |
 | `AspDotRustHttpHeader` | `HttpHeader` | shorter public name |
 | public `http_context::http_context` / `http_context::http_header` modules | re-exports `HttpContext` / `HttpHeader` only | hide internal module layout |
@@ -153,7 +153,7 @@
 
 ### 0.2.4 Change
 
-| old | new | why |
+| Old | New | Note |
 | --- | --- | --- |
 | conflicting dynamic segments dropped silently | `RoutingServiceBuilder::build()` panics with the conflict | catch route design errors at startup |
 | query decode only values; flags without `=` dropped | decode key and value; flag without `=` kept as `""` | correct query semantics |
@@ -161,7 +161,7 @@
 
 ### 0.2.4 Breaking Change
 
-| old | new | why |
+| Old | New | Note |
 | --- | --- | --- |
 | `HttpRequest` path/version getters; `client_addr` / `local_addr` | public `uri` / `http_version`; `path()` / `query_string()`; `client_socket_addr` / `local_socket_addr`; `routing_info` | clearer fields; routing resolved before request is built |
 | `HttpContext::routing_info` | removed; lives on `HttpRequest::routing_info` | single place for route resolution |
