@@ -1,7 +1,7 @@
 use crate::{
     Application,
     configuration::{CompressionConfiguration, CompressionLevel},
-    dependency_injection::Cfg,
+    dependency_injection::{CfgOption, CfgRequire},
     http_context::{HttpContext, http_header::HttpHeader, http_response::HttpResponse},
     logging::LOGGER,
     macros::middleware,
@@ -12,7 +12,6 @@ use async_compression::{
     tokio::write::{BrotliEncoder, GzipEncoder, ZlibEncoder, ZstdEncoder},
 };
 use http::{HeaderMap, header};
-use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 
 /// Supported encodings, ordered from the least to the most preferred.
@@ -120,11 +119,11 @@ async fn encode(encoding: Encoding, level: CompressionLevel, data: &[u8]) -> std
 /// because the first registered middleware is the outermost one.
 pub struct CompressionMiddleware {
     next: MiddlewareNext,
-    configuration: Arc<CompressionConfiguration>,
+    configuration: CfgRequire<CompressionConfiguration>,
 }
 #[middleware]
 impl CompressionMiddleware {
-    pub fn new(next: MiddlewareNext, configuration: Cfg<CompressionConfiguration>) -> Self {
+    pub fn new(next: MiddlewareNext, configuration: CfgOption<CompressionConfiguration>) -> Self {
         Self {
             next,
             configuration: configuration.unwrap_or_default(),

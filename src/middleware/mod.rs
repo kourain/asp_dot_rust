@@ -25,7 +25,7 @@ impl MiddlewareNext {
 /// A middleware of the chain, `#[middleware]` implements it.
 #[async_trait::async_trait]
 pub trait Middleware: Send + Sync {
-    fn inject(service_scope: &ServiceProviderScope, next: MiddlewareNext) -> Self
+    async fn inject(service_scope: &ServiceProviderScope, next: MiddlewareNext) -> Self
     where
         Self: Sized;
     async fn inject_invoke_async(&self, http_context: &mut HttpContext);

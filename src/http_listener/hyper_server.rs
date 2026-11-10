@@ -36,9 +36,9 @@ pub(crate) async fn hyper_server(app: &Arc<Application>) -> std::io::Result<()> 
         }
     }
 
-    let routing_service = app.service_provider.get_service::<RoutingService>();
-    let configuration_service = app.service_provider.get_service::<ConfigurationService>();
-    let hypercfg = configuration_service.get::<crate::configuration::HyperConfig>().unwrap_or_default();
+    let routing_service = app.service_provider.get_service::<RoutingService>().await;
+    let configuration_service = app.service_provider.get_service::<ConfigurationService>().await;
+    let hypercfg = configuration_service.get::<crate::configuration::HyperConfig>().capture().unwrap_or_default().0;
     futures::future::try_join_all(listeners.into_iter().map(|listener| {
         let routing_service = routing_service.clone();
         let hypercfg = hypercfg.clone();

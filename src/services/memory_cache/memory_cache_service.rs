@@ -107,8 +107,9 @@ impl MemoryCacheService {
         }
     }
 }
+#[async_trait::async_trait]
 impl DependencyInjectableService for MemoryCacheService {
-    fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
+    async fn inject(_service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
     where
         Self: Sized,
     {

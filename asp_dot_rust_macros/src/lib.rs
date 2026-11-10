@@ -147,7 +147,7 @@ pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```no_run
 /// #[injectable_service]
 /// impl ExampleService1 {
-///     fn new(service2: Serv<Service2>, service3: Serv<Service3>, configuration1: Cfg<Configuration1>) -> Self
+///     fn new(service2: Serv<Service2>, service3: Serv<Service3>, configuration1: CfgOption<Configuration1>) -> Self
 ///     {
 ///         //your logic to create ExampleService1
 ///     }
@@ -161,8 +161,8 @@ pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
 
 /// middleware in the style of ASP.NET: the next middleware is given to the constructor <br>
 /// Place it on `impl T { fn new(next: MiddlewareNext, ..); async fn invoke_async(&self, ctx, ..) }`. <br>
-/// - parameters of `new` are resolved once when the pipeline is built (`MiddlewareNext`, `Serv<T>`, `Cfg<T>`, `CfgRequire<T>`, `CfgReload<T>`). <br>
-/// - parameters of `invoke_async` after `ctx` are resolved on every request from the request scope (`Serv<T>`, `Cfg<T>`...). <br>
+/// - parameters of `new` are resolved once when the pipeline is built (`MiddlewareNext`, `Serv<T>`, `CfgOption<T>`, `CfgRequire<T>`, `CfgReload<T>`). <br>
+/// - parameters of `invoke_async` after `ctx` are resolved on every request from the request scope (`Serv<T>`, `CfgOption<T>`...). <br>
 /// - it generates `Middleware`, `Middleware` for the type. <br>
 /// - without `fn new` the struct must have only the field `next`.
 ///
@@ -191,7 +191,7 @@ pub fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```no_run
 /// #[controller_route("")]
 /// impl Controller1 {
-///     fn new(http_context: HttpContextRef,service2: Serv<Service2>, service3: Serv<Service3>, configuration1: Cfg<Configuration1>) -> Self
+///     fn new(http_context: HttpContextRef,service2: Serv<Service2>, service3: Serv<Service3>, configuration1: CfgOption<Configuration1>) -> Self
 ///     {
 ///         //your logic to create Controller1
 ///     }
@@ -204,7 +204,7 @@ pub fn controller_inject(args: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 /// Derive `DependencyInjectableService` directly from struct fields, when
-/// every field is already `Serv<T>`, `Cfg<T>`, `CfgRequire<T>`, or
+/// every field is already `Serv<T>`, `CfgOption<T>`, `CfgRequire<T>`, or
 /// `CfgReload<T>`. No `fn new` needed. <br>
 /// Example usage:
 ///
@@ -212,7 +212,7 @@ pub fn controller_inject(args: TokenStream, item: TokenStream) -> TokenStream {
 /// #[derive(DependencyInjectableService)]
 /// pub struct Ex2Service {
 ///     ex_service: Serv<ExService>,
-///     audit_cfg: Cfg<AuditConfiguration>,
+///     audit_cfg: CfgOption<AuditConfiguration>,
 /// }
 /// ```
 ///

@@ -8,7 +8,7 @@ pub(crate) struct AuthorizeMiddleware {
 /// written by hand, `schema` is not a service: `use_authorize` creates it with `add_middleware_factory`.
 #[async_trait::async_trait]
 impl Middleware for AuthorizeMiddleware {
-    fn inject(_service_scope: &ServiceProviderScope, next: MiddlewareNext) -> Self {
+    async fn inject(_service_scope: &ServiceProviderScope, next: MiddlewareNext) -> Self {
         Self { next, schema: String::new() }
     }
     async fn inject_invoke_async(&self, http_context: &mut HttpContext) {

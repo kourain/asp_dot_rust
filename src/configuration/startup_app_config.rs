@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, ops::Deref, str::FromStr};
+use std::{collections::HashMap, env, str::FromStr};
 
 use crate::{application::ApplicationBuilder, logging::LOGGER};
 
@@ -75,7 +75,7 @@ impl ApplicationBuilder {
     /// this run. Recognized flags (eg: `--ip`, `--http-port`, `--https-port`) are
     /// applied directly to the builder; the full parsed set is stored in
     /// `ConfigurationService` as `StartupAppConfiguration` so any service can
-    /// read custom flags via `Cfg<StartupAppConfiguration>`.
+    /// read custom flags via `CfgOption<StartupAppConfiguration>`.
     pub(crate) fn with_args(&mut self) -> &mut Self {
         let args: Vec<String> = env::args().skip(1).collect();
         self.with_custom_args(args)
@@ -83,7 +83,7 @@ impl ApplicationBuilder {
 
     /// Same as `with_args`, but takes the arguments explicitly (used by tests).
     pub fn with_custom_args(&mut self, args: Vec<String>) -> &mut Self {
-        let mut old_cli = self.configuration.get::<StartupAppConfiguration>().map(|c| c.deref().clone()).unwrap_or_default();
+        let mut old_cli: StartupAppConfiguration = (**self.configuration.get::<StartupAppConfiguration>().capture().unwrap_or_default()).clone();
         let new_cli = old_cli.parse(args);
 
         self.set_ip(&new_cli);
@@ -92,7 +92,7 @@ impl ApplicationBuilder {
 
         LOGGER::info(format!("Parsed {} command-line argument(s)", new_cli.len()));
         // replacing the previous value is expected here, do not warn about it
-        self.configuration.replace(new_cli);
+        self.configuration.insert::<StartupAppConfiguration>(|cfg| *cfg = new_cli.clone());
         self
     }
     fn set_ip(&mut self, cli: &StartupAppConfiguration) {

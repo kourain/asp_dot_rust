@@ -6,7 +6,7 @@ use crate::{
     http_listener::hyper_server,
     logging::LOGGER,
     middleware::{app_middlewares::ApplicationMiddlewares},
-    services::service_provider::service_provider_scope::ServiceProviderScope,
+    services::{configuration::ConfigurationService, service_provider::service_provider_scope::ServiceProviderScope},
 };
 
 pub struct Application {
@@ -32,14 +32,17 @@ impl Application {
         if self.http_port.is_empty() {
             self.http_port.insert(8080);
         }
-        self._middlewares.build_pipeline(&self.service_provider);
+        // load every configuration from its TOML file before anything resolves a configuration or a port is opened
+        self.service_provider.get_service::<ConfigurationService>().await.reload_all_async().await;
+        self._middlewares.build_pipeline(&self.service_provider).await;
         let mut hosted_services_app = std::mem::take(&mut self._hosted_services); // clear hosted services from app since we're moving them to the async block
         let app = Arc::new(self);
         // let mut hosted_services_app = Vec::new();
-        while let Some((name, mut service)) = hosted_services_app.pop() {
+        while let Some((name, service)) = hosted_services_app.pop() {
+            let app_clone = app.clone();
             tokio::spawn(async move {
                 LOGGER::info(format!("Starting background service: {}", name));
-                service.invoke_async().await
+                service(&app_clone.service_provider).await.invoke_async().await
             });
         }
         if let Err(e) = hyper_server(&app).await {

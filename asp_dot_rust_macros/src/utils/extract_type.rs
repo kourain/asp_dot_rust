@@ -14,7 +14,7 @@ pub fn get_exact_type(ty: &Type) -> &Type {
 }
 
 /// Extract inner type T from a single-generic-arg wrapper like `Serv<T>`,
-/// `Cfg<T>`, `CfgRequire<T>`, `CfgReload<T>` — matched by ident name only,
+/// `CfgOption<T>`, `CfgRequire<T>`, `CfgReload<T>` — matched by ident name only,
 /// so it works regardless of which crate path the wrapper was imported from.
 /// Shared between `#[inject]`/`#[controller_inject]` and
 /// `#[derive(DependencyInjectableService)]`.

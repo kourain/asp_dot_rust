@@ -1,6 +1,6 @@
 # Routing
 
-ASP.Rust matches incoming requests to controller actions using
+ASP.RS matches incoming requests to controller actions using
 [`matchit`](https://crates.io/crates/matchit), the same radix-tree router
 used by `axum` and `hyper`'s own examples. Routes are collected at startup
 into a `RoutingServiceBuilder`, then compiled once into an immutable
@@ -158,12 +158,11 @@ impl FilesController {
 - `#[max_body_size(5)]` reads `5` as a `usize`, a negative value or another type is a compile error. The long form `#[attr(max_body_size = ..)]` keeps the type you write (`5` is an `i32`), so write `5usize`: any other type makes the application panic at startup (so does an `ActionRoute` built by hand with `with_attribute("max_body_size", ..)` of another type).
 - The limit is chosen when the request is created. `http_context.request.max_body_size` tells the one in use.
 - A declared `Content-Length` over the limit is refused with 413, the body is not read.
-- `http_context.request.body` is a `Limited<Incoming>`: reading more than the limit (chunked body, or no declared length) fails with `http_body_util::LengthLimitError`. The action decides what to answer.
+- `http_context.request.body` is a `RequestBody` (`Stream(Limited<Incoming>)` or `Buffered`). Reading more than the limit from the stream fails with `LengthLimitError`. Call `enable_buffering` then `seek_body(0)` to read the body more than once (see `docs/model_binding.md`).
 - An unknown path or method uses the default limit.
 
 ## Known limitations
 
-- There is no automatic request-body or form binding yet (no
-  `FromBody`/`FromForm`/`FromQuery` helpers) — read
-  `http_context.request.body` directly in the action for now.
 - No route groups/areas beyond a single controller-level prefix.
+
+Model binding (`FromRoute` / `FromQuery` / `FromBody` / …) is documented in `docs/model_binding.md`.

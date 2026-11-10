@@ -1,12 +1,13 @@
 use std::{
-    any::{Any, TypeId, type_name},
+    any::{TypeId, type_name},
     collections::HashMap,
-    sync::{Arc, OnceLock},
+    sync::Arc,
 };
 
+use tokio::sync::OnceCell;
+
 use crate::{
-    dependency_injection::DependencyInjectableService,
-    services::service_provider::{ServiceInstance, ServiceType},
+    dependency_injection::{DependencyInjectableService, Serv}, services::service_provider::{ServiceInstance, ServiceInstanceType, ServiceType},
 };
 pub struct ServiceProviderScope {
     _inner_map: HashMap<TypeId, ServiceInstance>,
@@ -15,7 +16,7 @@ impl ServiceProviderScope {
     pub(crate) fn new() -> Self {
         Self { _inner_map: HashMap::new() }
     }
-    pub fn get_service<T>(&self) -> Arc<T>
+    pub async fn get_service<T>(&self) -> Serv<T>
     where
         T: DependencyInjectableService + Sized + Send + Sync + 'static,
     {
@@ -23,14 +24,21 @@ impl ServiceProviderScope {
         match self._inner_map.get(&type_id) {
             Some(instance) => match instance.service_type {
                 ServiceType::Singleton | ServiceType::Scope => {
-                    instance
+                    let arc_any = instance
                         .instance
-                        .get_or_init(|| Arc::new(T::inject(self)))
-                        .clone()
-                        .downcast::<T>()
-                        .expect("Type mismatch when downcasting service")
+                        .get_or_init(|| async {
+                            let mut sv = T::inject(self).await;
+                            sv.on_service_created().await;
+                            Serv(Arc::new(sv) as Arc<dyn std::any::Any + Send + Sync>)
+                        })
+                        .await;
+                    Serv::<T>::downcast(arc_any).expect("Type mismatch when downcasting service")
                 }
-                ServiceType::Transient => Arc::new(T::inject(self)),
+                ServiceType::Transient => {
+                    let mut sv = T::inject(self).await;
+                    sv.on_service_created().await;
+                    Serv(Arc::new(sv))
+                }
             },
             None => {
                 panic!("Service {} not found in scope", std::any::type_name::<T>());
@@ -46,52 +54,44 @@ impl ServiceProviderScope {
             panic!("Cann't add {type_name} to ServiceProviderScope as Transient")
         }
         let type_id = TypeId::of::<T>();
-        if self._inner_map.contains_key(&type_id) {
+        if self.contains_type_id(&type_id) {
             let type_name = type_name::<T>();
             panic!("{type_name} already exist in ServiceProviderScope")
         }
-        let instance: Arc<OnceLock<Arc<dyn Any + Send + Sync>>> = Arc::new(OnceLock::new());
-        _ = instance.set(service);
+        let instance: Arc<ServiceInstanceType> = Arc::new(OnceCell::new());
+        let _ = instance.set(Serv(service));
         self._inner_map.insert(type_id, ServiceInstance { service_type, instance });
+    }
+    fn add<T>(&mut self, service_type: ServiceType)
+    where
+        T: DependencyInjectableService + Send + Sync + 'static,
+    {
+        let type_id = TypeId::of::<T>();
+        self._inner_map.insert(
+            type_id,
+            ServiceInstance {
+                service_type,
+                instance: Arc::new(OnceCell::new()),
+            },
+        );
     }
     pub fn add_singleton<T>(&mut self)
     where
         T: DependencyInjectableService + Send + Sync + 'static,
     {
-        let type_id = TypeId::of::<T>();
-        self._inner_map.insert(
-            type_id,
-            ServiceInstance {
-                service_type: ServiceType::Singleton,
-                instance: Arc::new(OnceLock::new()),
-            },
-        );
+        self.add::<T>(ServiceType::Singleton);
     }
     pub fn add_scope<T>(&mut self)
     where
         T: DependencyInjectableService + Send + Sync + 'static,
     {
-        let type_id = TypeId::of::<T>();
-        self._inner_map.insert(
-            type_id,
-            ServiceInstance {
-                service_type: ServiceType::Scope,
-                instance: Arc::new(OnceLock::new()),
-            },
-        );
+        self.add::<T>(ServiceType::Scope);
     }
     pub fn add_transient<T>(&mut self)
     where
         T: DependencyInjectableService + Send + Sync + 'static,
     {
-        let type_id = TypeId::of::<T>();
-        self._inner_map.insert(
-            type_id,
-            ServiceInstance {
-                service_type: ServiceType::Transient,
-                instance: Arc::new(OnceLock::new()),
-            },
-        );
+        self.add::<T>(ServiceType::Transient);
     }
     pub fn create_scope(&self) -> ServiceProviderScope {
         ServiceProviderScope { _inner_map: self._inner_map.clone() }

@@ -1,3 +1,5 @@
 mod application_config;
 mod configuration_service;
-pub use configuration_service::ConfigurationService;
+#[allow(deprecated)]
+pub use configuration_service::{CfgEntry, CfgEntryAllowReloadFile, ConfigurationService};
+pub(crate) use configuration_service::EntryValue;

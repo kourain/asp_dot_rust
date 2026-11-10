@@ -1,6 +1,6 @@
 # Dependency Injection
 
-ASP.Rust ships a small, `TypeId`-based dependency injection (DI) container
+ASP.RS ships a small, `TypeId`-based dependency injection (DI) container
 inspired by ASP.NET Core's `IServiceCollection`. Services are registered on
 an `ApplicationBuilder` and resolved through a `ServiceProviderScope`, either
 directly or as constructor parameters of other injectable services and
@@ -98,7 +98,7 @@ resolved, or `get_service` panics with `Service <name> not found in scope`.
 ### Shortcut: `#[derive(DependencyInjectableService)]`
 
 When every dependency a service needs is already a plain struct field typed
-`Serv<T>`, `Cfg<T>`, `CfgRequire<T>`, or `CfgReload<T>`, `fn new` can be
+`Serv<T>`, `CfgOption<T>`, `CfgRequire<T>`, or `CfgReload<T>`, `fn new` can be
 skipped entirely:
 
 ```rust
@@ -123,7 +123,7 @@ This fallback is never silent: every unmarked field defaulted this way emits
 a compiler **warning** (via the `deprecated` lint) pointing at the field:
 
 ```text
-warning: use of deprecated function `Ex2Service::__di_default_field_marker_Ex2Service_1`: field `note` on `Ex2Service` is not Serv<T>, Cfg<T>, CfgRequire<T>, or CfgReload<T>; #[derive(DependencyInjectableService)] defaulted it via `Default::default()`. Mark it `#[di(default)]` if that is intended, or use #[inject] on a hand-written `fn new` if this field needs real construction.
+warning: use of deprecated function `Ex2Service::__di_default_field_marker_Ex2Service_1`: field `note` on `Ex2Service` is not Serv<T>, CfgOption<T>, CfgRequire<T>, or CfgReload<T>; #[derive(DependencyInjectableService)] defaulted it via `Default::default()`. Mark it `#[di(default)]` if that is intended, or use #[inject] on a hand-written `fn new` if this field needs real construction.
 ```
 
 Treat that warning as a prompt to double-check the field is intentionally
@@ -151,7 +151,7 @@ Misuse of the attribute is a compile error rather than a silent no-op:
 | Written | Result |
 | --- | --- |
 | `#[di(default)]` on a non-wrapper field | defaulted, no warning |
-| `#[di(default)]` on `Serv<T>` / `Cfg<T>` / `CfgRequire<T>` / `CfgReload<T>` | **error** — it would replace a real dependency with `Default::default()` |
+| `#[di(default)]` on `Serv<T>` / `CfgOption<T>` / `CfgRequire<T>` / `CfgReload<T>` | **error** — it would replace a real dependency with `Default::default()` |
 | `#[di]` or `#[di()]` | **error** — the option is missing |
 | `#[di(defualt)]` and other unknown options | **error** — unknown `di` option |
 
@@ -169,36 +169,37 @@ missing configuration should be handled:
 
 | Wrapper | Resolves via | If never registered |
 | ------- | ------------- | -------------------- |
-| `Cfg<T>` | `ConfigurationService::get::<T>()` | `Cfg(None)` |
-| `CfgRequire<T>` | `ConfigurationService::require::<T>()` | panics |
-| `CfgReload<T>` | `ConfigurationService::get_reload::<T>()` | panics (only valid if `T` was bound with `configure_reload::<T>()`) |
+| `CfgOption<T>` (`Cfg<T>`, deprecated) | `ConfigurationService::get::<T>().capture()` | no value (`has_value()` is `false`) |
+| `CfgRequire<T>` | `ConfigurationService::get::<T>().capture().unwrap()` | panics |
+| `CfgReload<T>` | `ConfigurationService::get::<T>()` | a handle without a value |
 
 ```rust
-use asp_dot_rust::dependency_injection::{Cfg, CfgRequire};
+use asp_dot_rust::dependency_injection::{CfgOption, CfgRequire};
 
 #[inject]
 impl Ex2Service {
-    pub fn new(config: Cfg<AuditConfiguration>) -> Self {
-        Ex2Service { enabled: config.0.map(|c| c.enabled).unwrap_or(false) }
+    pub fn new(config: CfgOption<AuditConfiguration>) -> Self {
+        Ex2Service { enabled: config.has_value() && config.unwrap().enabled }
     }
 
     // or, if the service cannot function without this configuration:
     pub fn new_strict(config: CfgRequire<AuditConfiguration>) -> Self {
-        Ex2Service { enabled: config.0.enabled }
+        Ex2Service { enabled: config.enabled }
     }
 }
 ```
 
-`CfgReload<T>` gives a `Serv`/`Cfg`-style wrapper around `Arc<ArcSwap<T>>`,
-for configuration that can change while the application is running (see
-[`appsettings.md`](./appsettings.md) for `configure::<T>()` /
-`reload_all()`).
+`CfgReload<T>` is a handle that follows the configuration while the
+application is running, `capture()` gives the value now. `CfgOption<T>` and
+`CfgRequire<T>` are values captured when the service is built (see
+[`appsettings.md`](./appsettings.md) for `configure::<T>()` and
+`reload_all_async()`).
 
 ## Injecting into a controller
 
 Controllers use `#[controller_inject]` instead of `#[inject]`
 and must take an `HttpContextRef` as one of their parameters, in addition to
-any `Serv<T>` service or `Cfg<T>`/`CfgRequire<T>`/`CfgReload<T>` configuration
+any `Serv<T>` service or `CfgOption<T>`/`CfgRequire<T>`/`CfgReload<T>` configuration
 parameters:
 
 ```rust
@@ -249,10 +250,10 @@ runtime.
 - Only a single implementation per concrete type is supported. Registering
   multiple implementations of the same trait behind `Arc<dyn Trait>` is not
   built in and requires a manual wrapper service.
-- `fn new` parameters must be one of `Serv<T>`, `Cfg<T>`, `CfgRequire<T>`,
+- `fn new` parameters must be one of `Serv<T>`, `CfgOption<T>`, `CfgRequire<T>`,
   `CfgReload<T>` (or `HttpContextRef` for controllers). Bare `Arc<T>` /
   `Option<Arc<T>>` parameters are **no longer recognized** as of 0.2.1 —
-  use `Serv<T>` / `Cfg<T>` instead.
+  use `Serv<T>` / `CfgOption<T>` instead.
 
 ## API summary
 
