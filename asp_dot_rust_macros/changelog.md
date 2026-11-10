@@ -4,6 +4,10 @@
 
 - `#[controller_route]` add model binding for action parameters: `FromRoute<T>`, `FromQuery<T>`, `FromOptionQuery<T>`, `FromBody<T>`, and `FromForm<T>`.
 - Refactor route attribute parsing with reusable `some_or_error!` and `ok_or_error!` macros to reduce repeated parsing and error-handling branches.
+- `#[derive(DependencyInjectableService)]`, `#[inject]` and `#[middleware]` generate `async fn inject` (with `async_trait` from `asp_dot_rust::third_party`) and resolve `Serv<T>` with `get_service::<T>().await`.
+- The generated code injects `CfgReload<T>` with `get::<T>()`, `CfgOption<T>` with `get::<T>().capture()` and `CfgRequire<T>` with `get::<T>().capture().unwrap()`, it does not call a tuple constructor of the wrapper any more.
+- `CfgOption<T>` is recognised as a parameter or field type besides the deprecated `Cfg<T>`.
+- Needs `asp_dot_rust` 0.2.10.
 
 ## 0.2.7
 

@@ -6,23 +6,43 @@
 
 - Model binding: action parameters `FromRoute<T>`, `FromQuery<T>`, `FromOptionQuery<T>`, `FromBody<T>`, `FromForm<T>` are resolved by the `#[controller_route]` macro (argument name = key). Route miss/parse → 404; query/body/form miss/parse or Content-Type mismatch → 422. At most one `FromBody` or `FromForm` per action. `String` body is raw UTF-8; other types use serde. See `docs/model_binding.md`.
 - Request body buffering: `HttpRequest::enable_buffering` loads the body into memory; `seek_body(0)` rewinds for another read (ASP.NET EnableBuffering). `request.body` is `RequestBody` (`Stream` | `Buffered`).
-- Dependencies: `serde_json` 1.0.154, `quick-xml` 0.42.0 (`serialize`), `serde_urlencoded` 0.7.1.
-
-### 0.2.10 Fix
-
-- Fixed: `Cfg::unwrap`, `Cfg::expect` and `CfgRequire::unwrap` were missing, `RequestTimeoutMiddleware` and `StartupAppConfiguration` did not compile.
+- Async dependency injection: `DependencyInjectableService::inject` is `async` and has an `on_service_created` hook that runs after the service is created, `ServiceProviderScope::get_service::<T>()` is `async` and returns `Serv<T>`. The middleware pipeline and the hosted services are built when the application runs, `#[derive(DependencyInjectableService)]`, `#[inject]` and `#[middleware]` generate the async code.
+- Every configuration is reloadable (the `draft/reloadable_cfg` design): `ConfigurationService` has `add_toml_file(path, watch_file_change)`, `configure::<T>(key)`, `configure_entry::<T>(key, allow_file)`, `insert::<T>(|cfg| ...)` and `get::<T>()` that returns a `CfgReload<T>`.
+- `configure::<T>()` reads nothing, the value is empty until `ConfigurationService::reload_all_async()` runs, `Application::run` calls it before the middleware pipeline is built and a port is opened.
+- TOML files are watched by default by `ConfigurationWatcherBackgroundService`, which `ApplicationBuilder::build()` adds. It watches the folder of each file, so a file replaced by an editor or created later is reloaded too, and it waits 2 seconds after the last change. Only the entries that are allowed to follow the file are updated.
+- `CfgEntryAllowReloadFile` (`NotAllowed`, `Allowed`, `AllowedRegexPattern`, `AllowedAll`) tells which files may update an entry, `configure::<T>()` uses `AllowedAll`.
+- A file that cannot be read or parsed, a section that does not match the type and a section that is not in the file keep the current values, the first two are logged as a warning.
+- `CfgReload<T>::capture()` gives the value now as a `CfgOption<T>`, `CfgOption<T>` has `has_value()`, `unwrap()` (returns `CfgRequire<T>`, panics when there is no value) and `unwrap_or_default()`.
+- The injection macros inject `CfgReload<T>` with `get::<T>()`, `CfgOption<T>` with `get::<T>().capture()` and `CfgRequire<T>` with `get::<T>().capture().unwrap()`.
+- `asp_dot_rust::third_party` re-exports `tokio`, `toml` and `async_trait` for the generated code.
+- Dependencies: `serde_json` 1.0.154, `quick-xml` 0.42.0 (`serialize`), `serde_urlencoded` 0.7.1, `notify` 8.2.1 and `notify-debouncer-full` 0.7.0 (file watcher), `regex` 1.13.1 (`AllowedRegexPattern`); updated `arc-swap` 1.9.4, `toml` 1.2.1, `uuid` 1.29.1.
 
 ### 0.2.10 Change
 
 | old | new | why |
 | --- | --- | --- |
 | body limit only inside `Limited` | `HttpRequest::max_body_size` on the request | so the action can read the limit in use for that request |
+| `Cfg<T>` | `CfgOption<T>` | `Cfg<T>` is a deprecated alias of `CfgOption<T>` and will be removed |
+| `add_toml_cfg(path)` and `add_optional_toml_cfg(path)` | `add_toml_file(path, watch_file_change)` | nothing is read until `reload_all_async()`, a file that is missing or not valid TOML is skipped and logged instead of a panic |
+| `insert::<T>(value)` | `insert::<T>(\|cfg\| ...)` | `T: Default`, the closure changes the default value |
+| `add_custom_configuration(impl FnOnce(&mut T))` | `add_custom_configuration(impl Fn(&mut T))` | the closure is the one `insert` takes |
+| several files with the same section: unspecified which one wins | the file added last wins | deterministic |
+| `Cfg::unwrap()` returned `Arc<T>` and `CfgRequire::unwrap()` existed | `CfgOption::unwrap()` returns `CfgRequire<T>`, `CfgRequire::unwrap()` is removed | `CfgRequire<T>` derefs to `Arc<T>`, the fields of `T` are used directly |
+| `ApplicationHostedService` held `Box<dyn BackGroundService>` | `ApplicationHostedService` holds a `HostedServiceFactory` | the service is created when the application runs |
+| `asp_dot_rust::__async_trait` (hidden) | `asp_dot_rust::third_party::async_trait` | `third_party` also has `tokio` and `toml` |
 
 ### 0.2.10 Breaking Change
 
 | old | new | why |
 | --- | --- | --- |
 | `HttpRequest::body: Limited<Incoming>` | `HttpRequest::body: RequestBody` (`Stream` \| `Buffered`) | allow buffering and `seek_body(0)` so the body can be read more than once |
+| `DependencyInjectableService::inject(scope) -> Self` | `async fn inject(scope) -> Self` and `on_service_created` | a service can await while it is created, implement it with `third_party::async_trait` |
+| `ServiceProviderScope::get_service::<T>() -> Arc<T>` | `async get_service::<T>() -> Serv<T>` | needs `.await`, `Serv<T>` derefs to `Arc<T>` |
+| the tuple field of `Serv`, `Cfg`, `CfgRequire` and `CfgReload` is public | the field is `pub(crate)` | use the `Deref`, `unwrap()` or `capture()` |
+| `ConfigurationService::get::<T>() -> Option<Arc<T>>`, `require::<T>()` and `get_reload::<T>()` | `get::<T>() -> CfgReload<T>` | the only getter, use `.capture()` or `.capture().unwrap()` |
+| `configure::<T>(section)` parsed the section at once and panicked when it was missing | `configure::<T>(key)` reads nothing, the value is empty until `reload_all_async()` | a missing section leaves the configuration without a value, check `has_value()` |
+| `configure_optional`, `configure_reload` and `reload_all()` | removed | `configure::<T>()` is reloadable and `reload_all_async()` reads every file |
+| `CfgReload<T>` held `Arc<ArcSwap<T>>` | `CfgReload<T>` is a handle with `capture()` | its value is empty until the configuration is loaded |
 
 ## 0.2.9
 
