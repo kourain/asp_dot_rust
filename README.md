@@ -1,4 +1,4 @@
-# ASP.Rust
+# ASP.RS
 
 Hard code a minimal framework, style base on ASP.NET (C#)
 
@@ -26,7 +26,7 @@ Not available yet
 
 ## Dependency Injection
 
-ASP.Rust includes a lightweight, `TypeId`-based dependency injection container inspired by ASP.NET Core's `IServiceCollection`.
+ASP.RS includes a lightweight, `TypeId`-based dependency injection container inspired by ASP.NET Core's `IServiceCollection`.
 
 Three lifetimes are supported — `add_singleton`,`add_scope`, and `add_transient` — and circular dependencies between services are detected automatically when the application is built, in every build profile (will be optional in future).
 

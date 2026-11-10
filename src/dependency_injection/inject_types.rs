@@ -1,79 +1,9 @@
-use arc_swap::ArcSwap;
-use std::{any::Any, ops::Deref, sync::Arc};
+use std::{ops::Deref, sync::Arc};
+
+use crate::services::configuration::EntryValue;
+
 macro_rules! define_service_wrapper {
     () => {};
-
-    // Option<Arc>
-    (
-        $(#[$meta:meta])*
-        $vis:vis struct $name:ident ( Option<Arc> );
-        $($rest:tt)*
-    ) => {
-        $(#[$meta])*
-        #[repr(transparent)]
-        $vis struct $name<T: ?Sized>(pub(crate) ::std::option::Option<::std::sync::Arc<T>>);
-
-        impl<T: ?Sized> ::std::ops::Deref for $name<T> {
-            type Target = ::std::option::Option<::std::sync::Arc<T>>;
-
-            #[inline]
-            fn deref(&self) -> &Self::Target {
-                &self.0
-            }
-        }
-
-        impl<T: ?Sized> ::std::clone::Clone for $name<T> {
-            #[inline]
-            fn clone(&self) -> Self {
-                $name(self.0.clone())
-            }
-        }
-
-        impl<T: ?Sized> ::std::default::Default for $name<T> {
-            #[inline]
-            fn default() -> Self {
-                $name(::std::option::Option::None)
-            }
-        }
-
-        impl<T> $name<T> {
-            pub fn downcast(
-                value: &$name<dyn ::std::any::Any + ::std::marker::Send + ::std::marker::Sync + 'static>,
-            ) -> ::std::result::Result<
-                $name<T>,
-                ::std::option::Option<::std::sync::Arc<dyn ::std::any::Any + ::std::marker::Send + ::std::marker::Sync>>,
-            >
-            where
-                T: ::std::marker::Send + ::std::marker::Sync + 'static,
-            {
-                match &value.0 {
-                    ::std::option::Option::Some(arc) => {
-                        arc.clone()
-                            .downcast::<T>()
-                            .map(|val| $name(::std::option::Option::Some(val)))
-                            .map_err(::std::option::Option::Some)
-                    }
-                    ::std::option::Option::None => ::std::result::Result::Ok($name(::std::option::Option::None)),
-                }
-            }
-            /// the configuration, panics if it was never registered
-            pub fn unwrap(self) -> Arc<T> {
-                self.0.expect("configuration was never registered")
-            }
-            /// the configuration, panics with `message` if it was never registered
-            pub fn expect(self, message: &str) -> Arc<T> {
-                self.0.expect(message)
-            }
-            pub fn unwrap_or_default(self) -> Arc<T>
-            where
-                T: Default,
-            {
-                self.0.unwrap_or_default()
-            }
-        }
-
-        define_service_wrapper!($($rest)*);
-    };
 
     // Arc
     (
@@ -138,61 +68,81 @@ define_service_wrapper!(
     /// construct `Serv(...)` from generated code in the caller's crate; prefer
     /// `.unwrap()` (or the `Deref` to `Arc<T>`) over reaching into `.0` directly.
     pub struct Serv(Arc);
-
-    /// Optional configuration: resolves to `None` if the type was never
-    /// registered in `ConfigurationService`.
-    ///
-    /// The tuple field is `pub` only so the `#[inject]` macro can
-    /// construct `Cfg(...)` from generated code in the caller's crate; prefer
-    /// `.unwrap()` over reaching into `.0` directly.
-    pub struct Cfg(Option<Arc>);
-
-    /// Required configuration: panics at construction time if the type was never
-    /// registered in `ConfigurationService`.
-    ///
-    /// The tuple field is `pub` only so the `#[inject]` macro can
-    /// construct `CfgRequire(...)` from generated code in the caller's crate;
-    /// prefer `.unwrap()` over reaching into `.0` directly.
-    pub struct CfgRequire(Arc);
 );
 
-/// Hot-reloadable configuration: the inner `ArcSwap<T>` is updated in place
-/// whenever `ConfigurationService::reload_all()` re-reads the TOML file(s)
-/// this section was bound from via `configure_reload::<T>()`.
-///
-/// The tuple field is `pub` only so the `#[inject]` macro can
-/// construct `CfgReload(...)` from generated code in the caller's crate;
-/// prefer `.unwrap()` over reaching into `.0` directly.
-pub struct CfgReload<T>(pub(crate) Arc<ArcSwap<T>>);
+/// Handle of a configuration, it follows every reload of the configuration.
+/// Use `capture` to get the value at this moment.
+#[derive(Default)]
+pub struct CfgReload<T>(pub(crate) EntryValue<T>);
 
-impl<T> Deref for CfgReload<T> {
-    type Target = ArcSwap<T>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl<T> CfgReload<T> {
+    pub fn capture(&self) -> CfgOption<T> {
+        CfgOption(self.0.load_full())
     }
 }
 
 impl<T> Clone for CfgReload<T> {
-    #[inline]
     fn clone(&self) -> Self {
         CfgReload(self.0.clone())
     }
 }
 
-impl<T: Default> Default for CfgReload<T> {
-    #[inline]
-    fn default() -> Self {
-        CfgReload(Arc::new(ArcSwap::from_pointee(T::default())))
+/// Value of a configuration at the moment it was captured, it has no value if the configuration is not registered,
+/// its section is missing or it is not loaded yet. It does not change when the configuration is reloaded.
+///
+/// `Cfg<T>` will be removed, use `CfgOption<T>`.
+#[deprecated(note = "Cfg<T> will be removed, use CfgOption<T> instead")]
+pub type Cfg<T> = CfgOption<T>;
+
+#[derive(Default)]
+pub struct CfgOption<T>(pub(crate) Option<Arc<T>>);
+
+impl<T> CfgOption<T> {
+    /// `true` if the configuration has a value
+    pub fn has_value(&self) -> bool {
+        self.0.is_some()
+    }
+
+    /// the value, **panics** if there is none (check `has_value` first if that is possible)
+    pub fn unwrap(self) -> CfgRequire<T> {
+        match self.0 {
+            Some(arc) => CfgRequire(arc),
+            None => panic!("Configuration of type {} has no value: its section is missing or it was not loaded yet", std::any::type_name::<T>()),
+        }
     }
 }
 
-impl<T> CfgReload<T> {
-    pub fn downcast(value: &Arc<dyn Any + Send + Sync + 'static>) -> Result<CfgReload<T>, Arc<dyn Any + Send + Sync + 'static>>
-    where
-        T: Send + Sync + 'static,
-    {
-        value.clone().downcast::<ArcSwap<T>>().map(CfgReload)
+impl<T: Default> CfgOption<T> {
+    pub fn unwrap_or_default(&self) -> CfgRequire<T> {
+        CfgRequire(self.0.as_ref().map(|arc| arc.clone()).unwrap_or_else(|| Arc::new(T::default())))
+    }
+}
+
+impl<T> Deref for CfgOption<T> {
+    type Target = Option<Arc<T>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> Clone for CfgOption<T> {
+    fn clone(&self) -> Self {
+        CfgOption(self.0.clone())
+    }
+}
+
+/// Value of a configuration that must have one.
+pub struct CfgRequire<T>(pub(crate) Arc<T>);
+
+impl<T> Deref for CfgRequire<T> {
+    type Target = Arc<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> Clone for CfgRequire<T> {
+    fn clone(&self) -> Self {
+        CfgRequire(self.0.clone())
     }
 }

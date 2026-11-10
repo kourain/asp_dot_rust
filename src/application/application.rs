@@ -6,7 +6,7 @@ use crate::{
     http_listener::hyper_server,
     logging::LOGGER,
     middleware::{app_middlewares::ApplicationMiddlewares},
-    services::service_provider::service_provider_scope::ServiceProviderScope,
+    services::{configuration::ConfigurationService, service_provider::service_provider_scope::ServiceProviderScope},
 };
 
 pub struct Application {
@@ -32,6 +32,8 @@ impl Application {
         if self.http_port.is_empty() {
             self.http_port.insert(8080);
         }
+        // load every configuration from its TOML file before anything resolves a configuration or a port is opened
+        self.service_provider.get_service::<ConfigurationService>().await.reload_all_async().await;
         self._middlewares.build_pipeline(&self.service_provider).await;
         let mut hosted_services_app = std::mem::take(&mut self._hosted_services); // clear hosted services from app since we're moving them to the async block
         let app = Arc::new(self);

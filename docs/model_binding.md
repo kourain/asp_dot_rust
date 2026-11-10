@@ -78,7 +78,7 @@ impl UsersController {
 
 ## Body buffering (multiple reads)
 
-`hyper` delivers the body as a one-shot stream. ASP.Rust can buffer it in memory, like ASP.NET `HttpRequest.EnableBuffering`:
+`hyper` delivers the body as a one-shot stream. ASP.RS can buffer it in memory, like ASP.NET `HttpRequest.EnableBuffering`:
 
 ```rust
 self.http_context.request.enable_buffering().await.unwrap();

@@ -1,19 +1,17 @@
 # App Settings (TOML Configuration)
 
-ASP.Rust supports loading typed configuration sections from TOML files
-through `ConfigurationService`, inspired by ASP.NET Core's
-`appsettings.json` + `IOptions<T>` pattern. A TOML file is parsed into raw
-tables first, then individual top-level sections are bound into strongly
-typed Rust structs on demand via `serde`.
+ASP.RS loads typed configuration sections from TOML files through `ConfigurationService`, inspired by ASP.NET Core's `appsettings.json` + `IOptions<T>` pattern. Every configuration is an entry of `ConfigurationService`, the entry is bound to a top-level TOML section and is updated again when the file changes.
 
 ## Core concepts
 
-| Concept | Type | Purpose |
-| ------- | ---- | ------- |
-| Raw file store | `ConfigurationService::add_toml_cfg` | Reads and parses a TOML file into a `toml::Table`, keyed internally by its path. Can be called multiple times to load several files. |
-| Section binding | `ConfigurationService::configure::<T>(section)` | Looks up a top-level table named `section` across every loaded file, deserializes it into `T`, and registers `T` in the same `ConfigurationService` used for regular configuration objects. |
-| Typed config object | any `T: DeserializeOwned + Default + Debug + Clone + Send + Sync + 'static` | The Rust struct a section is bound to, e.g. `RateLimitConfiguration`, `JwtAuthConfiguration`, or an app-defined type. |
-| Consumption | `ConfigurationService::get::<T>()` or `Cfg<T>` constructor parameter | Same retrieval path already used for configuration registered with `insert::<T>()` — see `docs/dependency_injection.md`. |
+| Concept | API | Purpose |
+| ------- | --- | ------- |
+| File | `add_toml_file(path, watch_file_change)` | Adds a TOML file. Nothing is read yet. `watch_file_change` tells if a change of the file reloads the configuration. |
+| Entry | `configure::<T>(key)` | Binds the top-level table `key` to `T`. The entry has no value until a file loads it. |
+| Entry with a policy | `configure_entry::<T>(key, allow_file)` | Same as `configure`, `allow_file` tells which files may update the entry. |
+| Static entry | `insert::<T>(\|cfg\| ...)` | Builds `T` from `T::default()` and the closure, no file changes it. |
+| Load | `reload_all_async()` | Reads every file and updates every entry. `Application::run` calls it before it builds the middleware pipeline and opens a port. |
+| Get | `get::<T>() -> CfgReload<T>` | The only way to get a configuration, see below. |
 
 ## Loading a TOML file and binding a section
 
@@ -38,114 +36,84 @@ let mut builder = ApplicationBuilder::new("MyApp");
 
 builder
     .configuration
-    .add_toml_cfg("appsettings.toml")
+    .add_toml_file("appsettings.toml", true)
     .configure::<RateLimitConfiguration>("rate_limit")
     .configure::<JwtAuthConfiguration>("jwt");
 
-let rate_limit = builder.configuration.get::<RateLimitConfiguration>().unwrap();
+// `Application::run` does this before it opens a port, call it yourself to read a value earlier
+builder.configuration.reload_all_async().await;
+
+let rate_limit = builder.configuration.get::<RateLimitConfiguration>().capture().unwrap();
 assert_eq!(rate_limit.max_requests, 100);
 ```
 
-`add_toml_cfg` and `configure` both return `&mut Self`, so calls can be
-chained the same way `service.add_singleton::<T>()` calls are chained.
+`add_toml_file`, `configure`, `configure_entry` and `insert` return `&mut Self`, so calls can be chained. The order of `add_toml_file` and `configure` does not matter because nothing is read until `reload_all_async`. `./appsettings.toml` is added by `ApplicationBuilder::new`.
 
-## Binding an app-defined section
+Any type that implements `Deserialize + Send + Sync + 'static` can be bound, it does not need to be one of the framework's built-in configuration types.
 
-Any type that implements `Deserialize`, `Default`, `Debug`, `Clone`, `Send`
-and `Sync` can be used as a section target — it does not need to be one of
-the framework's built-in configuration types:
+## Get a configuration
 
-```rust
-use serde::Deserialize;
+`ConfigurationService::get::<T>()` returns a `CfgReload<T>`, a handle that follows every reload of the configuration. The other wrappers are made from it:
 
-#[derive(Debug, Default, Clone, Deserialize)]
-pub struct AppSettings {
-    pub app_name: String,
-    #[serde(default)]
-    pub max_connections: u32,
-}
-```
+| Type | Made by | No value |
+| ---- | ------- | -------- |
+| `CfgReload<T>` | `get::<T>()` | the handle stays, its value is empty |
+| `CfgOption<T>` (`Cfg<T>`, deprecated) | `get::<T>().capture()` | `has_value()` is `false` |
+| `CfgRequire<T>` | `get::<T>().capture().unwrap()` | `unwrap()` panics |
 
-```rust
-builder.configuration.add_toml_cfg("app_settings.toml");
-builder.configuration.configure::<AppSettings>("app_setting");
+- `CfgOption<T>` is the value at the moment of `capture()`, it does not change when the file is reloaded. It has `has_value()`, `unwrap()` (panics when there is no value) and `unwrap_or_default()`, and it derefs to `Option<Arc<T>>`.
+- `CfgRequire<T>` derefs to `Arc<T>`, so the fields of `T` are used directly.
+- `Cfg<T>` is the old name of `CfgOption<T>`, it is deprecated and the struct will be renamed to `CfgOption<T>`.
+- A configuration has no value when it is not registered, its section is missing in every file, or it is not loaded yet.
 
-let settings = builder.configuration.get::<AppSettings>().unwrap();
-```
-
-## Loading the default `appsettings`
-
-`load_main_toml()` is a shortcut that loads a fixed, hard-coded path:
-It auto call when ApplicationBuilder creating
-
-- default: appsettings.toml
-- env: custom by env `ASP_RS_ENVIRONMENT=dev` or startup args `--env=dev`
-=> load appsettings.dev.toml
-
-## Consuming configuration in an injectable service
-
-Once a section has been bound with `configure::<T>()`, it is retrievable
-through the same `Cfg<T>` constructor-parameter mechanism documented
-in `docs/dependency_injection.md`:
+The injection macros (`#[inject]`, `#[derive(DependencyInjectableService)]` and `#[middleware]`) generate this code for parameters and fields of the three types, see [`dependency_injection.md`](./dependency_injection.md).
 
 ```rust
-use asp_dot_rust::dependency_injection::Cfg;
-use asp_dot_rust::macros::inject;
-
-pub struct RateLimiterService {
-    config: RateLimitConfiguration,
-}
+use asp_dot_rust::dependency_injection::{CfgOption, CfgReload};
 
 #[inject]
 impl RateLimiterService {
-    pub fn new(config: Cfg<RateLimitConfiguration>) -> Self {
-        Self { config: config.0.map(|c| (*c).clone()).unwrap_or_default() }
+    pub fn new(snapshot: CfgOption<RateLimitConfiguration>, live: CfgReload<RateLimitConfiguration>) -> Self {
+        Self { snapshot, live }
     }
 }
+// later, on every request: the value of the file right now
+// let max = self.live.capture().unwrap().max_requests;
 ```
 
-## Missing sections and missing files
+Services are built after `Application::run` loaded the configuration, so a `CfgOption<T>` has its value there. A service built before the load (for example resolved from the builder) holds a `CfgOption<T>` without a value, its `CfgReload<T>` gets the value once the configuration is loaded.
 
-- If a section key is not present in any loaded file, `configure::<T>()`
-  registers `T::default()` instead of panicking.
-- If the file passed to `add_toml_cfg` cannot be read (e.g. it does not
-  exist), the call panics immediately with `Failed to read configuration
-  file <path>`. Use `add_optional_toml_cfg` instead when a missing file
-  should be tolerated: it only logs a warning and does not add a table for
-  that path, and a subsequent `configure::<T>()` call then falls back to
-  `T::default()` for any section that was only expected to come from that
-  file.
-- If a file *is* found but is not valid TOML, both `add_toml_cfg` and
-  `add_optional_toml_cfg` panic immediately with `Failed to parse <path>
-  file <error>` — "optional" only tolerates a missing file, not a
-  malformed one.
-- If a section *is* found but does not deserialize into `T`, `configure::<T>()`
-  panics with `Failed to parse [<section>] of toml <path> as <type name>`.
+## Hot reload
 
-## Known limitations (What not work)
+Every `add_toml_file(path, true)` file is watched by `ConfigurationWatcherBackgroundService`, which `ApplicationBuilder::build()` adds to the application. When a file changes it is read again and every entry that is allowed to follow it is updated.
 
-- When the same section name exists in more than one file loaded via
-  `add_toml_cfg`, `configure::<T>()` iterates the internal file map in
-  unspecified order, so which file "wins" is not guaranteed and is not
-  documented as deterministic.
-- `configure::<T>()` requires `T: Default`; a section type with no sensible
-  default value must still provide one (e.g. via `#[derive(Default)]` or a
-  manual `impl`).
-- There is no environment-variable override layer and no support for
-  nested/segmented section paths (e.g. ASP.NET Core's `"Section:SubSection"`
-  syntax) — only flat, top-level TOML tables can be bound.
-- There is currently no hot-reload: files are parsed once when
-  `add_toml_cfg` is called, and `configure::<T>()` must be called again
-  manually to react to any change.
+- The folder of each file is watched, so a file replaced by an editor (write a temp file, then rename) or created later is still seen. Events are collected for 2 seconds before the reload.
+- A file added with `watch_file_change = false` is read by `reload_all_async()` only.
+- `configure_entry::<T>(key, allow_file)` limits the files that update an entry: `NotAllowed` (never from a file), `Allowed(vec!["appsettings.toml"])` (the path ends with the name), `AllowedRegexPattern(regex)` (matched on the full path) or `AllowedAll` (what `configure` uses).
+- A section that is not in the file keeps the current value. A file that cannot be read or parsed, or a section that does not match `T`, is logged and the current values are kept.
+- A file is applied entry by entry: when several files have the same section, the one read last wins, `reload_all_async()` reads the files in the order they were added.
+- An entry made by `insert::<T>()` is never changed by a file.
+
+## Missing files and sections
+
+- A file that does not exist is skipped (it is read when it is created later), nothing panics. A file that is not valid TOML is logged and skipped.
+- A section that is not in any file leaves the configuration without a value, use `has_value()` or `unwrap_or_default()`.
+- A section that does not deserialize into `T` is logged as `Failed to parse [<key>] as <type name>` and the configuration keeps its current value (no value at the first load).
+
+## Known limitations
+
+- There is no environment-variable override layer and no support for nested section paths (e.g. `"Section:SubSection"`), only top-level TOML tables can be bound.
 
 ## API summary
 
 | Method | On | Description |
 | ------ | -- | ----------- |
-| `add_toml_cfg(path)` | `ConfigurationService` | Read and parse a TOML file, storing it under `path`. Panics if the file cannot be read, and panics if it exists but fails to parse. |
-| `add_optional_toml_cfg(path)` | `ConfigurationService` | Same as `add_toml_cfg`, except a file that cannot be read is only logged as a warning (no panic, no table added for that path); an existing-but-malformed file still panics. |
-| `load_main_toml()` | `ConfigurationService` | Shortcut for `add_toml_cfg("./appsettings.toml")`. |
-| `configure::<T>(section)` | `ConfigurationService` | Deserialize the `section` table from every loaded file into `T` and register it (falls back to `T::default()` if the section is absent anywhere). Panics if the section exists but does not match `T`. |
-| `insert::<T>(config)` | `ConfigurationService` | Register a configuration value directly, bypassing TOML. Logs a warning if `T` was already registered. |
-| `get::<T>()` | `ConfigurationService` | Retrieve a previously registered configuration value, whether it came from `insert` or `configure`. Returns `None` if `T` was never registered. |
-| `contains::<T>()` | `ConfigurationService` | Check whether a configuration value of type `T` is registered. |
+| `add_toml_file(path, watch_file_change)` | `ConfigurationService` | Add a TOML file, nothing is read. |
+| `configure::<T>(key)` | `ConfigurationService` | Bind `key` to `T`, updated from any file. |
+| `configure_entry::<T>(key, allow_file)` | `ConfigurationService` | Same as `configure`, with a `CfgEntryAllowReloadFile` policy. |
+| `insert::<T>(custom)` | `ConfigurationService` | Static entry made from `T::default()` and `custom`, replaces an existing one. |
+| `contains::<T>()` | `ConfigurationService` | Check whether `T` is registered, it may still have no value. |
+| `get::<T>()` | `ConfigurationService` | The `CfgReload<T>` handle, empty if `T` is not registered. |
+| `reload_all_async()` | `ConfigurationService` | Read every file and update every entry. |
+| `capture()` | `CfgReload<T>` | The `CfgOption<T>` value now. |
+| `has_value()` / `unwrap()` / `unwrap_or_default()` | `CfgOption<T>` | Check / get the `CfgRequire<T>`, panics without a value / get it or `T::default()`. |

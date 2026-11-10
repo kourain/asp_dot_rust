@@ -17,7 +17,9 @@ pub mod prelude {
         ActionResult, BindError, FromBody, FromForm, FromOptionQuery, FromQuery, FromRoute,
         controller_inject, controller_route, delete, get, head, options, patch, post, put, route,
     };
-    pub use crate::dependency_injection::{Cfg, CfgReload, CfgRequire, Serv};
+    #[allow(deprecated)]
+    pub use crate::dependency_injection::Cfg;
+    pub use crate::dependency_injection::{CfgOption, CfgReload, CfgRequire, Serv};
     pub use crate::http_context::{HttpContext, HttpContextRef};
     pub use crate::middleware::Middleware;
     pub use crate::services::app_queue::AppQueueService;

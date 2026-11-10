@@ -1,6 +1,6 @@
 # Command-Line Arguments (`StartupAppConfiguration`)
 
-ASP.Rust automatically parses `std::env::args()` on every application start,
+ASP.RS automatically parses `std::env::args()` on every application start,
 similar in spirit to ASP.NET Core's command-line configuration provider. The
 raw process arguments are turned into a flat `key -> value` map
 (`StartupAppConfiguration`) that is:

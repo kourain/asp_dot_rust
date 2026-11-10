@@ -2,7 +2,7 @@ use std::{collections::HashSet, net::IpAddr, sync::Arc};
 
 use crate::{
     Application,
-    hosted_service::ApplicationHostedService,
+    hosted_service::{ApplicationHostedService, ConfigurationWatcherBackgroundService},
     logging::LOGGER,
     middleware::app_middlewares::ApplicationMiddlewares,
     services::{
@@ -33,7 +33,7 @@ impl ApplicationBuilder {
             service: ServiceProviderScope::new(),
             hosted_services: Vec::new(),
         };
-        app.configuration.load_default_toml();
+        app.configuration.add_toml_file("./appsettings.toml", true);
         app.with_args();
         LOGGER::verbose(format!("build at: {}", build_info::get_build_time_utc()));
         LOGGER::info(format!("Initializing application builder: {}", name));
@@ -79,7 +79,11 @@ impl ApplicationBuilder {
         self
     }
 
-    pub fn build(self) -> Application {
+    pub fn build(mut self) -> Application {
+        // every TOML file is watched by default, so the configuration follows its changes
+        if !self.configuration.watched_files().is_empty() {
+            self.add_hosted_service::<ConfigurationWatcherBackgroundService>();
+        }
         let mut service = self.service;
         service.add_instance::<ConfigurationService>(Arc::new(self.configuration), ServiceType::Singleton);
         service.check_dependency_cycles();
