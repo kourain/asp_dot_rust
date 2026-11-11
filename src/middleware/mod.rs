@@ -9,6 +9,7 @@ pub(crate) mod request_timeout;
 pub(crate) mod static_file;
 use crate::http_context::HttpContext;
 use crate::services::service_provider::service_provider_scope::ServiceProviderScope;
+use std::pin::Pin;
 use std::sync::Arc;
 
 /// The next middleware of the chain, given to the constructor of a middleware (like `RequestDelegate` in ASP.NET).
@@ -17,8 +18,9 @@ impl MiddlewareNext {
     pub(crate) fn new<M: Middleware + 'static>(middleware: M) -> Self {
         Self(Arc::new(middleware))
     }
-    pub async fn next_async(&self, http_context: &mut HttpContext) {
-        self.0.inject_invoke_async(http_context).await;
+    #[inline]
+    pub fn next_async<'a>(&'a self, http_context: &'a mut HttpContext) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        self.0.inject_invoke_async(http_context)
     }
 }
 

@@ -1,7 +1,7 @@
 use crate::{
     Application,
     configuration::JwtAuthConfiguration,
-    dependency_injection::{Cfg,CfgRequire},
+    dependency_injection::CfgRequire,
     http_context::{HttpContext, USER_CONTEXT_KEY, http_header::HttpHeader},
     macros::middleware,
     middleware::{Middleware, MiddlewareNext},
@@ -11,7 +11,6 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use std::sync::Arc;
 
 /// Authenticated principal parsed from the Authorization header and stored under `"user"`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,11 +88,8 @@ pub struct JwtAuthorizeMiddleware {
 
 #[middleware]
 impl JwtAuthorizeMiddleware {
-    pub fn new(next: MiddlewareNext, jwt_config: Cfg<JwtAuthConfiguration>) -> Self {
-        Self {
-            next,
-            jwt_config: jwt_config.unwrap_or_default(),
-        }
+    pub fn new(next: MiddlewareNext, jwt_config: CfgRequire<JwtAuthConfiguration>) -> Self {
+        Self { next, jwt_config: jwt_config }
     }
 
     pub async fn invoke_async(&self, http_context: &mut HttpContext) {
@@ -142,11 +138,7 @@ fn try_parse_jwt(http_context: &HttpContext, config: &JwtAuthConfiguration) -> R
 
 fn write_unauthorized(http_context: &mut HttpContext) {
     http_context.response.status_code = http::StatusCode::UNAUTHORIZED;
-    http_context.response.body = http::StatusCode::UNAUTHORIZED
-        .canonical_reason()
-        .unwrap_or("Unauthorized")
-        .as_bytes()
-        .to_vec();
+    http_context.response.body = http::StatusCode::UNAUTHORIZED.canonical_reason().unwrap_or("Unauthorized").as_bytes().to_vec();
 }
 
 impl Application {
