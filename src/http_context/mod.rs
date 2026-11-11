@@ -4,7 +4,7 @@ pub(crate) mod http_request;
 pub(crate) mod http_response;
 
 use crate::utils::ShareMutPtr;
-pub use http_context::HttpContext;
+pub use http_context::{HttpContext, USER_CONTEXT_KEY};
 pub use http_header::HttpHeader;
 pub use http_request::{HttpRequest, RequestBody};
 

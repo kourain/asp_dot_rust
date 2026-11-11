@@ -1,5 +1,6 @@
 pub(crate) mod app_middlewares;
 pub(crate) mod authorize;
+pub use authorize::AuthUser;
 pub(crate) mod auto_route;
 pub(crate) mod compression;
 pub(crate) mod cors;
