@@ -8,11 +8,11 @@ use crate::prelude::CfgRequire;
 /// - `--key value`   (consumes the next token unless it also starts with `--`)
 /// - `--flag`        (boolean flag with no value, stored as `"true"`)
 #[derive(Default, Debug, Clone)]
-pub struct StartupAppConfiguration {
+pub struct ArgsConfiguration {
     values: HashMap<String, String>,
 }
 
-impl StartupAppConfiguration {
+impl ArgsConfiguration {
     pub fn with_args(&mut self) {
         let args: Vec<String> = env::args().skip(1).collect();
         self.parse(args);
@@ -21,14 +21,14 @@ impl StartupAppConfiguration {
     /// Parse an arbitrary argument list. Exposed mainly so callers and tests
     /// can parse a custom source; production code should generally use
     /// `ApplicationBuilder::with_args`.
-    pub fn parse<I, S>(&mut self, args: I) -> Self
+    pub fn parse<I, S>(&mut self, args: I) -> &mut Self
     where
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
         let mut iter = args.into_iter().map(Into::into).peekable();
-        let mut values = HashMap::with_capacity(iter.size_hint().0);
-
+        self.values = HashMap::with_capacity(iter.size_hint().0);
+        let values = &mut self.values;
         while let Some(token) = iter.next() {
             let Some(key) = token.strip_prefix("--") else {
                 continue; // ignore positional / non `--` tokens
@@ -49,7 +49,7 @@ impl StartupAppConfiguration {
                 }
             }
         }
-        Self { values }
+        self
     }
 
     /// Returns the raw string value for `key`, if present.
@@ -82,8 +82,8 @@ impl ApplicationBuilder {
     /// applied directly to the builder; the full parsed set is stored in
     /// `ConfigurationService` as `StartupAppConfiguration` so any service can
     /// read custom flags via `CfgOption<StartupAppConfiguration>`.
-    pub(crate) fn with_args(&mut self) -> &mut Self {
-        let new_cli = self.configuration.get::<StartupAppConfiguration>().capture().unwrap();
+    pub(crate) fn load_data_from_args(&mut self) -> &mut Self {
+        let new_cli = self.configuration.get::<ArgsConfiguration>().capture().unwrap();
 
         self.set_ip(&new_cli);
         self.set_http_port(&new_cli);
@@ -91,17 +91,17 @@ impl ApplicationBuilder {
         self
     }
 
-    fn set_ip(&mut self, cli: &CfgRequire<StartupAppConfiguration>) {
+    fn set_ip(&mut self, cli: &CfgRequire<ArgsConfiguration>) {
         if let Some(ip) = cli.get("ip") {
             self.with_ip(ip);
         }
     }
-    fn set_http_port(&mut self, cli: &CfgRequire<StartupAppConfiguration>) {
+    fn set_http_port(&mut self, cli: &CfgRequire<ArgsConfiguration>) {
         if let Some(port) = cli.get_parsed::<u16>("http-port") {
             self.with_http_port(port);
         }
     }
-    fn set_https_port(&mut self, cli: &CfgRequire<StartupAppConfiguration>) {
+    fn set_https_port(&mut self, cli: &CfgRequire<ArgsConfiguration>) {
         if let Some(port) = cli.get_parsed::<u16>("https-port") {
             self.with_https_port(port);
         }

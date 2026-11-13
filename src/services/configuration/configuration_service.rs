@@ -13,7 +13,7 @@ use regex::Regex;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 
-use crate::{dependency_injection::inject_types::CfgReload, logging::LOGGER};
+use crate::{configuration::HyperConfig, dependency_injection::CfgReload, logging::LOGGER, utils::path::get_executable_folder};
 
 pub type BoxAny = Arc<dyn Any + Send + Sync + 'static>;
 /// Value of an entry: `None` until the entry is loaded. Every `CfgReload` of the entry shares it,
@@ -27,7 +27,7 @@ pub enum CfgEntryAllowReloadFile {
     /// The entry is updated only from these files, a file matches when its path ends with the given path, e.g. `appsettings.toml`.
     AllowedFileNames(Vec<&'static str>),
     /// the entry is updated only from these file_full_paths
-    AllowedFilePaths(Vec<PathBuf>),
+    AllowedFullPaths(Vec<PathBuf>),
     /// The entry is updated only from files whose full path matches the pattern.
     AllowedRegexPattern(Regex),
     /// The entry is updated from any file.
@@ -39,7 +39,7 @@ impl CfgEntryAllowReloadFile {
         match self {
             CfgEntryAllowReloadFile::NotAllowed => false,
             CfgEntryAllowReloadFile::AllowedFileNames(allowed_files) => allowed_files.iter().any(|file| Path::new(full_path_file).ends_with(file)),
-            CfgEntryAllowReloadFile::AllowedFilePaths(allowed_files) => allowed_files.iter().any(|file| full_path_file == file),
+            CfgEntryAllowReloadFile::AllowedFullPaths(allowed_files) => allowed_files.iter().any(|file| full_path_file == file),
             CfgEntryAllowReloadFile::AllowedRegexPattern(pattern) => pattern.is_match(full_path_file),
             CfgEntryAllowReloadFile::AllowedAll => true,
         }
@@ -125,7 +125,11 @@ impl ConfigurationService {
     pub fn new() -> Self {
         let mut _self = Self::default();
         _self.add_toml_file(r".\appsetting.toml", true);
-        _self.insert::<crate::configuration::StartupAppConfiguration>(|_|{});
+        _self.insert::<crate::configuration::ArgsConfiguration>(|_| {});
+        _self.configure_entry::<HyperConfig>(
+            "hyper_server",
+            CfgEntryAllowReloadFile::AllowedFullPaths(vec![format!("{}\\appsettings.toml", get_executable_folder()).into()]),
+        );
         _self
     }
     /// Bind the configuration of type T to the section `key`, it is updated from any file.
@@ -169,15 +173,20 @@ impl ConfigurationService {
         self._inner.insert(std::any::type_name::<T>(), CfgEntry::from_static_entry(value));
         self
     }
-    
+
     /// update a exist cfg
     pub fn update<T>(&mut self, custom: impl Fn(&mut T)) -> &mut Self
     where
-        T: Clone + Send + Sync + 'static,
+        T: Default + Clone + Send + Sync + 'static,
     {
-        let mut new_cfg = (**self.get::<T>().capture().unwrap()).clone();
-        custom(&mut new_cfg);
-        self._inner.insert(std::any::type_name::<T>(), CfgEntry::from_static_entry(new_cfg));
+        if let Some(instance) = self._inner.get(std::any::type_name::<T>()) {
+            let reloader = instance.downcast::<T>();
+            let mut new_cfg = (**reloader.capture().unwrap()).clone();
+            custom(&mut new_cfg);
+            reloader.0.store(Some(Arc::new(new_cfg)));
+        } else {
+            self.insert::<T>(custom);
+        }
         self
     }
 
@@ -197,7 +206,10 @@ impl ConfigurationService {
     {
         match self._inner.get(std::any::type_name::<T>()) {
             Some(entry) => entry.downcast::<T>(),
-            None => panic!("Configuration of type {} was not registered, use `ConfigurationService::configure::<T>(key)`", std::any::type_name::<T>()),
+            None => panic!(
+                "Configuration of type {} was not registered, use `ConfigurationService::configure::<T>(key)`",
+                std::any::type_name::<T>()
+            ),
         }
     }
 

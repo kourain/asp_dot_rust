@@ -65,7 +65,7 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
                         Self
                     }
                 }
-                #main_crate_path::dependency_injection::inventory::submit! {
+                #main_crate_path::third_party::inventory::submit! {
                     #main_crate_path::dependency_injection::DependencyEdge {
                         owner: std::any::TypeId::of::<#ident>,
                         owner_name: #ident_str,
@@ -142,7 +142,7 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
             }
         }
 
-        #main_crate_path::dependency_injection::inventory::submit! {
+        #main_crate_path::third_party::inventory::submit! {
             #main_crate_path::dependency_injection::DependencyEdge {
                 owner: std::any::TypeId::of::<#ident>,
                 owner_name: #ident_str,

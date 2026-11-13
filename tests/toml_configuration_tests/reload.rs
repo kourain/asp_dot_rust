@@ -175,7 +175,7 @@ async fn allow_policy_decides_which_files_update_an_entry() {
         .add_toml_file(&file_a, true)
         .add_toml_file(&file_b, true)
         .configure_entry::<SectionOne>("one", CfgEntryAllowReloadFile::NotAllowed)
-        .configure_entry::<SectionTwo>("two", CfgEntryAllowReloadFile::Allowed(vec!["a.toml"]));
+        .configure_entry::<SectionTwo>("two", CfgEntryAllowReloadFile::AllowedFileNames(vec!["a.toml"]));
     builder.configuration.reload_all_async().await;
 
     assert!(!builder.configuration.get::<SectionOne>().capture().has_value());
@@ -203,9 +203,9 @@ fn allow_policy_matching() {
     let path = "/srv/app/appsettings.dev.toml";
     assert!(CfgEntryAllowReloadFile::AllowedAll.allows(path));
     assert!(!CfgEntryAllowReloadFile::NotAllowed.allows(path));
-    assert!(CfgEntryAllowReloadFile::Allowed(vec!["appsettings.dev.toml"]).allows(path));
-    assert!(CfgEntryAllowReloadFile::Allowed(vec!["app/appsettings.dev.toml"]).allows(path));
-    assert!(!CfgEntryAllowReloadFile::Allowed(vec!["appsettings.toml"]).allows(path));
+    assert!(CfgEntryAllowReloadFile::AllowedFileNames(vec!["appsettings.dev.toml"]).allows(path));
+    assert!(CfgEntryAllowReloadFile::AllowedFileNames(vec!["app/appsettings.dev.toml"]).allows(path));
+    assert!(!CfgEntryAllowReloadFile::AllowedFileNames(vec!["appsettings.toml"]).allows(path));
     let pattern = regex::Regex::new(r"appsettings(\.(dev|prod|stag))?\.toml$").unwrap();
     assert!(CfgEntryAllowReloadFile::AllowedRegexPattern(pattern.clone()).allows(path));
     assert!(CfgEntryAllowReloadFile::AllowedRegexPattern(pattern).allows("/srv/app/appsettings.toml"));

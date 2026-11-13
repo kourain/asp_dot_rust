@@ -9,7 +9,6 @@ use crate::{
         configuration::ConfigurationService,
         service_provider::{ServiceType, service_provider_scope::ServiceProviderScope},
     },
-    utils::build_info,
 };
 
 pub struct ApplicationBuilder {
@@ -24,18 +23,15 @@ pub struct ApplicationBuilder {
 
 impl ApplicationBuilder {
     pub fn new(name: &str) -> Self {
-        let mut app = Self {
+        let app = Self {
             name: name.to_string(),
             ip: HashSet::new(),
             http_port: HashSet::new(),
             https_port: HashSet::new(),
-            configuration: ConfigurationService::default(),
+            configuration: ConfigurationService::new(),
             service: ServiceProviderScope::new(),
             hosted_services: Vec::new(),
         };
-        app.configuration.add_toml_file("./appsettings.toml", true);
-        app.with_args();
-        LOGGER::verbose(format!("build at: {}", build_info::get_build_time_utc()));
         LOGGER::info(format!("Initializing application builder: {}", name));
         app
     }
@@ -80,6 +76,7 @@ impl ApplicationBuilder {
     }
 
     pub fn build(mut self) -> Application {
+        self.load_data_from_args();
         // every TOML file is watched by default, so the configuration follows its changes
         if !self.configuration.watched_files().is_empty() {
             self.add_hosted_service::<ConfigurationWatcherBackgroundService>();

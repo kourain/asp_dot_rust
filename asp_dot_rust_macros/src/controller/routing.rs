@@ -215,7 +215,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                 )
             }
             /// inventory submit to register the bootstrap function
-            #main_crate_path::inventory::submit! {
+            #main_crate_path::third_party::inventory::submit! {
                 #main_crate_path::services::routing::ControllerBootstrapRegistration {
                     bootstrap: #controller_bootstrap_fn_name,
                 }

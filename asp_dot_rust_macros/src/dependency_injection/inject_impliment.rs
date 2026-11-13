@@ -86,7 +86,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                     httpcontext_inject_state = http_inject_type;
                     match httpcontext_inject_state {
                         HttpInjectType::ShareMutPtr => {
-                            http_context_inject = quote! { let http_ctx_ref = #main_crate_path::utils::ShareMutPtr::new_with_state(http_context, is_valid); };
+                            http_context_inject = quote! { let http_ctx_ref = #main_crate_path::utils::ShareMutPtr::new(http_context, is_valid); };
                             call_args.push(quote! { http_ctx_ref });
                         }
                         HttpInjectType::BorrowHttpContext | HttpInjectType::MoveHttpContext | _ => return create_compiler_error(new_fn, "Can't inject HttpContext, use HttpContextRef instead"),
@@ -139,7 +139,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
             }
 
             // Register dependency edges to check for cycles at build time
-            #main_crate_path::dependency_injection::inventory::submit! {
+            #main_crate_path::third_party::inventory::submit! {
                 #main_crate_path::dependency_injection::DependencyEdge {
                     owner: std::any::TypeId::of::<#self_ty>,
                     owner_name: #self_ty_str,

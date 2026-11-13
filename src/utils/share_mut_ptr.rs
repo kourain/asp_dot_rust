@@ -9,10 +9,7 @@ unsafe impl<T> Send for ShareMutPtr<T> {}
 unsafe impl<T> Sync for ShareMutPtr<T> {}
 
 impl<T> ShareMutPtr<T> {
-    pub fn new(value: &mut T) -> Self {
-        Self(value as *mut T, Arc::new(AtomicBool::new(false)))
-    }
-    pub fn new_with_state(value: &mut T, state: Arc<AtomicBool>) -> Self {
+    pub fn new(value: &mut T, state: Arc<AtomicBool>) -> Self {
         Self(value as *mut T, state)
     }
 }

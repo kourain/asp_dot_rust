@@ -1,13 +1,11 @@
-pub mod cycle_check;
-pub mod edge;
-pub mod inject_types;
+mod cycle_check;
+mod edge;
+mod inject_types;
 
 pub use edge::DependencyEdge;
-pub use inject_types::Serv;
 #[allow(deprecated)]
 pub use inject_types::Cfg;
-pub use inject_types::{CfgOption, CfgReload, CfgRequire};
-pub use inventory;
+pub use inject_types::{CfgOption, CfgReload, CfgRequire, Serv};
 
 #[async_trait::async_trait]
 pub trait DependencyInjectableService: Send + Sync + 'static {

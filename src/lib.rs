@@ -14,8 +14,7 @@ pub mod macros {
 }
 pub mod prelude {
     pub use crate::controller::{
-        ActionResult, BindError, FromBody, FromForm, FromOptionQuery, FromQuery, FromRoute,
-        controller_inject, controller_route, delete, get, head, options, patch, post, put, route,
+        ActionResult, BindError, FromBody, FromForm, FromOptionQuery, FromQuery, FromRoute, controller_inject, controller_route, delete, get, head, options, patch, post, put, route,
     };
     #[allow(deprecated)]
     pub use crate::dependency_injection::Cfg;
@@ -27,12 +26,17 @@ pub mod prelude {
 }
 pub mod utils;
 pub mod third_party {
+    pub use async_trait;
+    pub use inventory;
+    pub use regex;
+    pub use serde;
+    pub use serde_json;
     pub use tokio;
     pub use toml;
-    pub use async_trait;
+    pub use urlencoding;
+    pub use uuid;
 }
 
 pub use application::{Application, ApplicationBuilder};
-pub use inventory;
 
 pub type MutexAsync<T> = tokio::sync::Mutex<T>;
