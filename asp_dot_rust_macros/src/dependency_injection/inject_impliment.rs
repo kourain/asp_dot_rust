@@ -27,10 +27,13 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
             None
         })
         .expect("impl block must have fn `new`");
-
+    let mut async_call = quote! {};
     //check new is async or not
     if new_fn.sig.asyncness.is_some() {
-        return create_compiler_error(new_fn, "fn `new` cannot be async");
+        if !flag.contains(InjectFlags::ALLOW_ASYNC_NEW) {
+            return create_compiler_error(new_fn, "fn `new` cannot be async");
+        }
+        async_call = quote! { .await };
     }
 
     //check new is return type is Self or not
@@ -108,8 +111,9 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
         }
         expanded = quote! {
             #input
+            #[#main_crate_path::third_party::async_trait::async_trait]
             impl #main_crate_path::dependency_injection::DependencyInjectableController for #self_ty {
-                fn inject(
+                async fn inject(
                     http_context: &mut #main_crate_path::http_context::HttpContext,
                     is_valid: std::sync::Arc<std::sync::atomic::AtomicBool>
                 ) -> Self {
@@ -130,7 +134,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                 ) -> Self {
                     #http_context_inject
                     #configuration_service
-                    Self::new( #(#call_args),* )
+                    Self::new( #(#call_args),* )#async_call
                 }
             }
 

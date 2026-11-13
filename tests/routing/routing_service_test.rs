@@ -7,8 +7,9 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 struct TestController;
+#[async_trait::async_trait]
 impl DependencyInjectableController for TestController {
-    fn inject(_http_context: &mut HttpContext, _is_valid: Arc<AtomicBool>) -> Self {
+    async fn inject(_http_context: &mut HttpContext, _is_valid: Arc<AtomicBool>) -> Self {
         TestController
     }
 }

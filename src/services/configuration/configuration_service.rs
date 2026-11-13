@@ -8,7 +8,7 @@ use std::{
 };
 
 use arc_swap::ArcSwapOption;
-use asp_dot_rust_macros::DependencyInjectableService;
+use asp_dot_rust_macros::inject;
 use regex::Regex;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
@@ -25,7 +25,9 @@ pub enum CfgEntryAllowReloadFile {
     /// The entry is never updated from a file.
     NotAllowed,
     /// The entry is updated only from these files, a file matches when its path ends with the given path, e.g. `appsettings.toml`.
-    Allowed(Vec<&'static str>),
+    AllowedFileNames(Vec<&'static str>),
+    /// the entry is updated only from these file_full_paths
+    AllowedFilePaths(Vec<PathBuf>),
     /// The entry is updated only from files whose full path matches the pattern.
     AllowedRegexPattern(Regex),
     /// The entry is updated from any file.
@@ -36,7 +38,8 @@ impl CfgEntryAllowReloadFile {
     pub fn allows(&self, full_path_file: &str) -> bool {
         match self {
             CfgEntryAllowReloadFile::NotAllowed => false,
-            CfgEntryAllowReloadFile::Allowed(allowed_files) => allowed_files.iter().any(|file| Path::new(full_path_file).ends_with(file)),
+            CfgEntryAllowReloadFile::AllowedFileNames(allowed_files) => allowed_files.iter().any(|file| Path::new(full_path_file).ends_with(file)),
+            CfgEntryAllowReloadFile::AllowedFilePaths(allowed_files) => allowed_files.iter().any(|file| full_path_file == file),
             CfgEntryAllowReloadFile::AllowedRegexPattern(pattern) => pattern.is_match(full_path_file),
             CfgEntryAllowReloadFile::AllowedAll => true,
         }
@@ -110,16 +113,21 @@ impl CfgEntry {
     }
 }
 
-#[derive(DependencyInjectableService, Default)]
+#[derive(Default)]
 pub struct ConfigurationService {
-    #[di(default)]
     _inner: HashMap<&'static str, CfgEntry>,
     /// files in the order they were added, the flag tells if a change of the file reloads the configuration
-    #[di(default)]
     _toml_file_path: Vec<(PathBuf, bool)>,
 }
 
+#[inject]
 impl ConfigurationService {
+    pub fn new() -> Self {
+        let mut _self = Self::default();
+        _self.add_toml_file(r".\appsetting.toml", true);
+        _self.insert::<crate::configuration::StartupAppConfiguration>(|_|{});
+        _self
+    }
     /// Bind the configuration of type T to the section `key`, it is updated from any file.
     /// Nothing is read here, the value is `None` until `reload_all_async` runs.
     pub fn configure<T>(&mut self, key: &'static str) -> &mut Self
@@ -159,6 +167,17 @@ impl ConfigurationService {
         let mut value: T = Default::default();
         custom(&mut value);
         self._inner.insert(std::any::type_name::<T>(), CfgEntry::from_static_entry(value));
+        self
+    }
+    
+    /// update a exist cfg
+    pub fn update<T>(&mut self, custom: impl Fn(&mut T)) -> &mut Self
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        let mut new_cfg = (**self.get::<T>().capture().unwrap()).clone();
+        custom(&mut new_cfg);
+        self._inner.insert(std::any::type_name::<T>(), CfgEntry::from_static_entry(new_cfg));
         self
     }
 

@@ -1,6 +1,7 @@
 use std::{collections::HashMap, env, str::FromStr};
 
 use crate::{application::ApplicationBuilder, logging::LOGGER};
+use crate::prelude::CfgRequire;
 
 /// Recognized token forms, parsed left to right in a single pass:
 /// - `--key=value`
@@ -12,6 +13,11 @@ pub struct StartupAppConfiguration {
 }
 
 impl StartupAppConfiguration {
+    pub fn with_args(&mut self) {
+        let args: Vec<String> = env::args().skip(1).collect();
+        self.parse(args);
+        LOGGER::info(format!("Parsed {} command-line argument(s)", self.len()));
+    }
     /// Parse an arbitrary argument list. Exposed mainly so callers and tests
     /// can parse a custom source; production code should generally use
     /// `ApplicationBuilder::with_args`.
@@ -77,35 +83,25 @@ impl ApplicationBuilder {
     /// `ConfigurationService` as `StartupAppConfiguration` so any service can
     /// read custom flags via `CfgOption<StartupAppConfiguration>`.
     pub(crate) fn with_args(&mut self) -> &mut Self {
-        let args: Vec<String> = env::args().skip(1).collect();
-        self.with_custom_args(args)
-    }
-
-    /// Same as `with_args`, but takes the arguments explicitly (used by tests).
-    pub fn with_custom_args(&mut self, args: Vec<String>) -> &mut Self {
-        let mut old_cli: StartupAppConfiguration = (**self.configuration.get::<StartupAppConfiguration>().capture().unwrap_or_default()).clone();
-        let new_cli = old_cli.parse(args);
+        let new_cli = self.configuration.get::<StartupAppConfiguration>().capture().unwrap();
 
         self.set_ip(&new_cli);
         self.set_http_port(&new_cli);
         self.set_https_port(&new_cli);
-
-        LOGGER::info(format!("Parsed {} command-line argument(s)", new_cli.len()));
-        // replacing the previous value is expected here, do not warn about it
-        self.configuration.insert::<StartupAppConfiguration>(|cfg| *cfg = new_cli.clone());
         self
     }
-    fn set_ip(&mut self, cli: &StartupAppConfiguration) {
+
+    fn set_ip(&mut self, cli: &CfgRequire<StartupAppConfiguration>) {
         if let Some(ip) = cli.get("ip") {
             self.with_ip(ip);
         }
     }
-    fn set_http_port(&mut self, cli: &StartupAppConfiguration) {
+    fn set_http_port(&mut self, cli: &CfgRequire<StartupAppConfiguration>) {
         if let Some(port) = cli.get_parsed::<u16>("http-port") {
             self.with_http_port(port);
         }
     }
-    fn set_https_port(&mut self, cli: &StartupAppConfiguration) {
+    fn set_https_port(&mut self, cli: &CfgRequire<StartupAppConfiguration>) {
         if let Some(port) = cli.get_parsed::<u16>("https-port") {
             self.with_https_port(port);
         }

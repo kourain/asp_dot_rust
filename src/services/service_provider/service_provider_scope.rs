@@ -27,16 +27,14 @@ impl ServiceProviderScope {
                     let arc_any = instance
                         .instance
                         .get_or_init(|| async {
-                            let mut sv = T::inject(self).await;
-                            sv.on_service_created().await;
+                            let sv = T::inject(self).await;
                             Serv(Arc::new(sv) as Arc<dyn std::any::Any + Send + Sync>)
                         })
                         .await;
                     Serv::<T>::downcast(arc_any).expect("Type mismatch when downcasting service")
                 }
                 ServiceType::Transient => {
-                    let mut sv = T::inject(self).await;
-                    sv.on_service_created().await;
+                    let sv = T::inject(self).await;
                     Serv(Arc::new(sv))
                 }
             },

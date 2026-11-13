@@ -35,7 +35,7 @@ impl RoutingServiceBuilder {
         let controller_invoker: ControllerInvoke = |http_context: &mut crate::http_context::HttpContext, action_name: &'static str| {
             Box::pin(async move {
                 let is_valid = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-                let mut controller = T::inject(http_context, is_valid.clone());
+                let mut controller = T::inject(http_context, is_valid.clone()).await;
                 controller.routing(action_name).await;
                 is_valid.store(false, std::sync::atomic::Ordering::Release);
             })
