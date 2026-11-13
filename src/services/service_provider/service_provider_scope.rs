@@ -7,7 +7,8 @@ use std::{
 use tokio::sync::OnceCell;
 
 use crate::{
-    dependency_injection::{DependencyInjectableService, Serv}, services::service_provider::{ServiceInstance, ServiceInstanceType, ServiceType},
+    dependency_injection::{DependencyInjectableService, Serv},
+    services::service_provider::{ServiceInstance, ServiceInstanceType, ServiceType},
 };
 pub struct ServiceProviderScope {
     _inner_map: HashMap<TypeId, ServiceInstance>,
@@ -43,6 +44,7 @@ impl ServiceProviderScope {
             }
         }
     }
+    #[track_caller]
     pub fn add_instance<T>(&mut self, service: Arc<T>, service_type: ServiceType)
     where
         T: DependencyInjectableService + Send + Sync + 'static,

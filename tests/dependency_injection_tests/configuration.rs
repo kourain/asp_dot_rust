@@ -48,7 +48,7 @@ pub struct ReloadOnlyService {
 #[tokio::test]
 async fn derive_injects_every_configuration_wrapper() {
     let mut builder = ApplicationBuilder::new("TestDiConfigDerive");
-    builder.configuration.insert::<DiSettings>(|cfg| {
+    builder.configuration.add::<DiSettings>(|cfg| {
         cfg.app_name = "inserted".to_string();
         cfg.max_connections = 3;
     });
@@ -65,7 +65,7 @@ async fn derive_injects_every_configuration_wrapper() {
 #[tokio::test]
 async fn inject_attribute_injects_every_configuration_wrapper() {
     let mut builder = ApplicationBuilder::new("TestDiConfigInject");
-    builder.configuration.insert::<DiSettings>(|cfg| {
+    builder.configuration.add::<DiSettings>(|cfg| {
         cfg.app_name = "inserted".to_string();
         cfg.max_connections = 4;
     });
@@ -92,7 +92,7 @@ async fn a_configuration_loaded_after_the_service_was_built_reaches_only_the_rel
     assert!(!before.option.has_value());
     assert!(!handle_service.reload.capture().has_value());
 
-    app.service_provider.get_service::<ConfigurationService>().await.reload_all_async().await;
+    app.service_provider.get_service::<ConfigurationService>().await.load_all_async().await;
 
     assert!(!before.option.has_value(), "a snapshot never changes");
     assert_eq!(handle_service.reload.capture().unwrap().max_connections, 128);

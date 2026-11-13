@@ -1,18 +1,17 @@
 use std::{collections::HashMap, env, str::FromStr};
 
-use crate::{application::ApplicationBuilder, logging::LOGGER};
-use crate::prelude::CfgRequire;
+use crate::logging::LOGGER;
 
 /// Recognized token forms, parsed left to right in a single pass:
 /// - `--key=value`
 /// - `--key value`   (consumes the next token unless it also starts with `--`)
 /// - `--flag`        (boolean flag with no value, stored as `"true"`)
 #[derive(Default, Debug, Clone)]
-pub struct ArgsConfiguration {
+pub struct StartupArgsConfiguration {
     values: HashMap<String, String>,
 }
 
-impl ArgsConfiguration {
+impl StartupArgsConfiguration {
     pub fn with_args(&mut self) {
         let args: Vec<String> = env::args().skip(1).collect();
         self.parse(args);
@@ -73,37 +72,5 @@ impl ArgsConfiguration {
 
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
-    }
-}
-
-impl ApplicationBuilder {
-    /// Parse `std::env::args()` (skipping the binary name) and apply them to
-    /// this run. Recognized flags (eg: `--ip`, `--http-port`, `--https-port`) are
-    /// applied directly to the builder; the full parsed set is stored in
-    /// `ConfigurationService` as `StartupAppConfiguration` so any service can
-    /// read custom flags via `CfgOption<StartupAppConfiguration>`.
-    pub(crate) fn load_data_from_args(&mut self) -> &mut Self {
-        let new_cli = self.configuration.get::<ArgsConfiguration>().capture().unwrap();
-
-        self.set_ip(&new_cli);
-        self.set_http_port(&new_cli);
-        self.set_https_port(&new_cli);
-        self
-    }
-
-    fn set_ip(&mut self, cli: &CfgRequire<ArgsConfiguration>) {
-        if let Some(ip) = cli.get("ip") {
-            self.with_ip(ip);
-        }
-    }
-    fn set_http_port(&mut self, cli: &CfgRequire<ArgsConfiguration>) {
-        if let Some(port) = cli.get_parsed::<u16>("http-port") {
-            self.with_http_port(port);
-        }
-    }
-    fn set_https_port(&mut self, cli: &CfgRequire<ArgsConfiguration>) {
-        if let Some(port) = cli.get_parsed::<u16>("https-port") {
-            self.with_https_port(port);
-        }
     }
 }

@@ -1,7 +1,7 @@
-use asp_dot_rust::{ApplicationBuilder, configuration::ArgsConfiguration};
+use asp_dot_rust::{ApplicationBuilder, configuration::StartupArgsConfiguration};
 
-fn args(raw: &[&str]) -> ArgsConfiguration {
-    let mut rs = ArgsConfiguration::default();
+fn args(raw: &[&str]) -> StartupArgsConfiguration {
+    let mut rs = StartupArgsConfiguration::default();
     rs.parse(raw.iter().map(|s| s.to_string()));
     rs
 }
@@ -69,10 +69,10 @@ fn create_args_str(list: &[&str]) -> Vec<String> {
 #[tokio::test]
 async fn https_port_flag_does_not_panic_and_http_port_still_applies() {
     let mut builder = ApplicationBuilder::new("Args");
-    builder.configuration.update::<ArgsConfiguration>(|cfg| {
+    builder.configuration.update::<StartupArgsConfiguration>(|cfg| {
         cfg.parse(create_args_str(&["--http-port", "18911", "--https-port", "18912"]));
     });
-    let app = builder.build();
+    let _app = builder.build();
     // assert!(app.http_port.contains(&18911));
     // assert!(app.https_port.contains(&18912));
 }
@@ -81,7 +81,7 @@ async fn https_port_flag_does_not_panic_and_http_port_still_applies() {
 #[should_panic(expected = "already in use by HTTP")]
 async fn https_port_conflicting_with_http_port_is_still_rejected() {
     let mut builder = ApplicationBuilder::new("Args");
-    builder.configuration.update::<ArgsConfiguration>(|cfg| {
+    builder.configuration.update::<StartupArgsConfiguration>(|cfg| {
         println!("{:?}", cfg);
         cfg.parse(create_args_str(&["--http-port", "18913", "--https-port", "18913"]));
         println!("{:?}", cfg);

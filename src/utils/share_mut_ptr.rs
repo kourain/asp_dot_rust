@@ -23,6 +23,7 @@ impl<T> Clone for ShareMutPtr<T> {
 impl<T> Deref for ShareMutPtr<T> {
     type Target = T;
 
+    #[track_caller]
     fn deref(&self) -> &Self::Target {
         if !self.1.load(std::sync::atomic::Ordering::Relaxed) {
             let type_name = std::any::type_name::<T>();
@@ -33,6 +34,7 @@ impl<T> Deref for ShareMutPtr<T> {
 }
 
 impl<T> DerefMut for ShareMutPtr<T> {
+    #[track_caller]
     fn deref_mut(&mut self) -> &mut Self::Target {
         if !self.1.load(std::sync::atomic::Ordering::Relaxed) {
             let type_name = std::any::type_name::<T>();

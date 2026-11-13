@@ -58,6 +58,7 @@ impl ApplicationBuilder {
         self.ip.insert("::".parse().unwrap());
         self
     }
+    #[track_caller]
     pub fn with_http_port(&mut self, port: u16) -> &mut Self {
         if self.https_port.contains(&port) {
             panic!("Port {} is already in use by HTTPS. Please choose a different port for HTTP.", port);
@@ -65,7 +66,8 @@ impl ApplicationBuilder {
         self.http_port.insert(port);
         self
     }
-
+    
+    #[track_caller]
     pub fn with_https_port(&mut self, port: u16) -> &mut Self {
         if self.http_port.contains(&port) {
             panic!("Port {} is already in use by HTTP. Please choose a different port for HTTPS.", port);

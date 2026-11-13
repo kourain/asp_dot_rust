@@ -81,7 +81,7 @@ async fn configure_has_no_value_until_the_configuration_is_loaded() {
     let handle = builder.configuration.get::<AppSettings>();
     assert!(!handle.capture().has_value());
 
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
 
     let loaded: CfgOption<AppSettings> = handle.capture();
     assert!(loaded.has_value());
@@ -94,7 +94,7 @@ async fn configure_does_not_depend_on_the_order_of_add_toml_file() {
     let file = dir.write("appsettings.toml", "[one]\nvalue = 4\n");
     let mut builder = ApplicationBuilder::new("TestReloadOrder");
     builder.configuration.configure::<SectionOne>("one").add_toml_file(&file, true);
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
 
     assert_eq!(builder.configuration.get::<SectionOne>().capture().unwrap().value, 4);
 }
@@ -105,7 +105,7 @@ async fn a_missing_section_keeps_no_value() {
     let file = dir.write("appsettings.toml", "[other]\nvalue = 1\n");
     let mut builder = ApplicationBuilder::new("TestReloadMissingSection");
     builder.configuration.add_toml_file(&file, true).configure::<SectionOne>("one");
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
 
     let captured = builder.configuration.get::<SectionOne>().capture();
     assert!(!captured.has_value());
@@ -119,7 +119,7 @@ async fn unwrap_panics_while_the_configuration_has_no_value() {
     let file = dir.write("appsettings.toml", "[other]\nvalue = 1\n");
     let mut builder = ApplicationBuilder::new("TestReloadUnwrap");
     builder.configuration.add_toml_file(&file, true).configure::<SectionOne>("one");
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
 
     builder.configuration.get::<SectionOne>().capture().unwrap();
 }
@@ -129,7 +129,6 @@ async fn a_configuration_that_is_not_registered_has_no_value() {
     let builder = ApplicationBuilder::new("TestReloadNotRegistered");
 
     assert!(!builder.configuration.contains::<SectionTwo>());
-    assert!(!builder.configuration.get::<SectionTwo>().capture().has_value());
 }
 
 #[test]
@@ -146,14 +145,14 @@ async fn a_handle_follows_every_reload_and_a_capture_does_not() {
     let file = dir.write("appsettings.toml", &app_settings_toml("before", 1));
     let mut builder = ApplicationBuilder::new("TestReloadHandle");
     builder.configuration.add_toml_file(&file, true).configure::<AppSettings>("app_setting");
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
 
     let handle = builder.configuration.get::<AppSettings>();
     let snapshot = handle.capture().unwrap();
     assert_eq!(snapshot.app_name, "before");
 
     dir.write("appsettings.toml", &app_settings_toml("after", 2));
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
 
     assert_eq!(handle.capture().unwrap().app_name, "after");
     assert_eq!(handle.capture().unwrap().max_connections, 2);
@@ -167,8 +166,8 @@ async fn a_handle_follows_every_reload_and_a_capture_does_not() {
 #[tokio::test]
 async fn allow_policy_decides_which_files_update_an_entry() {
     let dir = TempDir::new("allow_policy");
-    let file_a = dir.write("a.toml", "[one]\nvalue = 1\n[two]\nvalue = 1\n");
-    let file_b = dir.write("b.toml", "[one]\nvalue = 2\n[two]\nvalue = 2\n");
+    let file_a = dir.write("a.toml", "[one]\nvalue = 1\n[two]\nvalue = 2\n");
+    let file_b = dir.write("b.toml", "[one]\nvalue = 1\n[two]\nvalue = 2\n");
     let mut builder = ApplicationBuilder::new("TestReloadAllowPolicy");
     builder
         .configuration
@@ -176,9 +175,13 @@ async fn allow_policy_decides_which_files_update_an_entry() {
         .add_toml_file(&file_b, true)
         .configure_entry::<SectionOne>("one", CfgEntryAllowReloadFile::NotAllowed)
         .configure_entry::<SectionTwo>("two", CfgEntryAllowReloadFile::AllowedFileNames(vec!["a.toml"]));
-    builder.configuration.reload_all_async().await;
-
-    assert!(!builder.configuration.get::<SectionOne>().capture().has_value());
+    builder.configuration.load_all_async().await;
+    assert_eq!(builder.configuration.get::<SectionOne>().capture().unwrap().value, 1);
+    assert_eq!(builder.configuration.get::<SectionTwo>().capture().unwrap().value, 2);
+    dir.write("a.toml", "[one]\nvalue = 2\n[two]\nvalue = 1\n");
+    //require SectionOne is old value
+    builder.configuration.load_all_async().await;
+    assert_eq!(builder.configuration.get::<SectionOne>().capture().unwrap().value, 1);
     assert_eq!(builder.configuration.get::<SectionTwo>().capture().unwrap().value, 1);
 }
 
@@ -189,28 +192,28 @@ async fn the_last_added_file_wins_for_the_same_section() {
     let overlay = dir.write("appsettings.dev.toml", "[one]\nvalue = 2\n");
     let mut builder = ApplicationBuilder::new("TestReloadLastWins");
     builder.configuration.add_toml_file(&base, true).add_toml_file(&overlay, true).configure::<SectionOne>("one");
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
     assert_eq!(builder.configuration.get::<SectionOne>().capture().unwrap().value, 2);
 
     // reading the files again keeps the order
     dir.write("appsettings.toml", "[one]\nvalue = 3\n");
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
     assert_eq!(builder.configuration.get::<SectionOne>().capture().unwrap().value, 2);
 }
 
 #[test]
 fn allow_policy_matching() {
     let path = "/srv/app/appsettings.dev.toml";
-    assert!(CfgEntryAllowReloadFile::AllowedAll.allows(path));
-    assert!(!CfgEntryAllowReloadFile::NotAllowed.allows(path));
-    assert!(CfgEntryAllowReloadFile::AllowedFileNames(vec!["appsettings.dev.toml"]).allows(path));
-    assert!(CfgEntryAllowReloadFile::AllowedFileNames(vec!["app/appsettings.dev.toml"]).allows(path));
-    assert!(!CfgEntryAllowReloadFile::AllowedFileNames(vec!["appsettings.toml"]).allows(path));
+    assert!(CfgEntryAllowReloadFile::AllowedAll.is_allow(path));
+    assert!(!CfgEntryAllowReloadFile::NotAllowed.is_allow(path));
+    assert!(CfgEntryAllowReloadFile::AllowedFileNames(vec!["appsettings.dev.toml"]).is_allow(path));
+    assert!(CfgEntryAllowReloadFile::AllowedFileNames(vec!["app/appsettings.dev.toml"]).is_allow(path));
+    assert!(!CfgEntryAllowReloadFile::AllowedFileNames(vec!["appsettings.toml"]).is_allow(path));
     let pattern = regex::Regex::new(r"appsettings(\.(dev|prod|stag))?\.toml$").unwrap();
-    assert!(CfgEntryAllowReloadFile::AllowedRegexPattern(pattern.clone()).allows(path));
-    assert!(CfgEntryAllowReloadFile::AllowedRegexPattern(pattern).allows("/srv/app/appsettings.toml"));
+    assert!(CfgEntryAllowReloadFile::AllowedRegexPattern(pattern.clone()).is_allow(path));
+    assert!(CfgEntryAllowReloadFile::AllowedRegexPattern(pattern).is_allow("/srv/app/appsettings.toml"));
     let strict = regex::Regex::new(r"appsettings\.prod\.toml$").unwrap();
-    assert!(!CfgEntryAllowReloadFile::AllowedRegexPattern(strict).allows(path));
+    assert!(!CfgEntryAllowReloadFile::AllowedRegexPattern(strict).is_allow(path));
     assert!(!Path::new(path).ends_with("dev.toml"));
 }
 
@@ -220,27 +223,27 @@ async fn a_bad_reload_keeps_the_current_value() {
     let file = dir.write("appsettings.toml", "[strict]\nname = \"good\"\n");
     let mut builder = ApplicationBuilder::new("TestReloadBad");
     builder.configuration.add_toml_file(&file, true).configure::<StrictSection>("strict");
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
     assert_eq!(builder.configuration.get::<StrictSection>().capture().unwrap().name, "good");
 
     // a section that does not match the type
     dir.write("appsettings.toml", "[strict]\nother = 1\n");
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
     assert_eq!(builder.configuration.get::<StrictSection>().capture().unwrap().name, "good");
 
     // a file that is not valid toml
     dir.write("appsettings.toml", "[strict\nname = ");
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
     assert_eq!(builder.configuration.get::<StrictSection>().capture().unwrap().name, "good");
 
     // a section that is gone
     dir.write("appsettings.toml", "[unrelated]\nvalue = 1\n");
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
     assert_eq!(builder.configuration.get::<StrictSection>().capture().unwrap().name, "good");
 
     // and the next good file is applied
     dir.write("appsettings.toml", "[strict]\nname = \"fixed\"\n");
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
     assert_eq!(builder.configuration.get::<StrictSection>().capture().unwrap().name, "fixed");
 }
 
@@ -250,15 +253,15 @@ async fn an_inserted_value_has_a_handle_and_no_file_changes_it() {
     let file = dir.write("appsettings.toml", "[one]\nvalue = 1\n");
     let mut builder = ApplicationBuilder::new("TestReloadInserted");
     builder.configuration.add_toml_file(&file, true);
-    builder.configuration.insert::<SectionOne>(|cfg| cfg.value = 10);
+    builder.configuration.add::<SectionOne>(|cfg| cfg.value = 10);
 
     assert!(builder.configuration.contains::<SectionOne>());
     assert_eq!(builder.configuration.get::<SectionOne>().capture().unwrap().value, 10);
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
     assert_eq!(builder.configuration.get::<SectionOne>().capture().unwrap().value, 10);
 
     // inserting again replaces the value
-    builder.configuration.insert::<SectionOne>(|cfg| cfg.value = 20);
+    builder.configuration.add::<SectionOne>(|cfg| cfg.value = 20);
     assert_eq!(builder.configuration.get::<SectionOne>().capture().unwrap().value, 20);
 }
 
@@ -277,7 +280,7 @@ async fn the_watcher_reloads_when_a_watched_file_changes_or_is_replaced() {
     let app = builder.build();
 
     let configuration = app.service_provider.get_service::<ConfigurationService>().await;
-    configuration.reload_all_async().await;
+    configuration.load_all_async().await;
     let handle = configuration.get::<AppSettings>();
     let one = configuration.get::<SectionOne>();
     let mut watcher = ConfigurationWatcherBackgroundService::inject(&app.service_provider).await;

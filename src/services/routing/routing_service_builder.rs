@@ -28,6 +28,7 @@ pub struct RoutingServiceBuilder {
 }
 
 impl RoutingServiceBuilder {
+    #[track_caller]
     pub fn register_controller<T>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>)
     where
         T: DependencyInjectableController + Routing + Send + 'static,
@@ -68,6 +69,7 @@ impl RoutingServiceBuilder {
         format!("/{root}/{action}")
     }
 
+    #[track_caller]
     pub fn add_controller_route<T>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str, route_attr_map: RouteAttributeMap, invoker: ControllerInvoke)
     where
         T: DependencyInjectableController + Routing + Send + 'static,
