@@ -1,4 +1,4 @@
-use crate::{http_context::HttpContext, http_context::http_header::HttpHeader};
+use crate::{http_context::HttpContext, http_context::HttpHeaderExt};
 use core::future::Future;
 
 pub trait ActionResult: Sync {

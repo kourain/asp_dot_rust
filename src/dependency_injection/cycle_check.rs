@@ -6,6 +6,7 @@ use std::{
 use crate::{dependency_injection::edge::DependencyEdge, logging::LOGGER, services::service_provider::ServiceProviderScope};
 
 impl ServiceProviderScope {
+    #[track_caller]
     pub fn check_dependency_cycles(self: &ServiceProviderScope) {
         let mut graph: HashMap<TypeId, (&'static str, Vec<TypeId>)> = HashMap::new();
 

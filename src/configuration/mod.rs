@@ -15,5 +15,5 @@ pub use hyper_config::HyperConfig;
 pub use jwt_auth_config::JwtAuthConfiguration;
 pub use rate_limit_config::RateLimitConfiguration;
 pub use request_timeout_config::RequestTimeoutConfiguration;
-pub use startup_app_config::StartupAppConfiguration;
+pub use startup_app_config::StartupArgsConfiguration;
 pub use static_file_config::StaticFileConfiguration;

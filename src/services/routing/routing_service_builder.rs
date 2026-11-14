@@ -1,7 +1,10 @@
 use crate::{
     controller::{ActionRoute, Routing},
     dependency_injection::DependencyInjectableController,
-    services::routing::{ControllerInvoke, MAX_BODY_SIZE_ATTRIBUTE, Route, RouteAttribute, RouteAttributeMap, RoutingService},
+    services::{
+        openapi::RegisteredOperation,
+        routing::{ControllerInvoke, MAX_BODY_SIZE_ATTRIBUTE, Route, RouteAttribute, RouteAttributeMap, RoutingService},
+    },
 };
 use asp_dot_rust_macros::DependencyInjectableService;
 use std::{
@@ -19,9 +22,13 @@ pub struct RoutingServiceBuilder {
     _router: HashMap<String, HashMap<http::Method, Arc<Route>>>,
     #[di(default)]
     _registered_controllers: HashSet<TypeId>,
+    /// Flat list of operations for OpenAPI generation.
+    #[di(default)]
+    _operations: Vec<RegisteredOperation>,
 }
 
 impl RoutingServiceBuilder {
+    #[track_caller]
     pub fn register_controller<T>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>)
     where
         T: DependencyInjectableController + Routing + Send + 'static,
@@ -29,7 +36,7 @@ impl RoutingServiceBuilder {
         let controller_invoker: ControllerInvoke = |http_context: &mut crate::http_context::HttpContext, action_name: &'static str| {
             Box::pin(async move {
                 let is_valid = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-                let mut controller = T::inject(http_context, is_valid.clone());
+                let mut controller = T::inject(http_context, is_valid.clone()).await;
                 controller.routing(action_name).await;
                 is_valid.store(false, std::sync::atomic::Ordering::Release);
             })
@@ -62,6 +69,7 @@ impl RoutingServiceBuilder {
         format!("/{root}/{action}")
     }
 
+    #[track_caller]
     pub fn add_controller_route<T>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str, route_attr_map: RouteAttributeMap, invoker: ControllerInvoke)
     where
         T: DependencyInjectableController + Routing + Send + 'static,
@@ -70,8 +78,9 @@ impl RoutingServiceBuilder {
         if route_attr_map.get(MAX_BODY_SIZE_ATTRIBUTE).is_some_and(|value| !value.is::<usize>()) {
             panic!("Attribute `{}` of {}::{} must be a usize (the limit in bytes)", MAX_BODY_SIZE_ATTRIBUTE, std::any::type_name::<T>(), action_name);
         }
+        let controller_name = std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>());
         let route_info = Arc::new(Route {
-            controller_name: std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>()),
+            controller_name,
             controller_type_name: std::any::type_name::<T>(),
             action_name,
             route_attr: RouteAttribute::new(route_attr_map),
@@ -83,19 +92,32 @@ impl RoutingServiceBuilder {
                 for method in methods {
                     // Route already exists, update it
                     let http_method = http::Method::from_str(&method.to_uppercase()).unwrap();
-                    if let Some(old) = exist_route.insert(http_method, route_info.clone()) {
+                    if let Some(old) = exist_route.insert(http_method.clone(), route_info.clone()) {
                         panic!(
                             "Doublicate route \"{}\", method {} at \"{}::{}\" and \"{}::{}\"",
                             route, method, old.controller_type_name, old.action_name, route_info.controller_type_name, route_info.action_name
                         )
                     }
+                    self._operations.push(RegisteredOperation {
+                        path: route.clone(),
+                        method: http_method,
+                        controller_name,
+                        action_name,
+                    });
                 }
             }
             None => {
                 // Route doesn't exist, insert it
                 let mut method_map = HashMap::new();
                 for method in methods {
-                    method_map.insert(http::Method::from_str(&method.to_uppercase()).unwrap(), route_info.clone());
+                    let http_method = http::Method::from_str(&method.to_uppercase()).unwrap();
+                    method_map.insert(http_method.clone(), route_info.clone());
+                    self._operations.push(RegisteredOperation {
+                        path: route.clone(),
+                        method: http_method,
+                        controller_name,
+                        action_name,
+                    });
                 }
                 self._router.insert(route, method_map);
             }
@@ -111,6 +133,7 @@ impl RoutingServiceBuilder {
                 }
             }
         }
+        result._operations = self._operations;
         result
     }
 }

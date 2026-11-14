@@ -9,10 +9,12 @@ use std::{
 
 use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,
+    configuration::CompressionConfiguration,
     controller::{ActionResult, get, route},
     http_context::HttpContextRef,
     logging::LOGGER,
     macros::{controller_inject, controller_route},
+    services::configuration::CfgEntryAllowReloadFile::NotAllowed,
 };
 use http_body_util::{BodyExt, Empty};
 use hyper::body::Bytes;
@@ -229,6 +231,7 @@ async fn start_server(configure: impl FnOnce(&mut Application)) -> u16 {
     let mut builder = ApplicationBuilder::new("StreamResponseTest");
     builder.with_loopback_ip().with_http_port(port);
     builder.add_controllers();
+    builder.configuration.configure_default_entry::<CompressionConfiguration>("compress_middleware", NotAllowed);
     let mut app = builder.build();
     configure(&mut app);
     tokio::spawn(app.run());
@@ -439,8 +442,15 @@ async fn streamed_response_sends_chunks_when_they_are_written() {
     let second_at = Instant::now();
     let third = conn.read_chunk().await.unwrap().unwrap();
     assert!(conn.read_chunk().await.unwrap().is_none(), "the stream must end properly");
-    assert_eq!((first.as_slice(), second.as_slice(), third.as_slice()), (b"one\n".as_slice(), b"two\n".as_slice(), b"three\n".as_slice()));
-    assert!(second_at - first_at >= Duration::from_millis(200), "the first chunk was held until the second one: {:?}", second_at - first_at);
+    assert_eq!(
+        (first.as_slice(), second.as_slice(), third.as_slice()),
+        (b"one\n".as_slice(), b"two\n".as_slice(), b"three\n".as_slice())
+    );
+    assert!(
+        second_at - first_at >= Duration::from_millis(200),
+        "the first chunk was held until the second one: {:?}",
+        second_at - first_at
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -615,7 +625,9 @@ async fn compression_does_not_touch_a_response_that_is_already_streamed() {
 
 async fn h2_get(port: u16, path: &str) -> hyper::Response<hyper::body::Incoming> {
     let stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-    let (mut sender, connection) = hyper::client::conn::http2::handshake(hyper_util::rt::TokioExecutor::new(), hyper_util::rt::TokioIo::new(stream)).await.unwrap();
+    let (mut sender, connection) = hyper::client::conn::http2::handshake(hyper_util::rt::TokioExecutor::new(), hyper_util::rt::TokioIo::new(stream))
+        .await
+        .unwrap();
     tokio::spawn(connection);
     let request = hyper::Request::get(format!("http://127.0.0.1:{port}{path}")).body(Empty::<Bytes>::new()).unwrap();
     sender.send_request(request).await.unwrap()
@@ -638,7 +650,11 @@ async fn http2_streamed_response_sends_chunks_when_they_are_written() {
         assert!(frame.into_data().is_ok_and(|data| data.is_empty()), "unexpected frame after the last chunk");
     }
     assert_eq!((&first[..], &second[..], &third[..]), (&b"one\n"[..], &b"two\n"[..], &b"three\n"[..]));
-    assert!(second_at - first_at >= Duration::from_millis(200), "the first chunk was held until the second one: {:?}", second_at - first_at);
+    assert!(
+        second_at - first_at >= Duration::from_millis(200),
+        "the first chunk was held until the second one: {:?}",
+        second_at - first_at
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

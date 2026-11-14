@@ -1,5 +1,16 @@
 # Change log
 
+## 0.2.11
+
+### 0.2.11 New
+
+- Basic and JWT Bearer authorization middleware: `use_authorize_basic()` parses Basic credentials and `use_authorize_bearer()` validates JWTs using `JwtAuthConfiguration`; both store the resulting `AuthUser` under `"user"`.
+- Automatic Swagger / OpenAPI: call `use_swagger()` after `add_controllers()` to serve Swagger UI at `/swagger` and an OpenAPI 3.0 document at `/swagger/v1/swagger.json`. The document is generated from registered routes. See `docs/swagger.md`.
+
+### 0.2.11 Fix
+
+- Fix configuration registration and startup loading order so configured values are available when middleware and services are constructed.
+
 ## 0.2.10
 
 ### 0.2.10 New

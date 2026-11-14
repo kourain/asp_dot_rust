@@ -133,7 +133,7 @@ async fn start_server() -> u16 {
     };
     let mut builder = ApplicationBuilder::new("RouteBodyLimitTest");
     builder.with_loopback_ip().with_http_port(port);
-    builder.add_custom_configuration(|config: &mut HyperConfig| {
+    builder.configuration.insert(|config: &mut HyperConfig| {
         config.max_request_body_size = DEFAULT_LIMIT;
     });
     builder.add_controllers();

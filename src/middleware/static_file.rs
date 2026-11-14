@@ -2,10 +2,9 @@ use crate::{
     Application,
     configuration::StaticFileConfiguration,
     dependency_injection::CfgOption,
-    http_context::http_header::HttpHeader,
+    http_context::HttpHeaderExt,
     macros::middleware,
     middleware::MiddlewareNext,
-    utils,
 };
 
 pub struct StaticFileMiddleware {
@@ -31,21 +30,32 @@ impl StaticFileMiddleware {
     }
 
     pub async fn invoke_async(&self, http_context: &mut crate::http_context::HttpContext) {
-        let request_path = http_context.request.path().to_string();
-        let static_file_path = format!("{}/{}", self.static_dir_path.display(), request_path.trim_start_matches('/'));
-        let fpath = std::path::Path::new(&static_file_path);
+        let request_path = http_context.request.path().trim_start_matches('/');
+        // Reject empty path and path traversal segments before joining.
+        if request_path.is_empty() || request_path.split(['/', '\\']).any(|segment| segment == ".." || segment == ".") {
+            self.next.next_async(http_context).await;
+            return;
+        }
 
-        if !fpath.exists() {
-            if !utils::path::is_path_in_folder(fpath.canonicalize().unwrap().to_str().unwrap(), self.static_dir_path.canonicalize().unwrap().to_str().unwrap()) {
-                http_context.response.status_code = http::StatusCode::FORBIDDEN;
-                http_context.response.body = http::StatusCode::FORBIDDEN.canonical_reason().unwrap_or("Forbidden").as_bytes().to_vec();
-                return;
-            }
+        let candidate = self.static_dir_path.join(request_path);
+        let Ok(canonical) = candidate.canonicalize() else {
+            self.next.next_async(http_context).await;
+            return;
+        };
+        let Ok(root) = self.static_dir_path.canonicalize() else {
+            self.next.next_async(http_context).await;
+            return;
+        };
+        if !canonical.starts_with(&root) || !canonical.is_file() {
+            self.next.next_async(http_context).await;
+            return;
+        }
 
-            if let Ok(file_content) = std::fs::read(&static_file_path) {
+        match tokio::fs::read(&canonical).await {
+            Ok(file_content) => {
                 http_context.response.body = file_content;
-                if let Some(extension) = fpath.extension() {
-                    let content_type = match extension.to_str().unwrap_or("") {
+                if let Some(extension) = canonical.extension().and_then(|e| e.to_str()) {
+                    let content_type = match extension {
                         "html" => "text/html",
                         "css" => "text/css",
                         "js" => "application/javascript",
@@ -56,13 +66,19 @@ impl StaticFileMiddleware {
                         "mp3" => "audio/mpeg",
                         "mp4" => "video/mp4",
                         "opus" => "audio/opus",
+                        "svg" => "image/svg+xml",
+                        "txt" => "text/plain",
+                        "wasm" => "application/wasm",
+                        "woff" => "font/woff",
+                        "woff2" => "font/woff2",
                         _ => "application/octet-stream",
                     };
                     http_context.response.headers.insert_str("Content-Type", content_type);
                 }
             }
-        } else {
-            self.next.next_async(http_context).await;
+            Err(_) => {
+                self.next.next_async(http_context).await;
+            }
         }
     }
 }

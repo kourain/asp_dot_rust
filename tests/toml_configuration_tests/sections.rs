@@ -9,7 +9,7 @@ async fn loads_multiple_typed_sections_from_one_file() {
         .add_toml_file("tests/fixtures/appsettings.toml", false)
         .configure::<RateLimitConfiguration>("rate_limit")
         .configure::<JwtAuthConfiguration>("jwt");
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
 
     let rate_limit = builder.configuration.get::<RateLimitConfiguration>().capture().unwrap();
     assert_eq!(rate_limit.max_requests, 100);
@@ -29,7 +29,7 @@ async fn a_missing_section_has_no_value() {
         .configuration
         .add_toml_file("tests/fixtures/appsettings.toml", false)
         .configure::<RateLimitConfiguration>("does_not_exist");
-    builder.configuration.reload_all_async().await;
+    builder.configuration.load_all_async().await;
 
     assert!(builder.configuration.contains::<RateLimitConfiguration>());
     assert!(!builder.configuration.get::<RateLimitConfiguration>().capture().has_value());

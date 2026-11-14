@@ -31,6 +31,7 @@ impl AppQueueService {
             self._queue.get(&queue_key).unwrap().lock().await.push_back(Box::new(value));
         }
     }
+
     pub async fn de_queue_async<S, V>(&mut self, count: usize) -> Vec<V>
     where
         S: 'static,

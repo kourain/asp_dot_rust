@@ -2,7 +2,7 @@ use crate::{
     Application,
     configuration::CorsConfiguration,
     dependency_injection::{CfgOption, CfgRequire, Serv},
-    http_context::{HttpContext, http_header::HttpHeader},
+    http_context::{HttpContext, HttpHeaderExt},
     macros::middleware,
     middleware::MiddlewareNext,
 };

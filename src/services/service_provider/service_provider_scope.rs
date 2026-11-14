@@ -7,7 +7,8 @@ use std::{
 use tokio::sync::OnceCell;
 
 use crate::{
-    dependency_injection::{DependencyInjectableService, Serv}, services::service_provider::{ServiceInstance, ServiceInstanceType, ServiceType},
+    dependency_injection::{DependencyInjectableService, Serv},
+    services::service_provider::{ServiceInstance, ServiceInstanceType, ServiceType},
 };
 pub struct ServiceProviderScope {
     _inner_map: HashMap<TypeId, ServiceInstance>,
@@ -27,16 +28,14 @@ impl ServiceProviderScope {
                     let arc_any = instance
                         .instance
                         .get_or_init(|| async {
-                            let mut sv = T::inject(self).await;
-                            sv.on_service_created().await;
+                            let sv = T::inject(self).await;
                             Serv(Arc::new(sv) as Arc<dyn std::any::Any + Send + Sync>)
                         })
                         .await;
                     Serv::<T>::downcast(arc_any).expect("Type mismatch when downcasting service")
                 }
                 ServiceType::Transient => {
-                    let mut sv = T::inject(self).await;
-                    sv.on_service_created().await;
+                    let sv = T::inject(self).await;
                     Serv(Arc::new(sv))
                 }
             },
@@ -45,6 +44,7 @@ impl ServiceProviderScope {
             }
         }
     }
+    #[track_caller]
     pub fn add_instance<T>(&mut self, service: Arc<T>, service_type: ServiceType)
     where
         T: DependencyInjectableService + Send + Sync + 'static,

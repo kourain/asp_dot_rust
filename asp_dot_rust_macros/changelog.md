@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.9
+
+- `#[inject]` now supports an `async fn new` constructor; the generated injection code awaits it.
+- Generated controller and dependency-registration code uses the public `third_party` re-exports and the current `HttpHeaderExt` / `ShareMutPtr` APIs.
+- move to new conversion and public third_party of core project
+
 ## 0.2.8
 
 - `#[controller_route]` add model binding for action parameters: `FromRoute<T>`, `FromQuery<T>`, `FromOptionQuery<T>`, `FromBody<T>`, and `FromForm<T>`.

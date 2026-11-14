@@ -4,6 +4,7 @@ bitflags! {
     pub(crate) struct InjectFlags: u8 {
         const NONE             = 0b0;
         const INJECT_CONTROLLER = 0b1;
+        const ALLOW_ASYNC_NEW = 0b10;
     }
 }
 

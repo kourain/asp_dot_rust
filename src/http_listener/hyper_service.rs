@@ -2,7 +2,7 @@ use crate::{
     Application,
     configuration::HyperConfig,
     dependency_injection::Serv,
-    http_context::{HttpContext, http_request::HttpRequest, http_response::HttpResponse},
+    http_context::{HttpContext, HttpRequest, HttpResponse},
     logging::LOGGER,
     services::routing::{MAX_BODY_SIZE_ATTRIBUTE, ResolvedRoute, RoutingResult, RoutingService},
 };

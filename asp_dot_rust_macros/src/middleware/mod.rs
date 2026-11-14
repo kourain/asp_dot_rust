@@ -169,7 +169,7 @@ pub(crate) fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         // Register dependency edges to check for cycles at build time
-        #main_crate_path::dependency_injection::inventory::submit! {
+        #main_crate_path::third_party::inventory::submit! {
             #main_crate_path::dependency_injection::DependencyEdge {
                 owner: std::any::TypeId::of::<#self_ty>,
                 owner_name: #self_ty_str,
