@@ -11,7 +11,7 @@ use asp_dot_rust::{
 async fn test_application() {
     LOGGER::disable();
     let mut app_builder = ApplicationBuilder::new("TestApp");
-    app_builder.with_any_ip().with_http_port(8080);
+    app_builder.with_loopback_ip().with_http_port(8080);
     app_builder
         .configuration
         .update(|config: &mut CorsConfiguration| {

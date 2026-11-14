@@ -14,7 +14,7 @@ use crate::middleware::TestMidware;
 async fn test_application() {
     LOGGER::disable();
     let mut app_builder = ApplicationBuilder::new("TestApp");
-    app_builder.with_any_ip().with_http_port(8080).with_http_port(9999);
+    app_builder.with_loopback_ip().with_http_port(8080).with_http_port(9999);
     app_builder
         .configuration.update(|config: &mut CorsConfiguration| {
             config.allowed_origins = ["*".into()].into();
