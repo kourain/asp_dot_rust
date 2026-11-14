@@ -1,5 +1,7 @@
 # Change log
 
+- Automatic Swagger / OpenAPI: `app.use_swagger()` after `add_controllers()` serves Swagger UI at `/swagger` and OpenAPI 3.0 JSON at `/swagger/v1/swagger.json`. The document is built from registered routes (path, method, controller tag, path parameters). See `docs/swagger.md`.
+
 ## 0.2.10
 
 ### 0.2.10 New
