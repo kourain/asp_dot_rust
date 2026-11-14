@@ -253,7 +253,7 @@ async fn an_inserted_value_has_a_handle_and_no_file_changes_it() {
     let file = dir.write("appsettings.toml", "[one]\nvalue = 1\n");
     let mut builder = ApplicationBuilder::new("TestReloadInserted");
     builder.configuration.add_toml_file(&file, true);
-    builder.configuration.add::<SectionOne>(|cfg| cfg.value = 10);
+    builder.configuration.insert::<SectionOne>(|cfg| cfg.value = 10);
 
     assert!(builder.configuration.contains::<SectionOne>());
     assert_eq!(builder.configuration.get::<SectionOne>().capture().unwrap().value, 10);
@@ -261,7 +261,7 @@ async fn an_inserted_value_has_a_handle_and_no_file_changes_it() {
     assert_eq!(builder.configuration.get::<SectionOne>().capture().unwrap().value, 10);
 
     // inserting again replaces the value
-    builder.configuration.add::<SectionOne>(|cfg| cfg.value = 20);
+    builder.configuration.insert::<SectionOne>(|cfg| cfg.value = 20);
     assert_eq!(builder.configuration.get::<SectionOne>().capture().unwrap().value, 20);
 }
 

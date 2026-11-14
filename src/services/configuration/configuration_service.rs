@@ -145,7 +145,7 @@ impl ConfigurationService {
     pub fn new() -> Self {
         let mut _self = Self::default();
         _self.add_toml_file(r".\appsetting.toml", true);
-        _self.add::<crate::configuration::StartupArgsConfiguration>(|_| {});
+        _self.insert::<crate::configuration::StartupArgsConfiguration>(|_| {});
         _self.configure_default_entry::<HyperConfig>(
             "hyper_server",
             CfgEntryAllowReloadFile::AllowedFullPaths(vec![format!("{}\\appsettings.toml", get_executable_folder()).into()]),
@@ -193,7 +193,7 @@ impl ConfigurationService {
 
     /// Insert a configuration of type T made from `T::default()` and `custom`, no file changes it.
     /// A configuration of type T that already exists is replaced.
-    pub fn add<T>(&mut self, custom: impl Fn(&mut T)) -> &mut Self
+    pub fn insert<T>(&mut self, custom: impl Fn(&mut T)) -> &mut Self
     where
         T: Default + Send + Sync + 'static,
     {
@@ -214,7 +214,7 @@ impl ConfigurationService {
             custom(&mut new_cfg);
             reloader.0.store(Some(Arc::new(new_cfg)));
         } else {
-            self.add::<T>(custom);
+            self.insert::<T>(custom);
         }
         self
     }

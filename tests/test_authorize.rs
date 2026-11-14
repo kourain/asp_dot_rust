@@ -103,7 +103,7 @@ async fn jwt_auth_stores_user() {
     });
     builder.add_controllers();
     let mut app = builder.build();
-    app.use_authorize_jwt();
+    app.use_authorize_bearer();
     tokio::spawn(app.run());
     wait_ready(port);
 
@@ -119,7 +119,7 @@ async fn jwt_auth_stores_user() {
     let token = encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(b"test-secret-key-32-chars-minimum!"),
+        &EncodingKey::from_secret(b"test-secret-key-32-chars-minimum!").unwrap(),
     )
     .unwrap();
     let (status, body) = http_get(port, "/whoami", Some(&format!("Bearer {token}")));

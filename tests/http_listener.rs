@@ -93,7 +93,7 @@ async fn startup_fails_loudly_when_a_port_is_taken() {
 
 fn limits(max_headers: usize, max_body: usize) -> impl FnOnce(&mut ApplicationBuilder) {
     move |builder| {
-        builder.configuration.add(|c: &mut HyperConfig| {
+        builder.configuration.insert(|c: &mut HyperConfig| {
             c.max_request_headers_size = max_headers;
             c.max_request_body_size = max_body;
         });

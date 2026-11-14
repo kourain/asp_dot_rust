@@ -48,7 +48,7 @@ pub struct ReloadOnlyService {
 #[tokio::test]
 async fn derive_injects_every_configuration_wrapper() {
     let mut builder = ApplicationBuilder::new("TestDiConfigDerive");
-    builder.configuration.add::<DiSettings>(|cfg| {
+    builder.configuration.insert::<DiSettings>(|cfg| {
         cfg.app_name = "inserted".to_string();
         cfg.max_connections = 3;
     });
@@ -65,7 +65,7 @@ async fn derive_injects_every_configuration_wrapper() {
 #[tokio::test]
 async fn inject_attribute_injects_every_configuration_wrapper() {
     let mut builder = ApplicationBuilder::new("TestDiConfigInject");
-    builder.configuration.add::<DiSettings>(|cfg| {
+    builder.configuration.insert::<DiSettings>(|cfg| {
         cfg.app_name = "inserted".to_string();
         cfg.max_connections = 4;
     });

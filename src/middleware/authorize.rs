@@ -118,7 +118,7 @@ fn try_parse_jwt(http_context: &HttpContext, config: &JwtAuthConfiguration) -> R
     validation.set_audience(&[config.token_audience.as_str()]);
     // expiration is enforced by default when `exp` is present
 
-    let key = DecodingKey::from_secret(config.secret_key.as_bytes());
+    let key = DecodingKey::from_secret(config.secret_key.as_bytes()).ok().ok_or(())?;
     let data = decode::<JsonValue>(token, &key, &validation).map_err(|_| ())?;
     let claims = data.claims;
     let name = claims
@@ -148,14 +148,9 @@ impl Application {
         self
     }
 
-    /// Require JWT Bearer authentication using `JwtAuthConfiguration`. On success, stores `AuthUser` under `"user"`.
-    pub fn use_authorize_jwt(&mut self) -> &mut Self {
-        self.add_middleware::<JwtAuthorizeMiddleware>();
-        self
-    }
-
     /// Alias for `use_authorize_jwt`.
     pub fn use_authorize_bearer(&mut self) -> &mut Self {
-        self.use_authorize_jwt()
+        self.add_middleware::<JwtAuthorizeMiddleware>();
+        self
     }
 }
