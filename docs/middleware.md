@@ -17,7 +17,7 @@ impl LogMiddleware {
     }
     pub async fn invoke_async(&self, http_context: &mut HttpContext) {
         // before the handler
-        self.next.call_async(http_context).await;
+        self.next.next_async(http_context).await;
         // after the handler
     }
 }
@@ -38,5 +38,5 @@ impl LogMiddleware {
 - A middleware is a singleton, take request scoped services in the parameters of `invoke_async`, not in `new`.
 - Middlewares are created when the application runs, after all services are registered.
 - `add_middleware_instance` is replaced by `add_middleware_factory(|next| ..)`.
-- The macro `middleware!(pub Name, |ctx, next| { next.call_async(ctx).await; })` defines a middleware with only the field `next`.
+- The macro `middleware!(pub Name, |ctx, next| { next.next_async(ctx).await; })` defines a middleware with only the field `next`.
 - Per request trace logging of each middleware was removed from the pipeline.

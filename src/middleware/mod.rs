@@ -1,5 +1,6 @@
 pub(crate) mod app_middlewares;
 pub(crate) mod authorize;
+pub use authorize::AuthUser;
 pub(crate) mod auto_route;
 pub(crate) mod compression;
 pub(crate) mod cors;
@@ -8,6 +9,7 @@ pub(crate) mod request_timeout;
 pub(crate) mod static_file;
 use crate::http_context::HttpContext;
 use crate::services::service_provider::service_provider_scope::ServiceProviderScope;
+use std::pin::Pin;
 use std::sync::Arc;
 
 /// The next middleware of the chain, given to the constructor of a middleware (like `RequestDelegate` in ASP.NET).
@@ -16,8 +18,9 @@ impl MiddlewareNext {
     pub(crate) fn new<M: Middleware + 'static>(middleware: M) -> Self {
         Self(Arc::new(middleware))
     }
-    pub async fn next_async(&self, http_context: &mut HttpContext) {
-        self.0.inject_invoke_async(http_context).await;
+    #[inline]
+    pub fn next_async<'a>(&'a self, http_context: &'a mut HttpContext) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        self.0.inject_invoke_async(http_context)
     }
 }
 
@@ -31,7 +34,7 @@ pub trait Middleware: Send + Sync {
     async fn inject_invoke_async(&self, http_context: &mut HttpContext);
 }
 
-/// Defines a middleware that has only the field `next`: `middleware!(pub Name, |ctx, next| { next.call_async(ctx).await; });`
+/// Defines a middleware that has only the field `next`: `middleware!(pub Name, |ctx, next| { next.next_async(ctx).await; });`
 #[macro_export]
 macro_rules! middleware {
     ($vis:vis $name:ident, |$ctx:ident, $next:ident| $body:block) => {

@@ -1,4 +1,4 @@
-use crate::{Application, configuration::RateLimitConfiguration, dependency_injection::CfgOption, http_context::HttpContext, macros::middleware, middleware::MiddlewareNext};
+use crate::{Application, configuration::RateLimitConfiguration, dependency_injection::CfgRequire, http_context::HttpContext, macros::middleware, middleware::MiddlewareNext};
 use dashmap::DashMap;
 
 pub struct RateLimitMiddleware {
@@ -11,8 +11,7 @@ pub struct RateLimitMiddleware {
 }
 #[middleware]
 impl RateLimitMiddleware {
-    pub fn new(next: MiddlewareNext, config: CfgOption<RateLimitConfiguration>) -> Self {
-        let config = config.unwrap_or_default();
+    pub fn new(next: MiddlewareNext, config: CfgRequire<RateLimitConfiguration>) -> Self {
         RateLimitMiddleware {
             next,
             ip_request_counts: DashMap::new(),
@@ -23,44 +22,33 @@ impl RateLimitMiddleware {
         }
     }
     pub async fn invoke_async(&self, context: &mut HttpContext) {
-        let client_socket_addr = context.request.client_socket_addr;
+        let client_ip = context.request.client_socket_addr.ip();
         let now = std::time::Instant::now();
-        match self.ip_blocked_until.get(&client_socket_addr.ip()) {
-            Some(blocked_time) => {
-                if now < *blocked_time {
-                    context.response.status_code = http::StatusCode::TOO_MANY_REQUESTS; // Too Many Requests
-                    context.response.body = http::StatusCode::TOO_MANY_REQUESTS.canonical_reason().unwrap_or("Too Many Requests").as_bytes().to_vec();
-                    return;
-                } else {
-                    self.ip_blocked_until.remove(&client_socket_addr.ip());
-                }
+
+        // Reject while still blocked.
+        if let Some(blocked_until) = self.ip_blocked_until.get(&client_ip) {
+            if now < *blocked_until {
+                context.response.status_code = http::StatusCode::TOO_MANY_REQUESTS;
+                context.response.body = http::StatusCode::TOO_MANY_REQUESTS.canonical_reason().unwrap_or("Too Many Requests").as_bytes().to_vec();
+                return;
             }
-            None => {
-                self.ip_blocked_until.insert(client_socket_addr.ip(), std::time::Instant::now());
-            }
-        };
-        match self.ip_request_counts.get_mut(&client_socket_addr.ip()) {
-            Some(mut history_access) => {
-                history_access.push(now);
-                let mut index: usize = 0;
-                for i in (0..history_access.len()).rev() {
-                    if now.duration_since(history_access[i]) > std::time::Duration::from_secs(self.limit_seconds.into()) {
-                        index = i;
-                        break;
-                    }
-                }
-                if history_access.len() - index - 1 > self.max_requests {
-                    self.ip_blocked_until
-                        .insert(client_socket_addr.ip(), std::time::Instant::now() + std::time::Duration::from_secs(self.block_duration_seconds.into()));
-                    history_access.clear(); // Clear history to start fresh after blocking
-                } else {
-                    history_access.drain(..index); // Remove old timestamps outside the time window
-                }
-            }
-            None => {
-                self.ip_request_counts.insert(client_socket_addr.ip(), vec![now]);
-            }
-        };
+            drop(blocked_until);
+            self.ip_blocked_until.remove(&client_ip);
+        }
+
+        let window = std::time::Duration::from_secs(self.limit_seconds.into());
+        let mut history = self.ip_request_counts.entry(client_ip).or_insert_with(Vec::new);
+        // Drop timestamps outside the sliding window.
+        history.retain(|t| now.duration_since(*t) <= window);
+        history.push(now);
+
+        if history.len() > self.max_requests {
+            self.ip_blocked_until.insert(client_ip, now + std::time::Duration::from_secs(self.block_duration_seconds.into()));
+            history.clear();
+            context.response.status_code = http::StatusCode::TOO_MANY_REQUESTS;
+            context.response.body = http::StatusCode::TOO_MANY_REQUESTS.canonical_reason().unwrap_or("Too Many Requests").as_bytes().to_vec();
+            return;
+        }
 
         self.next.next_async(context).await;
     }
