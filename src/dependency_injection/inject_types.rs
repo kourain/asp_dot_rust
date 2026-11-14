@@ -104,6 +104,7 @@ impl<T> CfgOption<T> {
     }
 
     /// the value, **panics** if there is none (check `has_value` first if that is possible)
+    #[track_caller]
     pub fn unwrap(self) -> CfgRequire<T> {
         match self.0 {
             Some(arc) => CfgRequire(arc),

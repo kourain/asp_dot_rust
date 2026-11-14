@@ -2,7 +2,7 @@ use crate::{
     Application,
     configuration::JwtAuthConfiguration,
     dependency_injection::CfgRequire,
-    http_context::{HttpContext, USER_CONTEXT_KEY, http_header::HttpHeader},
+    http_context::{HttpContext, USER_CONTEXT_KEY, HttpHeaderExt},
     macros::middleware,
     middleware::{Middleware, MiddlewareNext},
     services::service_provider::service_provider_scope::ServiceProviderScope,

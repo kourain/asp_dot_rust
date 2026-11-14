@@ -7,8 +7,9 @@ use asp_dot_rust::{
 use std::sync::{Arc, atomic::AtomicBool};
 
 struct ControllerA;
+#[async_trait::async_trait]
 impl DependencyInjectableController for ControllerA {
-    fn inject(_http_context: &mut HttpContext, _is_valid: Arc<AtomicBool>) -> Self {
+    async fn inject(_http_context: &mut HttpContext, _is_valid: Arc<AtomicBool>) -> Self {
         ControllerA
     }
 }
@@ -18,8 +19,9 @@ impl Routing for ControllerA {
 }
 
 struct ControllerB;
+#[async_trait::async_trait]
 impl DependencyInjectableController for ControllerB {
-    fn inject(_http_context: &mut HttpContext, _is_valid: Arc<AtomicBool>) -> Self {
+    async fn inject(_http_context: &mut HttpContext, _is_valid: Arc<AtomicBool>) -> Self {
         ControllerB
     }
 }

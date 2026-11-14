@@ -184,7 +184,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
     };
 
     let expanded = quote! {
-        use #main_crate_path::http_context::HttpHeader;
+        use #main_crate_path::http_context::HttpHeaderExt;
         #input_impl_tokens
         /// impl by #[controller_route] macro
         #[async_trait::async_trait]
@@ -215,7 +215,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                 )
             }
             /// inventory submit to register the bootstrap function
-            #main_crate_path::inventory::submit! {
+            #main_crate_path::third_party::inventory::submit! {
                 #main_crate_path::services::routing::ControllerBootstrapRegistration {
                     bootstrap: #controller_bootstrap_fn_name,
                 }

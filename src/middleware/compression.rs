@@ -2,7 +2,7 @@ use crate::{
     Application,
     configuration::{CompressionConfiguration, CompressionLevel},
     dependency_injection::{CfgOption, CfgRequire},
-    http_context::{HttpContext, http_header::HttpHeader, http_response::HttpResponse},
+    http_context::{HttpContext, HttpHeaderExt, HttpResponse},
     logging::LOGGER,
     macros::middleware,
     middleware::MiddlewareNext,

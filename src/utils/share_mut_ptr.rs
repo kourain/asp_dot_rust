@@ -9,10 +9,7 @@ unsafe impl<T> Send for ShareMutPtr<T> {}
 unsafe impl<T> Sync for ShareMutPtr<T> {}
 
 impl<T> ShareMutPtr<T> {
-    pub fn new(value: &mut T) -> Self {
-        Self(value as *mut T, Arc::new(AtomicBool::new(false)))
-    }
-    pub fn new_with_state(value: &mut T, state: Arc<AtomicBool>) -> Self {
+    pub fn new(value: &mut T, state: Arc<AtomicBool>) -> Self {
         Self(value as *mut T, state)
     }
 }
@@ -26,6 +23,7 @@ impl<T> Clone for ShareMutPtr<T> {
 impl<T> Deref for ShareMutPtr<T> {
     type Target = T;
 
+    #[track_caller]
     fn deref(&self) -> &Self::Target {
         if !self.1.load(std::sync::atomic::Ordering::Relaxed) {
             let type_name = std::any::type_name::<T>();
@@ -36,6 +34,7 @@ impl<T> Deref for ShareMutPtr<T> {
 }
 
 impl<T> DerefMut for ShareMutPtr<T> {
+    #[track_caller]
     fn deref_mut(&mut self) -> &mut Self::Target {
         if !self.1.load(std::sync::atomic::Ordering::Relaxed) {
             let type_name = std::any::type_name::<T>();

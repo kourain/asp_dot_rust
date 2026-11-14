@@ -13,12 +13,13 @@ async fn test_application() {
     let mut app_builder = ApplicationBuilder::new("TestApp");
     app_builder.with_any_ip().with_http_port(8080);
     app_builder
-        .add_custom_configuration(|config: &mut CorsConfiguration| {
+        .configuration
+        .update(|config: &mut CorsConfiguration| {
             config.allowed_origins = ["*".into()].into();
             config.allowed_methods = [http::Method::GET, http::Method::POST].into();
             config.allowed_headers = ["Content-Type".into()].into();
         })
-        .add_custom_configuration(|cfg: &mut RateLimitConfiguration| {
+        .update(|cfg: &mut RateLimitConfiguration| {
             cfg.max_requests = 5000000000;
             cfg.limit_seconds = 1;
             cfg.block_duration_seconds = 60;

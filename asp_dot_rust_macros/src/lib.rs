@@ -156,7 +156,7 @@ pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
-    dependency_injection::inject_impliment::inject(args, item, InjectFlags::NONE)
+    dependency_injection::inject_impliment::inject(args, item, InjectFlags::NONE | InjectFlags::ALLOW_ASYNC_NEW)
 }
 
 /// middleware in the style of ASP.NET: the next middleware is given to the constructor <br>

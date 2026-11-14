@@ -2,7 +2,7 @@ use crate::{
     Application,
     configuration::StaticFileConfiguration,
     dependency_injection::CfgOption,
-    http_context::http_header::HttpHeader,
+    http_context::HttpHeaderExt,
     macros::middleware,
     middleware::MiddlewareNext,
 };
