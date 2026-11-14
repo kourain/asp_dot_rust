@@ -1,5 +1,5 @@
-use crate::http_context::http_request::HttpRequest;
-use crate::http_context::HttpHeader;
+use crate::http_context::HttpRequest;
+use crate::http_context::HttpHeaderExt;
 
 use super::error::BindError;
 

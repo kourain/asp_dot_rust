@@ -4,7 +4,7 @@ use hyper::body::Bytes;
 use std::io;
 use tokio::sync::oneshot;
 
-use crate::http_context::http_header::HttpHeader;
+use crate::http_context::HttpHeaderExt;
 
 /// Chunk size (64KB) used to write a complete body into the stream.
 const BODY_CHUNK_SIZE: usize = 64 * 1024;
