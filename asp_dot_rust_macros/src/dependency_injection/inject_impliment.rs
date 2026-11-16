@@ -49,30 +49,25 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
     // extract the inner type from each Arc<T> parameter
     let mut inner_types = Vec::new();
     let mut call_args = Vec::new();
-    let mut http_context_inject = quote! {};
     let mut configuration_service = quote! {};
     let mut httpcontext_inject_state = HttpInjectType::None;
     for arg in &new_fn.sig.inputs {
         if let FnArg::Typed(PatType { ty, .. }) = arg {
-            if let Some(inner) = extract_wrapper_inner(ty, "Serv")
-            {
+            if let Some(inner) = extract_wrapper_inner(ty, "Serv") {
                 let arg = quote! { service_scope.get_service::<#inner>().await };
                 call_args.push(arg);
                 inner_types.push(inner.clone());
-            } else if let Some(inner) = extract_wrapper_inner(ty, "CfgRequire")
-            {
+            } else if let Some(inner) = extract_wrapper_inner(ty, "CfgRequire") {
                 let arg = quote! { configuration_service.get::<#inner>().capture().unwrap() };
                 call_args.push(arg);
                 inner_types.push(inner.clone());
                 configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>().await; };
-            } else if let Some(inner) = extract_wrapper_inner(ty, "CfgReload")
-            {
+            } else if let Some(inner) = extract_wrapper_inner(ty, "CfgReload") {
                 let arg = quote! { configuration_service.get::<#inner>() };
                 call_args.push(arg);
                 inner_types.push(inner.clone());
                 configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>().await; };
-            } else if let Some(inner) = extract_wrapper_inner(ty, "CfgOption").or_else(|| extract_wrapper_inner(ty, "Cfg"))
-            {
+            } else if let Some(inner) = extract_wrapper_inner(ty, "CfgOption").or_else(|| extract_wrapper_inner(ty, "Cfg")) {
                 let arg = quote! { configuration_service.get::<#inner>().capture() };
                 call_args.push(arg);
                 inner_types.push(inner.clone());
@@ -85,9 +80,8 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                     }
                     httpcontext_inject_state = http_inject_type;
                     match httpcontext_inject_state {
-                        HttpInjectType::ShareMutPtr => {
-                            http_context_inject = quote! { let http_ctx_ref = #main_crate_path::utils::ShareMutPtr::new(http_context, is_valid); };
-                            call_args.push(quote! { http_ctx_ref });
+                        HttpInjectType::HttpContextRef => {
+                            call_args.push(quote! { http_context });
                         }
                         HttpInjectType::BorrowHttpContext | HttpInjectType::MoveHttpContext | _ => return create_compiler_error(new_fn, "Can't inject HttpContext, use HttpContextRef instead"),
                     }
@@ -99,7 +93,7 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                         "Field must be Serv<T> (Service), CfgOption<T> (optional config), CfgRequire<T> (required config), or CfgReload<T> (reloadable config), found: {}",
                         token_type_to_string(ty)
                     ),
-                )
+                );
             }
         }
     }
@@ -114,11 +108,9 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
             #[#main_crate_path::third_party::async_trait::async_trait]
             impl #main_crate_path::dependency_injection::DependencyInjectableController for #self_ty {
                 async fn inject(
-                    http_context: &mut #main_crate_path::http_context::HttpContext,
-                    is_valid: std::sync::Arc<std::sync::atomic::AtomicBool>
+                    http_context: #main_crate_path::http_context::HttpContextRef
                 ) -> Self {
                     let service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope = &http_context.service_provider;
-                    #http_context_inject
                     #configuration_service
                     Self::new( #(#call_args),* )
                 }
@@ -132,7 +124,6 @@ pub(crate) fn inject(_args: TokenStream, item: TokenStream, flag: InjectFlags) -
                 async fn inject(
                     service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope
                 ) -> Self {
-                    #http_context_inject
                     #configuration_service
                     Self::new( #(#call_args),* )#async_call
                 }
@@ -155,7 +146,7 @@ fn get_http_inject_type(ty: &Type) -> HttpInjectType {
     if let Type::Path(p) = ty {
         let seg = p.path.segments.last().unwrap();
         if seg.ident == "HttpContextRef" {
-            return HttpInjectType::ShareMutPtr;
+            return HttpInjectType::HttpContextRef;
         } else if seg.ident == "HttpContext" {
             return HttpInjectType::MoveHttpContext;
         }

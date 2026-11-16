@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
 };
 
-pub struct ShareMutPtr<T>(*mut T, Arc<AtomicBool>)
+pub(crate) struct ShareMutPtr<T>(*mut T, Arc<AtomicBool>)
 where
     T: Send + Sync + 'static;
 

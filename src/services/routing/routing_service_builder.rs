@@ -33,12 +33,10 @@ impl RoutingServiceBuilder {
     where
         T: DependencyInjectableController + Routing + Send + 'static,
     {
-        let controller_invoker: ControllerInvoke = |http_context: &mut crate::http_context::HttpContext, action_name: &'static str| {
+        let controller_invoker: ControllerInvoke = |http_context, action_name| {
             Box::pin(async move {
-                let is_valid = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-                let mut controller = T::inject(http_context, is_valid.clone()).await;
+                let mut controller = T::inject(http_context).await;
                 controller.routing(action_name).await;
-                is_valid.store(false, std::sync::atomic::Ordering::Release);
             })
         };
         if !self._registered_controllers.insert(TypeId::of::<T>()) {
@@ -76,7 +74,12 @@ impl RoutingServiceBuilder {
     {
         // a limit that is not a usize would be ignored when a request comes in, refuse it at startup
         if route_attr_map.get(MAX_BODY_SIZE_ATTRIBUTE).is_some_and(|value| !value.is::<usize>()) {
-            panic!("Attribute `{}` of {}::{} must be a usize (the limit in bytes)", MAX_BODY_SIZE_ATTRIBUTE, std::any::type_name::<T>(), action_name);
+            panic!(
+                "Attribute `{}` of {}::{} must be a usize (the limit in bytes)",
+                MAX_BODY_SIZE_ATTRIBUTE,
+                std::any::type_name::<T>(),
+                action_name
+            );
         }
         let controller_name = std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>());
         let route_info = Arc::new(Route {

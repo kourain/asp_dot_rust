@@ -11,7 +11,7 @@ bitflags! {
 #[derive(PartialEq)]
 pub enum HttpInjectType {
     None,
-    ShareMutPtr,
+    HttpContextRef,
     BorrowHttpContext,
     MoveHttpContext,
 }

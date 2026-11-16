@@ -41,15 +41,18 @@ impl DiMiddleware {
     }
 }
 
-api_controller!(pub DiController {});
+api_controller!(pub DiController {
+    routing: Serv<RoutingService>,
+});
 #[controller_route]
 #[controller_inject]
 impl DiController {
-    fn new(http_context: HttpContextRef) -> Self {
-        Self { http_context }
+    fn new(http_context: HttpContextRef, routing: Serv<RoutingService>) -> Self {
+        Self { http_context, routing }
     }
     #[get("/ok")]
     pub async fn ok(&mut self) -> impl ActionResult {
+        assert!(self.routing.get_allowed_methods(self.http_context.request.path()).contains(&http::Method::GET));
         "ok"
     }
 }

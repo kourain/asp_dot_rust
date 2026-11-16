@@ -1,15 +1,14 @@
 use asp_dot_rust::{
     controller::{ActionRoute, Routing},
     dependency_injection::DependencyInjectableController,
-    http_context::HttpContext,
+    http_context::HttpContextRef,
     services::routing::RoutingServiceBuilder,
 };
-use std::sync::{Arc, atomic::AtomicBool};
 
 struct ControllerA;
 #[async_trait::async_trait]
 impl DependencyInjectableController for ControllerA {
-    async fn inject(_http_context: &mut HttpContext, _is_valid: Arc<AtomicBool>) -> Self {
+    async fn inject(_http_context: HttpContextRef) -> Self {
         ControllerA
     }
 }
@@ -21,7 +20,7 @@ impl Routing for ControllerA {
 struct ControllerB;
 #[async_trait::async_trait]
 impl DependencyInjectableController for ControllerB {
-    async fn inject(_http_context: &mut HttpContext, _is_valid: Arc<AtomicBool>) -> Self {
+    async fn inject(_http_context: HttpContextRef) -> Self {
         ControllerB
     }
 }
@@ -95,7 +94,12 @@ fn resolved_route_has_its_attributes_stored_as_their_own_type() {
     let mut builder = RoutingServiceBuilder::default();
     builder.register_controller::<ControllerA>(
         "home",
-        vec![ActionRoute::new("index", vec!["get"], "").with_attribute("level", 5u8).with_attribute("zone", "main").with_attribute("ratio", 0.5f32)],
+        vec![
+            ActionRoute::new("index", vec!["get"], "")
+                .with_attribute("level", 5u8)
+                .with_attribute("zone", "main")
+                .with_attribute("ratio", 0.5f32),
+        ],
     );
     let service = builder.build();
     let uri: http::Uri = "/home".parse().unwrap();
