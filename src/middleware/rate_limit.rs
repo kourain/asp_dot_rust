@@ -47,10 +47,10 @@ impl RateLimitMiddleware {
             history.clear();
             context.response.status_code = http::StatusCode::TOO_MANY_REQUESTS;
             context.response.body = http::StatusCode::TOO_MANY_REQUESTS.canonical_reason().unwrap_or("Too Many Requests").as_bytes().to_vec();
-            return;
+        } else {
+            drop(history);
+            self.next.next_async(context).await;
         }
-
-        self.next.next_async(context).await;
     }
 }
 
