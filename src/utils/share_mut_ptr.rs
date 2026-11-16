@@ -3,24 +3,20 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
 };
 
-pub struct ShareMutPtr<T>(*mut T, Arc<AtomicBool>);
+pub struct ShareMutPtr<T>(*mut T, Arc<AtomicBool>)
+where
+    T: Send + Sync + 'static;
 
-unsafe impl<T> Send for ShareMutPtr<T> {}
-unsafe impl<T> Sync for ShareMutPtr<T> {}
+unsafe impl<T: Send + Sync + 'static> Send for ShareMutPtr<T> {}
+unsafe impl<T: Send + Sync + 'static> Sync for ShareMutPtr<T> {}
 
-impl<T> ShareMutPtr<T> {
+impl<T: Send + Sync + 'static> ShareMutPtr<T> {
     pub fn new(value: &mut T, state: Arc<AtomicBool>) -> Self {
         Self(value as *mut T, state)
     }
 }
 
-impl<T> Clone for ShareMutPtr<T> {
-    fn clone(&self) -> Self {
-        Self(self.0, self.1.clone())
-    }
-}
-
-impl<T> Deref for ShareMutPtr<T> {
+impl<T: Send + Sync + 'static> Deref for ShareMutPtr<T> {
     type Target = T;
 
     #[track_caller]
@@ -33,7 +29,7 @@ impl<T> Deref for ShareMutPtr<T> {
     }
 }
 
-impl<T> DerefMut for ShareMutPtr<T> {
+impl<T: Send + Sync + 'static> DerefMut for ShareMutPtr<T> {
     #[track_caller]
     fn deref_mut(&mut self) -> &mut Self::Target {
         if !self.1.load(std::sync::atomic::Ordering::Relaxed) {
