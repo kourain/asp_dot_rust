@@ -1,8 +1,8 @@
-//! Middleware in the style of ASP.NET with dependency injection: startup services in `new`, request services in `invoke_async`.
+//! Middleware and controller dependency injection with startup and request arguments.
 use asp_dot_rust::{
     ApplicationBuilder, api_controller,
     controller::{ActionResult, get},
-    dependency_injection::Serv,
+    dependency_injection::{CfgOption, CfgReload, CfgRequire, Serv},
     http_context::{HttpContext, HttpContextRef},
     logging::LOGGER,
     macros::{controller_inject, controller_route, middleware},
@@ -22,20 +22,27 @@ use std::{
 static EVENTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static REQUESTS: AtomicUsize = AtomicUsize::new(0);
 
+#[derive(Default)]
+struct DiSettings {
+    enabled: bool,
+}
+
 pub struct DiMiddleware {
     next: MiddlewareNext,
     startup: Serv<RoutingService>,
 }
 #[middleware]
 impl DiMiddleware {
-    pub fn new(next: MiddlewareNext, startup: Serv<RoutingService>) -> Self {
+    fn new(config: CfgRequire<DiSettings>, next: MiddlewareNext, startup: Serv<RoutingService>) -> Self {
+        assert!(config.enabled);
         EVENTS.lock().unwrap().push("new".to_string());
         Self { next, startup }
     }
-    pub async fn invoke_async(&self, http_context: &mut HttpContext, request: Serv<RoutingService>) {
+    async fn invoke_async(&self, http_context: &mut HttpContext, request: Serv<RoutingService>, config: CfgReload<DiSettings>) {
         // both services are the same registered service, the second one is resolved on every request
         let methods = (self.startup.get_allowed_methods("/ok").len(), request.get_allowed_methods("/ok").len());
         assert_eq!(methods.0, methods.1);
+        assert!(config.capture().unwrap().enabled);
         REQUESTS.fetch_add(1, SeqCst);
         self.next.next_async(http_context).await;
     }
@@ -47,7 +54,8 @@ api_controller!(pub DiController {
 #[controller_route]
 #[controller_inject]
 impl DiController {
-    fn new(http_context: HttpContextRef, routing: Serv<RoutingService>) -> Self {
+    fn new(http_context: HttpContextRef, routing: Serv<RoutingService>, config: CfgOption<DiSettings>) -> Self {
+        assert!(config.unwrap().enabled);
         Self { http_context, routing }
     }
     #[get("/ok")]
@@ -67,11 +75,12 @@ fn request(port: u16, path: &str) -> String {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn startup_and_request_services_are_injected() {
+async fn startup_and_request_dependencies_are_injected() {
     LOGGER::disable();
     let port = 18936;
     let mut builder = ApplicationBuilder::new("draft_di");
     builder.with_loopback_ip().with_http_port(port);
+    builder.configuration.insert::<DiSettings>(|config| config.enabled = true);
     builder.add_controllers();
     let mut app = builder.build();
     app.add_middleware::<DiMiddleware>();

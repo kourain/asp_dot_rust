@@ -1,7 +1,5 @@
-use crate::{
-    dependency_injection::flags::DIPropOption,
-    utils::{compiler_error::create_compiler_error, extract_type::extract_wrapper_inner},
-};
+use super::{dependencies::Dependencies, flags::DIPropOption};
+use crate::utils::compiler_error::create_compiler_error;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, parse_macro_input};
@@ -48,6 +46,7 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     let ident = &input.ident;
     let ident_str = ident.to_string();
+    let mut dependencies = Dependencies::default();
 
     let data = match &input.data {
         Data::Struct(s) => s,
@@ -57,7 +56,7 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
     let named = match &data.fields {
         Fields::Named(f) => &f.named,
         Fields::Unit => {
-            // no fields at all -- nothing to resolve, no dependency edges
+            let registration = dependencies.register(&main_crate_path, ident);
             return quote! {
                 #[#main_crate_path::third_party::async_trait::async_trait]
                 impl #main_crate_path::dependency_injection::DependencyInjectableService for #ident {
@@ -65,13 +64,7 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
                         Self
                     }
                 }
-                #main_crate_path::third_party::inventory::submit! {
-                    #main_crate_path::dependency_injection::DependencyEdge {
-                        owner: std::any::TypeId::of::<#ident>,
-                        owner_name: #ident_str,
-                        dependencies: || vec![],
-                    }
-                }
+                #registration
             }
             .into();
         }
@@ -85,8 +78,6 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
 
     let mut field_inits = Vec::new();
     let mut field_warnings = Vec::new();
-    let mut inner_types = Vec::new();
-    let mut configuration_service = quote! {};
 
     for (field_index, field) in named.iter().enumerate() {
         let field_ident = field.ident.as_ref().unwrap();
@@ -94,21 +85,8 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
 
         let di_default = extract_di_options(field);
 
-        if let Some(inner) = extract_wrapper_inner(ty, "Serv") {
-            field_inits.push(quote! { #field_ident: service_scope.get_service::<#inner>().await });
-            inner_types.push(inner);
-        } else if let Some(inner) = extract_wrapper_inner(ty, "CfgRequire") {
-            field_inits.push(quote! { #field_ident: configuration_service.get::<#inner>().capture().unwrap() });
-            inner_types.push(inner.clone());
-            configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>().await; };
-        } else if let Some(inner) = extract_wrapper_inner(ty, "CfgReload") {
-            field_inits.push(quote! { #field_ident: configuration_service.get::<#inner>() });
-            inner_types.push(inner.clone());
-            configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>().await; };
-        } else if let Some(inner) = extract_wrapper_inner(ty, "CfgOption").or_else(|| extract_wrapper_inner(ty, "Cfg")) {
-            field_inits.push(quote! { #field_ident: configuration_service.get::<#inner>().capture() });
-            inner_types.push(inner.clone());
-            configuration_service = quote! { let configuration_service = service_scope.get_service::<#main_crate_path::services::configuration::ConfigurationService>().await; };
+        if let Some(expression) = dependencies.resolve(ty) {
+            field_inits.push(quote! { #field_ident: #expression });
         } else {
             field_inits.push(quote! { #field_ident: Default::default() });
             if !di_default.contains(DIPropOption::DEFAULT) {
@@ -132,23 +110,19 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
         }
     }
 
+    let configuration = dependencies.configuration_binding(&main_crate_path);
+    let registration = dependencies.register(&main_crate_path, ident);
     quote! {
         #[#main_crate_path::third_party::async_trait::async_trait]
         impl #main_crate_path::dependency_injection::DependencyInjectableService for #ident {
             async fn inject(service_scope: &#main_crate_path::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self {
-                #configuration_service
+                #configuration
                 #(#field_warnings)*
                 Self { #(#field_inits),* }
             }
         }
 
-        #main_crate_path::third_party::inventory::submit! {
-            #main_crate_path::dependency_injection::DependencyEdge {
-                owner: std::any::TypeId::of::<#ident>,
-                owner_name: #ident_str,
-                dependencies: || vec![ #( (std::any::TypeId::of::<#inner_types>(), std::any::type_name::<#inner_types>()) ),* ],
-            }
-        }
+        #registration
     }
     .into()
 }

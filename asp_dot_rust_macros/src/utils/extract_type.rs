@@ -1,4 +1,11 @@
-use syn::Type;
+use syn::{Ident, Type};
+
+pub fn type_name(ty: &Type) -> Option<&Ident> {
+    match ty {
+        Type::Path(path) => path.path.segments.last().map(|segment| &segment.ident),
+        _ => None,
+    }
+}
 
 /// Returns the exact type, unwrapping references if necessary.
 pub fn get_exact_type(ty: &Type) -> &Type {
@@ -9,15 +16,14 @@ pub fn get_exact_type(ty: &Type) -> &Type {
         Type::Reference(r) => {
             return get_exact_type(&r.elem);
         }
-        _ => return ty
+        _ => return ty,
     }
 }
 
 /// Extract inner type T from a single-generic-arg wrapper like `Serv<T>`,
 /// `CfgOption<T>`, `CfgRequire<T>`, `CfgReload<T>` — matched by ident name only,
 /// so it works regardless of which crate path the wrapper was imported from.
-/// Shared between `#[inject]`/`#[controller_inject]` and
-/// `#[derive(DependencyInjectableService)]`.
+/// Used for dependency injection and action parameter binding.
 pub fn extract_wrapper_inner(ty: &Type, wrapper_name: &str) -> Option<Type> {
     if let Type::Path(p) = ty {
         let seg = p.path.segments.last()?;
