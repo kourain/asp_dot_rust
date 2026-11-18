@@ -4,8 +4,33 @@ A middleware is created once when the application runs and holds the next middle
 
 ## Write a middleware
 
+### Inject struct fields with `#[derive(DependencyInjectableMiddleware)]`
+
 ```rust
-use asp_dot_rust::{macros::middleware, middleware::MiddlewareNext, http_context::HttpContext};
+use asp_dot_rust::{
+    http_context::HttpContext,
+    macros::{DependencyInjectableMiddleware, middleware},
+    middleware::MiddlewareNext,
+};
+
+#[derive(DependencyInjectableMiddleware)]
+pub struct LogMiddleware {
+    next: MiddlewareNext,
+}
+#[middleware]
+impl LogMiddleware {
+    pub async fn invoke_async(&self, http_context: &mut HttpContext) {
+        // before the handler
+        self.next.next_async(http_context).await;
+        // after the handler
+    }
+}
+```
+
+### Inject constructor parameters with `fn new`
+
+```rust
+use asp_dot_rust::{http_context::HttpContext, macros::middleware, middleware::MiddlewareNext};
 
 pub struct LogMiddleware {
     next: MiddlewareNext,
@@ -25,13 +50,15 @@ impl LogMiddleware {
 
 ## Dependency injection
 
-- Parameters of `new` after `next` are resolved once when the pipeline is built: `Serv<T>`, `CfgOption<T>`, `CfgRequire<T>`, `CfgReload<T>`.
+- `#[derive(DependencyInjectableMiddleware)]` fills one `MiddlewareNext` field and resolves fields typed `Serv<T>`, `CfgOption<T>`, `CfgRequire<T>`, and `CfgReload<T>` when the pipeline is built. Mark fields that use `Default::default()` with `#[di(default)]`.
+- For custom construction, define `fn new` inside the `#[middleware]` impl. Its parameters can use the same dependency types and must include `MiddlewareNext`.
 - Parameters of `invoke_async` after `http_context` are resolved on every request from the request scope, with the same types.
-- Without `fn new` the struct must have only the field `next`.
 
 ## What `#[middleware]` generates
 
-`Middleware` (from `new`), `Middleware` (from `invoke_async`) and `Middleware` for the type.
+`#[middleware]` implements `Middleware` using `invoke_async`. When the block contains `fn new`, it also implements `DependencyInjectableMiddleware` using that constructor. When the block contains only `invoke_async`, provide `DependencyInjectableMiddleware` via the derive or a manual implementation.
+
+`DependencyInjectableMiddleware::inject` takes ownership of `MiddlewareNext` and passes it directly to the constructor or stores it in the derived field.
 
 ## Limits
 

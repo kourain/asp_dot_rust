@@ -14,9 +14,18 @@ pub trait DependencyInjectableService: Send + Sync + 'static {
     where
         Self: Sized;
 }
+
 #[async_trait::async_trait]
 pub trait DependencyInjectableController: Send + Sync + 'static {
     async fn inject(http_context: crate::http_context::HttpContextRef) -> Self
+    where
+        Self: Sized;
+}
+
+/// Creates a middleware from the services and the next middleware.
+#[async_trait::async_trait]
+pub trait DependencyInjectableMiddleware {
+    async fn inject(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope, next: crate::middleware::MiddlewareNext) -> Self
     where
         Self: Sized;
 }

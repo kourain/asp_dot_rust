@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
-fn extract_di_options(field: &syn::Field) -> DIPropOption {
+pub(super) fn extract_di_options(field: &syn::Field) -> DIPropOption {
     let mut result = DIPropOption::empty();
     for attr in &field.attrs {
         if !attr.path().is_ident("di") {

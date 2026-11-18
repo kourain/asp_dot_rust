@@ -5,7 +5,7 @@ use asp_dot_rust::{
     dependency_injection::{CfgOption, CfgReload, CfgRequire, Serv},
     http_context::{HttpContext, HttpContextRef},
     logging::LOGGER,
-    macros::{controller_inject, controller_route, middleware},
+    macros::{DependencyInjectableMiddleware, controller_inject, controller_route, middleware},
     middleware::MiddlewareNext,
     services::routing::RoutingService,
 };
@@ -21,10 +21,32 @@ use std::{
 
 static EVENTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static REQUESTS: AtomicUsize = AtomicUsize::new(0);
+static DERIVED_REQUESTS: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Default)]
 struct DiSettings {
     enabled: bool,
+}
+
+#[derive(DependencyInjectableMiddleware)]
+struct DerivedMiddleware {
+    continuation: MiddlewareNext,
+    routing: Serv<RoutingService>,
+    settings: CfgRequire<DiSettings>,
+    #[di(default)]
+    requests: AtomicUsize,
+}
+
+#[middleware]
+impl DerivedMiddleware {
+    async fn invoke_async(&self, http_context: &mut HttpContext, routing: Serv<RoutingService>) {
+        assert!(self.settings.enabled);
+        let startup_methods = self.routing.get_allowed_methods("/ok");
+        assert!(startup_methods.contains(&http::Method::GET));
+        assert_eq!(startup_methods, routing.get_allowed_methods("/ok"));
+        assert_eq!(self.requests.fetch_add(1, SeqCst), DERIVED_REQUESTS.fetch_add(1, SeqCst));
+        self.continuation.next_async(http_context).await;
+    }
 }
 
 pub struct DiMiddleware {
@@ -84,6 +106,7 @@ async fn startup_and_request_dependencies_are_injected() {
     builder.add_controllers();
     let mut app = builder.build();
     app.add_middleware::<DiMiddleware>();
+    app.add_middleware::<DerivedMiddleware>();
     // the middleware is created once when the application runs, not when it is added
     assert!(EVENTS.lock().unwrap().is_empty());
     tokio::spawn(app.run());
@@ -99,4 +122,5 @@ async fn startup_and_request_dependencies_are_injected() {
     }
     assert_eq!(*EVENTS.lock().unwrap(), ["new"]);
     assert_eq!(REQUESTS.load(SeqCst), 3);
+    assert_eq!(DERIVED_REQUESTS.load(SeqCst), 3);
 }

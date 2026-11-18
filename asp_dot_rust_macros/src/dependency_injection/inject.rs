@@ -90,88 +90,95 @@ fn expand(input: &ItemImpl, target: InjectTarget) -> Result<TokenStream2, TokenS
             _ => None,
         })
     };
-    let extra = match target {
-        InjectTarget::Service => None,
-        InjectTarget::Controller => Some(("HttpContextRef", quote! { http_context })),
-        InjectTarget::Middleware => Some(("MiddlewareNext", quote! { next })),
-    };
-    let (constructor, dependencies) = if let Some(new) = find_fn("new") {
-        let await_call = if new.sig.asyncness.is_some() {
-            if target != InjectTarget::Service {
-                return Err(create_compiler_error(&new.sig, "fn `new` cannot be async"));
+    let (impl_generics, _, where_clause) = input.generics.split_for_impl();
+    let scope = quote! { #main_crate::services::service_provider::service_provider_scope::ServiceProviderScope };
+    let middleware = if target == InjectTarget::Middleware {
+        let Some(invoke) = find_fn("invoke_async") else {
+            return Err(create_compiler_error(self_ty, "impl block must have fn `invoke_async`"));
+        };
+        let invoke = middleware_invoke(invoke, &main_crate)?;
+        quote! {
+            #[#main_crate::third_party::async_trait::async_trait]
+            impl #impl_generics #main_crate::middleware::Middleware for #self_ty #where_clause {
+                #invoke
             }
-            quote! { .await }
-        } else {
-            TokenStream2::new()
-        };
-        let InjectedArguments { dependencies, bindings, values } = InjectedArguments::resolve(&new.sig, new.sig.inputs.iter(), extra)?;
-        let configuration = dependencies.configuration_binding(&main_crate);
-        let registration_check = if target == InjectTarget::Controller {
-            dependencies.check_registrations(self_ty)
-        } else {
-            TokenStream2::new()
-        };
-        // Finish borrowing the scope before moving a controller's HttpContextRef.
-        let constructor = quote! {
-            #configuration
-            #registration_check
-            #(#bindings)*
-            Self::new(#(#values),*) #await_call
-        };
-        (constructor, dependencies)
-    } else if target == InjectTarget::Middleware {
-        (quote! { Self { next } }, Dependencies::default())
+        }
     } else {
+        TokenStream2::new()
+    };
+
+    let Some(new) = find_fn("new") else {
+        if target == InjectTarget::Middleware {
+            return Ok(quote! { #input #middleware });
+        }
         return Err(create_compiler_error(self_ty, "impl block must have fn `new`"));
     };
 
-    let scope = quote! { #main_crate::services::service_provider::service_provider_scope::ServiceProviderScope };
-    let (trait_path, methods, registration) = match target {
+    let (constructor, dependencies) = constructor(new, target, self_ty, &main_crate)?;
+    let (trait_name, parameters, scope_binding, registration) = match target {
         InjectTarget::Service => (
-            quote! { #main_crate::dependency_injection::DependencyInjectableService },
-            quote! {
-                async fn inject(service_scope: &#scope) -> Self {
-                    #constructor
-                }
-            },
+            quote! { DependencyInjectableService },
+            quote! { service_scope: &#scope },
+            TokenStream2::new(),
             dependencies.register(&main_crate, self_ty),
         ),
         InjectTarget::Controller => (
-            quote! { #main_crate::dependency_injection::DependencyInjectableController },
-            quote! {
-                async fn inject(http_context: #main_crate::http_context::HttpContextRef) -> Self {
-                    let service_scope = &http_context.service_provider;
-                    #constructor
-                }
-            },
+            quote! { DependencyInjectableController },
+            quote! { http_context: #main_crate::http_context::HttpContextRef },
+            quote! { let service_scope = &http_context.service_provider; },
             TokenStream2::new(),
         ),
-        InjectTarget::Middleware => {
-            let Some(invoke) = find_fn("invoke_async") else {
-                return Err(create_compiler_error(self_ty, "impl block must have fn `invoke_async`"));
-            };
-            let invoke = middleware_invoke(invoke, &main_crate)?;
-            (
-                quote! { #main_crate::middleware::Middleware },
-                quote! {
-                    async fn inject(service_scope: &#scope, next: #main_crate::middleware::MiddlewareNext) -> Self {
-                        #constructor
-                    }
-                    #invoke
-                },
-                TokenStream2::new(),
-            )
-        }
+        InjectTarget::Middleware => (
+            quote! { DependencyInjectableMiddleware },
+            quote! { service_scope: &#scope, next: #main_crate::middleware::MiddlewareNext },
+            TokenStream2::new(),
+            TokenStream2::new(),
+        ),
     };
 
     Ok(quote! {
         #input
         #[#main_crate::third_party::async_trait::async_trait]
-        impl #trait_path for #self_ty {
-            #methods
+        impl #impl_generics #main_crate::dependency_injection::#trait_name for #self_ty #where_clause {
+            async fn inject(#parameters) -> Self {
+                #scope_binding
+                #constructor
+            }
         }
         #registration
+        #middleware
     })
+}
+
+fn constructor(new: &ImplItemFn, target: InjectTarget, self_ty: &syn::Type, main_crate: &TokenStream2) -> Result<(TokenStream2, Dependencies), TokenStream> {
+    let extra = match target {
+        InjectTarget::Service => None,
+        InjectTarget::Controller => Some(("HttpContextRef", quote! { http_context })),
+        InjectTarget::Middleware => Some(("MiddlewareNext", quote! { next })),
+    };
+    let await_call = if new.sig.asyncness.is_some() {
+        if target != InjectTarget::Service {
+            return Err(create_compiler_error(&new.sig, "fn `new` cannot be async"));
+        }
+        quote! { .await }
+    } else {
+        TokenStream2::new()
+    };
+    let InjectedArguments { dependencies, bindings, values } = InjectedArguments::resolve(&new.sig, new.sig.inputs.iter(), extra)?;
+    let configuration = dependencies.configuration_binding(main_crate);
+    let registration_check = if target == InjectTarget::Controller {
+        dependencies.check_registrations(self_ty)
+    } else {
+        TokenStream2::new()
+    };
+    // Finish borrowing the scope before moving a controller's HttpContextRef.
+    let constructor = quote! {
+        #configuration
+        #registration_check
+        #(#bindings)*
+        Self::new(#(#values),*) #await_call
+    };
+    Ok((constructor, dependencies))
 }
 
 fn middleware_invoke(invoke: &ImplItemFn, main_crate: &TokenStream2) -> Result<TokenStream2, TokenStream> {

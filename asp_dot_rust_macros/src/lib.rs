@@ -162,8 +162,8 @@ pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
 /// Place it on `impl T { fn new(next: MiddlewareNext, ..); async fn invoke_async(&self, ctx, ..) }`. <br>
 /// - parameters of `new` are resolved once when the pipeline is built (`MiddlewareNext`, `Serv<T>`, `CfgOption<T>`, `CfgRequire<T>`, `CfgReload<T>`). <br>
 /// - parameters of `invoke_async` after `ctx` are resolved on every request from the request scope (`Serv<T>`, `CfgOption<T>`...). <br>
-/// - it implements `Middleware` for the type. <br>
-/// - without `fn new` the struct must have only the field `next`.
+/// - it implements `Middleware` for the type and implements `DependencyInjectableMiddleware` when the block contains `fn new`. <br>
+/// - for field injection, put `#[derive(DependencyInjectableMiddleware)]` on the struct and omit `fn new` from the annotated impl.
 ///
 /// ```no_run
 /// pub struct LogMiddleware {
@@ -182,6 +182,15 @@ pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
     dependency_injection::inject(args, item, InjectTarget::Middleware)
+}
+
+/// Implements `DependencyInjectableMiddleware` for a struct with one `MiddlewareNext` field.
+///
+/// Resolves `Serv<T>` and configuration fields when the pipeline is built.
+/// Use `#[di(default)]` to initialize other fields with `Default::default()`.
+#[proc_macro_derive(DependencyInjectableMiddleware, attributes(di))]
+pub fn derive_dependency_injectable_middleware(item: TokenStream) -> TokenStream {
+    dependency_injection::derive_middleware::derive_injectable_middleware(item)
 }
 
 /// inject httpcontext service and config <br>
