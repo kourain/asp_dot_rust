@@ -15,7 +15,7 @@ pub trait DependencyInjectableService: Send + Sync + 'static {
 }
 #[async_trait::async_trait]
 pub trait DependencyInjectableController: Send + Sync + 'static {
-    async fn inject(http_context: &mut crate::http_context::HttpContext, is_valid: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self
+    async fn inject(http_context: crate::http_context::HttpContextRef) -> Self
     where
         Self: Sized;
 }

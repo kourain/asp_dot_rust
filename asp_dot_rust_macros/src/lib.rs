@@ -1,12 +1,11 @@
 mod controller;
 mod dependency_injection;
-mod middleware;
 mod utils;
 
 use proc_macro::TokenStream;
 
 use crate::controller::extra_attribute::{define_attr_alias_macros, for_each_attr_alias};
-use crate::dependency_injection::flags::InjectFlags;
+use crate::dependency_injection::InjectTarget;
 
 /// using the controller_route attribute to define a controller and its routes
 ///
@@ -156,14 +155,14 @@ pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
-    dependency_injection::inject_impliment::inject(args, item, InjectFlags::NONE | InjectFlags::ALLOW_ASYNC_NEW)
+    dependency_injection::inject(args, item, InjectTarget::Service)
 }
 
 /// middleware in the style of ASP.NET: the next middleware is given to the constructor <br>
 /// Place it on `impl T { fn new(next: MiddlewareNext, ..); async fn invoke_async(&self, ctx, ..) }`. <br>
 /// - parameters of `new` are resolved once when the pipeline is built (`MiddlewareNext`, `Serv<T>`, `CfgOption<T>`, `CfgRequire<T>`, `CfgReload<T>`). <br>
 /// - parameters of `invoke_async` after `ctx` are resolved on every request from the request scope (`Serv<T>`, `CfgOption<T>`...). <br>
-/// - it generates `Middleware`, `Middleware` for the type. <br>
+/// - it implements `Middleware` for the type. <br>
 /// - without `fn new` the struct must have only the field `next`.
 ///
 /// ```no_run
@@ -176,13 +175,13 @@ pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
 ///         Self { next }
 ///     }
 ///     pub async fn invoke_async(&self, http_context: &mut HttpContext) {
-///         self.next.call_async(http_context).await;
+///         self.next.next_async(http_context).await;
 ///     }
 /// }
 /// ```
 #[proc_macro_attribute]
 pub fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
-    middleware::middleware(args, item)
+    dependency_injection::inject(args, item, InjectTarget::Middleware)
 }
 
 /// inject httpcontext service and config <br>
@@ -200,7 +199,7 @@ pub fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn controller_inject(args: TokenStream, item: TokenStream) -> TokenStream {
-    dependency_injection::inject_impliment::inject(args, item, InjectFlags::INJECT_CONTROLLER)
+    dependency_injection::inject(args, item, InjectTarget::Controller)
 }
 
 /// Derive `DependencyInjectableService` directly from struct fields, when

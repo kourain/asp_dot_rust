@@ -5,7 +5,7 @@ use asp_dot_rust::{
     logging::LOGGER,
     macros::{controller_inject, controller_route},
 };
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -33,6 +33,36 @@ impl ListenerController {
         self.http_context.response.headers.insert("x-file-name", http::HeaderValue::from_bytes("caf\u{e9}.txt".as_bytes()).unwrap());
         self.http_context.response.headers.insert("x-plain", http::HeaderValue::from_static("plain"));
         "h"
+    }
+}
+
+asp_dot_rust::middleware!(pub RuntimeMiddleware, |ctx, next| {
+    ctx.response.headers.insert_str("X-Runtime-Middleware", "active");
+    next.next_async(ctx).await;
+});
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn startup_factory_data_is_released_while_the_pipeline_keeps_serving() {
+    let startup_data = Arc::new(vec![0_u8; 1024]);
+    let weak = Arc::downgrade(&startup_data);
+    start(
+        18708,
+        |_| {},
+        move |app| {
+            app.add_middleware_factory(move |next| {
+                assert_eq!(startup_data.len(), 1024);
+                RuntimeMiddleware { next }
+            });
+        },
+    )
+    .await;
+
+    assert!(weak.upgrade().is_none(), "middleware factories must be dropped before serving requests");
+    for _ in 0..2 {
+        let response = raw_request(18708, "GET", "/listener", "").await;
+        assert_eq!(status_of(&response), 200, "{response}");
+        assert_eq!(body_of(&response), "listening");
+        assert_eq!(header_of(&response, "x-runtime-middleware").as_deref(), Some("active"));
     }
 }
 

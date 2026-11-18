@@ -6,24 +6,19 @@ use crate::{
         routing::{ControllerInvoke, MAX_BODY_SIZE_ATTRIBUTE, Route, RouteAttribute, RouteAttributeMap, RoutingService},
     },
 };
-use asp_dot_rust_macros::DependencyInjectableService;
+use matchit::Router;
 use std::{
     any::TypeId,
     collections::{HashMap, HashSet},
-    fmt::Debug,
     str::FromStr,
     sync::Arc,
 };
 
-#[derive(Clone, Default, Debug, DependencyInjectableService)]
+#[derive(Default)]
 pub struct RoutingServiceBuilder {
-    /// key: "route", value: HashMap<http_method, resolved controller action info>
-    #[di(default)]
-    _router: HashMap<String, HashMap<http::Method, Arc<Route>>>,
-    #[di(default)]
-    _registered_controllers: HashSet<TypeId>,
+    _router: Router<HashMap<http::Method, Arc<Route>>>,
+    pub(crate) _registered_controllers: HashSet<TypeId>,
     /// Flat list of operations for OpenAPI generation.
-    #[di(default)]
     _operations: Vec<RegisteredOperation>,
 }
 
@@ -33,12 +28,10 @@ impl RoutingServiceBuilder {
     where
         T: DependencyInjectableController + Routing + Send + 'static,
     {
-        let controller_invoker: ControllerInvoke = |http_context: &mut crate::http_context::HttpContext, action_name: &'static str| {
+        let controller_invoker: ControllerInvoke = |http_context, action_name| {
             Box::pin(async move {
-                let is_valid = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-                let mut controller = T::inject(http_context, is_valid.clone()).await;
+                let mut controller = T::inject(http_context).await;
                 controller.routing(action_name).await;
-                is_valid.store(false, std::sync::atomic::Ordering::Release);
             })
         };
         if !self._registered_controllers.insert(TypeId::of::<T>()) {
@@ -76,7 +69,12 @@ impl RoutingServiceBuilder {
     {
         // a limit that is not a usize would be ignored when a request comes in, refuse it at startup
         if route_attr_map.get(MAX_BODY_SIZE_ATTRIBUTE).is_some_and(|value| !value.is::<usize>()) {
-            panic!("Attribute `{}` of {}::{} must be a usize (the limit in bytes)", MAX_BODY_SIZE_ATTRIBUTE, std::any::type_name::<T>(), action_name);
+            panic!(
+                "Attribute `{}` of {}::{} must be a usize (the limit in bytes)",
+                MAX_BODY_SIZE_ATTRIBUTE,
+                std::any::type_name::<T>(),
+                action_name
+            );
         }
         let controller_name = std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>());
         let route_info = Arc::new(Route {
@@ -87,53 +85,36 @@ impl RoutingServiceBuilder {
             invoke_async: invoker,
         });
 
-        match self._router.get_mut(&route) {
-            Some(exist_route) => {
-                for method in methods {
-                    // Route already exists, update it
-                    let http_method = http::Method::from_str(&method.to_uppercase()).unwrap();
-                    if let Some(old) = exist_route.insert(http_method.clone(), route_info.clone()) {
-                        panic!(
-                            "Doublicate route \"{}\", method {} at \"{}::{}\" and \"{}::{}\"",
-                            route, method, old.controller_type_name, old.action_name, route_info.controller_type_name, route_info.action_name
-                        )
-                    }
-                    self._operations.push(RegisteredOperation {
-                        path: route.clone(),
-                        method: http_method,
-                        controller_name,
-                        action_name,
-                    });
-                }
+        // Remove by the exact pattern: matching a URL here could confuse static
+        // routes with parameters or silently merge different parameter names.
+        let mut method_map = self._router.remove(&route).unwrap_or_default();
+        for method in methods {
+            let http_method = match http::Method::from_str(&method.to_uppercase()) {
+                Ok(method) => method,
+                Err(error) => panic!("Invalid HTTP method {method} for route {route} at {}::{action_name}: {error}", std::any::type_name::<T>()),
+            };
+            if let Some(old) = method_map.get(&http_method) {
+                panic!(
+                    "Duplicate route \"{}\", method {} at \"{}::{}\" and \"{}::{}\"",
+                    route, method, old.controller_type_name, old.action_name, route_info.controller_type_name, route_info.action_name
+                );
             }
-            None => {
-                // Route doesn't exist, insert it
-                let mut method_map = HashMap::new();
-                for method in methods {
-                    let http_method = http::Method::from_str(&method.to_uppercase()).unwrap();
-                    method_map.insert(http_method.clone(), route_info.clone());
-                    self._operations.push(RegisteredOperation {
-                        path: route.clone(),
-                        method: http_method,
-                        controller_name,
-                        action_name,
-                    });
-                }
-                self._router.insert(route, method_map);
-            }
+            method_map.insert(http_method.clone(), route_info.clone());
+            self._operations.push(RegisteredOperation {
+                path: route.clone(),
+                method: http_method,
+                controller_name,
+                action_name,
+            });
+        }
+        if let Err(error) = self._router.insert(route.clone(), method_map) {
+            panic!("Failed to insert route {route} at {}::{action_name}: {error}", std::any::type_name::<T>());
         }
     }
     pub fn build(self) -> RoutingService {
-        let mut result = RoutingService::default();
-        for route in self._router {
-            match result._router.insert(&route.0, route.1) {
-                Ok(_) => {}
-                Err(e) => {
-                    panic!("Failed to insert route {}: {:?}", route.0, e);
-                }
-            }
+        RoutingService {
+            _router: self._router,
+            _operations: self._operations,
         }
-        result._operations = self._operations;
-        result
     }
 }

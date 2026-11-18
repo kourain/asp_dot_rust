@@ -183,7 +183,6 @@ impl HttpResponse {
         let mut offset = 0;
         while offset < body.len() {
             let end = (offset + BODY_CHUNK_SIZE).min(body.len());
-            // slice shares the memory of `body`, nothing is copied
             self.send_chunk(body.slice(offset..end)).await?;
             offset = end;
         }

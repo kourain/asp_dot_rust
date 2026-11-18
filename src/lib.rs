@@ -22,7 +22,6 @@ pub mod prelude {
     pub use crate::http_context::{HttpContext, HttpContextRef};
     pub use crate::middleware::Middleware;
     pub use crate::services::app_queue::AppQueueService;
-    pub use crate::utils::ShareMutPtr;
 }
 pub mod utils;
 pub mod third_party {

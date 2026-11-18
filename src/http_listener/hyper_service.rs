@@ -1,10 +1,13 @@
 use crate::{
-    Application,
     configuration::HyperConfig,
     dependency_injection::Serv,
     http_context::{HttpContext, HttpRequest, HttpResponse},
     logging::LOGGER,
-    services::routing::{MAX_BODY_SIZE_ATTRIBUTE, ResolvedRoute, RoutingResult, RoutingService},
+    middleware::MiddlewareNext,
+    services::{
+        routing::{MAX_BODY_SIZE_ATTRIBUTE, ResolvedRoute, RoutingResult, RoutingService},
+        service_provider::ServiceProviderScope,
+    },
 };
 use futures::{FutureExt, future::Either};
 use hyper::service::service_fn;
@@ -46,21 +49,26 @@ fn exceeds_limits<B>(req: &http::Request<B>, limits: &HyperConfig, max_body_size
     None
 }
 
-pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, routing_service: Serv<RoutingService>, hypercfg: Arc<HyperConfig>) -> std::io::Result<()> {
+pub(crate) async fn hyper_service(
+    stream: TcpStream,
+    service_provider: Arc<ServiceProviderScope>,
+    middleware_pipeline: MiddlewareNext,
+    routing_service: Serv<RoutingService>,
+    hypercfg: Arc<HyperConfig>,
+) -> std::io::Result<()> {
     let client_socket_addr = stream.peer_addr().unwrap();
     let local_listen_socket_addr = stream.local_addr().unwrap();
     let connection_id: Arc<Ulid> = Arc::new(Ulid::generate());
     let limits = hypercfg.clone();
     let hyper_service = service_fn(move |req| {
-        let app = app.clone();
+        let service_provider = service_provider.clone();
+        let middleware_pipeline = middleware_pipeline.clone();
         let limits = limits.clone();
         let start = std::time::Instant::now();
-        // Extract request metadata before consuming the body
         let routing_service = routing_service.clone();
         let connection_id = connection_id.clone();
         let routing_info = routing_service.resolve(req.uri(), req.method());
         async move {
-            // Refuse a request over the limits before it reaches the pipeline
             let max_body_size = max_body_size_of(&routing_info, &limits);
             if let Some(status) = exceeds_limits(&req, &limits, max_body_size) {
                 LOGGER::warn(format!("{} {} {} refused with {}", client_socket_addr, req.method(), req.uri(), status));
@@ -72,10 +80,9 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
             // The response sends its head through `head_rx` as soon as the first byte is written or the response is complete
             let (custom_resp, head_rx) = HttpResponse::new_streaming();
 
-            // Build HttpContext and run middlewares/handlers, then write the complete response (status, headers and body) into the stream
-            let mut http_context = HttpContext::new(custom_req, custom_resp, app.service_provider.create_scope());
+            let mut http_context = HttpContext::new(custom_req, custom_resp, service_provider.create_scope());
             let pipeline = async move {
-                match AssertUnwindSafe(app.call_middlewares_async(&mut http_context)).catch_unwind().await {
+                match AssertUnwindSafe(middleware_pipeline.next_async(&mut http_context)).catch_unwind().await {
                     Ok(()) => {}
                     Err(panic_payload) => {
                         LOGGER::error(format!(
@@ -101,7 +108,6 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
                     http_context.response.final_status(),
                     duration.as_secs_f64() * 1000.0
                 ));
-                // Writes what is still in `response.body` (the whole body of a complete response) and ends the stream
                 if let Err(e) = http_context.response.complete_async().await {
                     LOGGER::debug(format!("Response not fully written: {}", e));
                 }
@@ -136,7 +142,6 @@ pub(crate) async fn hyper_service(stream: TcpStream, app: Arc<Application>, rout
         .keep_alive_interval(Duration::from_secs(hypercfg.http2_keep_alive_interval))
         .keep_alive_timeout(Duration::from_secs(hypercfg.http2_keep_alive_timeout))
         .max_header_list_size(u32::try_from(hypercfg.max_request_headers_size).unwrap_or(u32::MAX));
-    // wrap the tokio TcpStream so hyper-util can use hyper RT traits
     let io = TokioIo::new(stream);
     builder.serve_connection(io, hyper_service).await.map_err(std::io::Error::other)
 }

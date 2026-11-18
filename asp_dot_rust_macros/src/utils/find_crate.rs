@@ -11,6 +11,6 @@ pub(crate) fn asp_dot_rust_crate_path() -> proc_macro2::TokenStream {
             let ident = Ident::new(&name, Span::call_site());
             quote!(::#ident)
         }
-        Err(_) => quote!(::asp_dot_rust), // fallback
+        Err(_) => quote!(::asp_dot_rust),
     }
 }

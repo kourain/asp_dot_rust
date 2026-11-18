@@ -1,3 +1,6 @@
-pub(crate) mod flags;
-pub(crate) mod inject_impliment;
+mod dependencies;
 pub(crate) mod derive_service;
+mod flags;
+mod inject;
+
+pub(crate) use inject::{InjectTarget, inject};

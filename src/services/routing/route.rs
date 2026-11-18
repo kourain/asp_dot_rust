@@ -1,8 +1,8 @@
 use std::{any::Any, collections::HashMap, pin::Pin};
 
-use crate::http_context::HttpContext;
+use crate::http_context::HttpContextRef;
 
-pub(crate) type ControllerInvoke = for<'a> fn(&'a mut HttpContext, &'static str) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
+pub(crate) type ControllerInvoke = fn(HttpContextRef, &'static str) -> Pin<Box<dyn Future<Output = ()> + Send>>;
 /// Key of the attribute that is the request body limit of a route, in bytes (`#[max_body_size(..)]` sets it). Its value is a `usize`.
 pub const MAX_BODY_SIZE_ATTRIBUTE: &str = "max_body_size";
 pub type RouteAttributeMap = HashMap<&'static str, Box<dyn Any + Send + Sync + 'static>>;
