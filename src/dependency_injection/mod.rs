@@ -2,7 +2,8 @@ mod cycle_check;
 mod edge;
 mod inject_types;
 
-pub use edge::DependencyEdge;
+#[doc(hidden)]
+pub use edge::{Dependency, ServiceDependencies};
 #[allow(deprecated)]
 pub use inject_types::Cfg;
 pub use inject_types::{CfgOption, CfgReload, CfgRequire, Serv};

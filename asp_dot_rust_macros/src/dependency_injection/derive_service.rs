@@ -4,10 +4,6 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
-/// Returns `Ok(true)` when the field carries `#[di(default)]`, `Ok(false)`
-/// when it carries no `#[di(..)]` attribute at all, and `Err(..)` for a
-/// malformed one (`#[di]`, `#[di(typo)]`) so a mistyped opt-in is a compile
-/// error rather than a silently ignored attribute.
 fn extract_di_options(field: &syn::Field) -> DIPropOption {
     let mut result = DIPropOption::empty();
     for attr in &field.attrs {
@@ -26,21 +22,6 @@ fn extract_di_options(field: &syn::Field) -> DIPropOption {
     result
 }
 
-/// `#[derive(DependencyInjectableService)]` — for the common case where every
-/// dependency a service needs is already a struct field typed `Serv<T>`,
-/// `CfgOption<T>`, `CfgRequire<T>`, or `CfgReload<T>`. It builds `Self { .. }`
-/// directly from those fields, so no `fn new` / `#[inject]` is
-/// needed at all.
-///
-/// Any field that is NOT one of the four wrapper types falls back to
-/// `Default::default()` (a hard compile error if the field's type does not
-/// implement `Default`), and emits a `deprecated`-style compiler **warning**
-/// at the field's call site so the fallback is never silent. Mark such a
-/// field `#[di(default)]` to say the fallback is intentional and silence
-/// that warning for that field only. Prefer `#[inject]` on a hand-written
-/// `fn new` instead if the service needs real custom construction logic
-/// (computed fields, a dependency the constructor needs but doesn't store,
-/// etc).
 pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
     let main_crate_path = crate::utils::find_crate::asp_dot_rust_crate_path();
     let input = parse_macro_input!(item as DeriveInput);
@@ -90,10 +71,7 @@ pub(crate) fn derive_injectable_service(item: TokenStream) -> TokenStream {
         } else {
             field_inits.push(quote! { #field_ident: Default::default() });
             if !di_default.contains(DIPropOption::DEFAULT) {
-                // Not a compile error: emit a `deprecated`-style compiler
-                // *warning* instead, so silently defaulting a field is never
-                // truly silent. The nested fn only exists to be `#[deprecated]`;
-                // calling it does nothing at runtime.
+                // A deprecated marker emits a warning without rejecting the derive.
                 let marker_name = syn::Ident::new(&format!("__di_default_field_marker_{}_{}", ident_str, field_index), field_ident.span());
                 let warning_msg = format!(
                     "field `{}` on `{}` is not Serv<T>, CfgOption<T>, CfgRequire<T>, or CfgReload<T>; #[derive(DependencyInjectableService)] defaulted it via `Default::default()`. \

@@ -106,9 +106,15 @@ fn expand(input: &ItemImpl, target: InjectTarget) -> Result<TokenStream2, TokenS
         };
         let InjectedArguments { dependencies, bindings, values } = InjectedArguments::resolve(&new.sig, new.sig.inputs.iter(), extra)?;
         let configuration = dependencies.configuration_binding(&main_crate);
+        let registration_check = if target == InjectTarget::Controller {
+            dependencies.check_registrations(self_ty)
+        } else {
+            TokenStream2::new()
+        };
         // Finish borrowing the scope before moving a controller's HttpContextRef.
         let constructor = quote! {
             #configuration
+            #registration_check
             #(#bindings)*
             Self::new(#(#values),*) #await_call
         };
@@ -120,7 +126,7 @@ fn expand(input: &ItemImpl, target: InjectTarget) -> Result<TokenStream2, TokenS
     };
 
     let scope = quote! { #main_crate::services::service_provider::service_provider_scope::ServiceProviderScope };
-    let (trait_path, methods) = match target {
+    let (trait_path, methods, registration) = match target {
         InjectTarget::Service => (
             quote! { #main_crate::dependency_injection::DependencyInjectableService },
             quote! {
@@ -128,6 +134,7 @@ fn expand(input: &ItemImpl, target: InjectTarget) -> Result<TokenStream2, TokenS
                     #constructor
                 }
             },
+            dependencies.register(&main_crate, self_ty),
         ),
         InjectTarget::Controller => (
             quote! { #main_crate::dependency_injection::DependencyInjectableController },
@@ -137,6 +144,7 @@ fn expand(input: &ItemImpl, target: InjectTarget) -> Result<TokenStream2, TokenS
                     #constructor
                 }
             },
+            TokenStream2::new(),
         ),
         InjectTarget::Middleware => {
             let Some(invoke) = find_fn("invoke_async") else {
@@ -151,13 +159,9 @@ fn expand(input: &ItemImpl, target: InjectTarget) -> Result<TokenStream2, TokenS
                     }
                     #invoke
                 },
+                TokenStream2::new(),
             )
         }
-    };
-    let registration = if target == InjectTarget::Controller {
-        TokenStream2::new()
-    } else {
-        dependencies.register(&main_crate, self_ty)
     };
 
     Ok(quote! {
@@ -177,10 +181,12 @@ fn middleware_invoke(invoke: &ImplItemFn, main_crate: &TokenStream2) -> Result<T
     }
     let InjectedArguments { dependencies, bindings, values } = InjectedArguments::resolve(&invoke.sig, inputs, None)?;
     let configuration = dependencies.configuration_binding(main_crate);
+    let registration_check = dependencies.check_registrations(&quote! { Self });
     Ok(quote! {
         async fn inject_invoke_async(&self, http_context: &mut #main_crate::http_context::HttpContext) {
             let service_scope = &http_context.service_provider;
             #configuration
+            #registration_check
             #(#bindings)*
             self.invoke_async(http_context #(, #values)*).await;
         }
