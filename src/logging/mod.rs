@@ -12,7 +12,7 @@ use tokio::sync::broadcast::error::RecvError;
 
 type LogSender = broadcast::Sender<LogCommand>;
 pub type LogReceiver = broadcast::Receiver<LogCommand>;
-static LOG_CHANNEL_CAPACITY: AtomicU64 = AtomicU64::new(4096); // default capacity of log channel, can be changed with LOGGER::set_logger_capacity()
+static LOG_CHANNEL_CAPACITY: AtomicU64 = AtomicU64::new(4096);
 
 static LOG_SENDER: OnceLock<LogSender> = OnceLock::new();
 static LOG_RUNNING: AtomicBool = AtomicBool::new(true);
@@ -40,7 +40,7 @@ impl LOGGER {
         _ = Self::get_sender().send(LogCommand::SetLogFormat(format.into()));
     }
 
-    /// set whether to use UTC time for timestamps
+    /// Sets the timestamp format.
     pub fn with_time_format(format: impl Into<String>) {
         _ = Self::get_sender().send(LogCommand::SetTimeFormat(format.into()));
     }
@@ -92,10 +92,8 @@ impl LOGGER {
         Self::log(LogLevel::Verbose, message);
     }
 
-    /// get the log sender, initializing it if necessary
     fn get_sender() -> &'static LogSender {
         LOG_SENDER.get_or_init(|| {
-            // Fallback if not initialized (shouldn't happen in normal usage)
             let (tx, rx) = broadcast::channel::<LogCommand>(LOG_CHANNEL_CAPACITY.load(Ordering::Relaxed) as usize);
             Self::start_default_logger(Some(rx));
             tx
@@ -139,12 +137,10 @@ impl LOGGER {
             DEFAULT_LOG_ENABLE.store(false, Ordering::Release);
         }
     }
-    // default console logger, runs in background task
     fn start_default_logger(mut _rx: Option<LogReceiver>) {
         if !DEFAULT_LOG_ENABLE.load(Ordering::Relaxed) || DEFAULT_LOG_RUNNING.swap(true, Ordering::SeqCst) {
-            return; // Already initialized
+            return;
         }
-        // Do not create another thread when no tokio runtime is active
         if let Ok(handler) = tokio::runtime::Handle::try_current() {
             let mut rx;
             if let Some(_rx) = _rx {
@@ -152,7 +148,6 @@ impl LOGGER {
             } else {
                 rx = Self::spawn_log_receiver();
             }
-            // Run it on its own thread with a small current-thread runtime instead of `tokio::spawn`.
             let log_task = async move {
                 let mut logger = Logger::new();
                 loop {
@@ -172,9 +167,7 @@ impl LOGGER {
                                 LogCommand::SetLogLevel(level) => {
                                     logger.set_level(level);
                                 }
-                                LogCommand::SetEnable(_) => {
-                                    // Do nothing, handled by outer loop
-                                }
+                                LogCommand::SetEnable(_) => {}
                                 LogCommand::SetDefaultLogger(enable) => {
                                     DEFAULT_LOG_ENABLE.store(enable, Ordering::Release);
                                 }

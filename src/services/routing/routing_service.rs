@@ -12,7 +12,6 @@ use std::{
 
 #[derive(Clone, Default, Debug, DependencyInjectableService)]
 pub struct RoutingService {
-    /// key: "route", value: HashMap<http_method, resolved controller action info>
     #[di(default)]
     pub(crate) _router: Router<HashMap<http::Method, Arc<Route>>>,
     /// Flat list of registered operations for OpenAPI generation.

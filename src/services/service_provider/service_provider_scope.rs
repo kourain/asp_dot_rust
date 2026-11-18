@@ -62,6 +62,20 @@ impl ServiceProviderScope {
         let _ = instance.set(Serv(service));
         self._inner_map.insert(type_id, ServiceInstance { service_type, instance });
     }
+
+    /// Stores a built instance in an existing registration, preserving its lifetime.
+    #[track_caller]
+    pub(crate) fn store_instance<T>(&mut self, service: Arc<T>)
+    where
+        T: DependencyInjectableService,
+    {
+        let registration = self._inner_map.get_mut(&TypeId::of::<T>()).unwrap_or_else(|| panic!("Service {} not found in scope", type_name::<T>()));
+        assert!(registration.service_type != ServiceType::Transient, "Cannot store a transient service {}", type_name::<T>());
+        let service: Serv<dyn std::any::Any + Send + Sync> = Serv(service);
+        if registration.instance.set(service.clone()).is_err() {
+            registration.instance = Arc::new(OnceCell::from(service));
+        }
+    }
     fn add<T>(&mut self, service_type: ServiceType)
     where
         T: DependencyInjectableService + Send + Sync + 'static,

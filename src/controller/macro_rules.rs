@@ -1,14 +1,7 @@
-/// create Controller with impl StructName
+/// Defines a controller with an `HttpContextRef` field.
 #[macro_export]
 macro_rules! api_controller {
     ( $vis:vis $name:ident { $( $field_name:ident : $field_type:ty ),* $(,)? } ) => {
-        /// pre-impl 
-        /// ```no_run no_docs
-        /// impl asp_dot_rust::utils::StructName for 
-        /// {
-        ///     fn str_name() -> &'static str {...}
-        /// }
-        /// ```
         $vis struct $name {
             $(
                 $field_name : $field_type,

@@ -13,6 +13,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 /// The next middleware of the chain, given to the constructor of a middleware (like `RequestDelegate` in ASP.NET).
+#[derive(Clone)]
 pub struct MiddlewareNext(Arc<dyn Middleware>);
 impl MiddlewareNext {
     pub(crate) fn new<M: Middleware + 'static>(middleware: M) -> Self {

@@ -153,7 +153,7 @@ impl ConfigurationService {
         _self
     }
     /// Bind the configuration of type T to the section `key`, it is updated from any file.
-    /// Nothing is read here, the value is `None` until `reload_all_async` runs.
+    /// Nothing is read here, the value is `None` until `load_all_async` runs.
     pub fn configure<T>(&mut self, key: &'static str) -> &mut Self
     where
         T: DeserializeOwned + Send + Sync + 'static,
@@ -227,8 +227,8 @@ impl ConfigurationService {
         self._inner.contains_key(std::any::type_name::<T>())
     }
 
-    /// The handle of the configuration of type T, the only way to get a configuration.
-    /// A configuration that is not registered gives a handle without a value.
+    /// Returns a reloadable handle for a registered configuration.
+    /// Panics if `T` has not been registered.
     #[track_caller]
     pub fn get<T>(&self) -> CfgReload<T>
     where

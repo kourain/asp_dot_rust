@@ -2,7 +2,6 @@ use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
     Application,
-    http_context::HttpContext,
     logging::LOGGER,
     middleware::{Middleware, MiddlewareNext, auto_route::RoutingMiddleware},
     services::service_provider::service_provider_scope::ServiceProviderScope,
@@ -12,33 +11,26 @@ use crate::{
 /// The factory is async so that `Middleware::inject` (which may resolve services) can await.
 type Factory = Box<dyn for<'a> Fn(&'a ServiceProviderScope, MiddlewareNext) -> Pin<Box<dyn Future<Output = MiddlewareNext> + Send + 'a>> + Send + Sync>;
 
-pub(crate) struct ApplicationMiddlewares {
+pub(crate) struct ApplicationMiddlewaresBuilder {
     builder: Vec<Factory>,
-    root: Option<MiddlewareNext>,
 }
-impl ApplicationMiddlewares {
+impl ApplicationMiddlewaresBuilder {
     pub fn new() -> Self {
-        Self { builder: Vec::new(), root: None }
+        Self { builder: Vec::new() }
     }
     pub fn add(&mut self, factory: Factory) {
         self.builder.push(factory);
     }
     /// Creates the middlewares from the last to the first, so each one receives the one after it as `next`.
     /// Must complete before the HTTP server opens any port.
-    pub async fn build_pipeline(&mut self, service_scope: &ServiceProviderScope) {
+    pub async fn build_pipeline(self, service_scope: &ServiceProviderScope) -> MiddlewareNext {
         LOGGER::info(format!("Building middleware pipeline {} middlewares", self.builder.len()));
         let routing = MiddlewareNext::new(RoutingMiddleware);
         let mut root = routing;
-        for factory in self.builder.iter().rev() {
+        for factory in self.builder.into_iter().rev() {
             root = factory(service_scope, root).await;
         }
-        self.builder.clear();
-        self.root = Some(root);
-    }
-    pub async fn invoke_async(&self, http_context: &mut HttpContext) {
-        if let Some(root) = self.root.as_ref() {
-            root.next_async(http_context).await;
-        }
+        root
     }
 }
 
@@ -65,8 +57,5 @@ impl Application {
             Box::pin(async move { MiddlewareNext::new(factory(next)) })
         }));
         self
-    }
-    pub(crate) async fn call_middlewares_async(&self, http_context: &mut HttpContext) {
-        self._middlewares.invoke_async(http_context).await;
     }
 }

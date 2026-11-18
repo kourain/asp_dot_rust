@@ -3,7 +3,6 @@ use std::{collections::HashMap, sync::Arc};
 
 #[derive(Debug, Default)]
 pub struct ResolvedRoute {
-    /// key: http_method, value: ControllerInfo
     pub router_info: RoutingResult,
     pub path_params: HashMap<String, String>,
     pub query_params: HashMap<String, String>,

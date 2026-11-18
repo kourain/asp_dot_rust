@@ -1,6 +1,7 @@
 use crate::http_context::http_request::HttpRequest;
 use crate::http_context::http_response::HttpResponse;
 use crate::services::service_provider::service_provider_scope::ServiceProviderScope;
+use crate::utils::ReadOnly;
 use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,7 +13,7 @@ pub const USER_CONTEXT_KEY: &str = "user";
 pub struct HttpContext {
     pub request: HttpRequest,
     pub response: HttpResponse,
-    pub service_provider: ServiceProviderScope,
+    pub service_provider: ReadOnly<ServiceProviderScope>,
     /// Per-request bag for middleware and handlers (e.g. authenticated user under `"user"`).
     pub context_data: HashMap<String, Box<dyn Any + Send + Sync>>,
     pub(crate) is_shareable: Arc<AtomicBool>,
@@ -23,7 +24,7 @@ impl HttpContext {
         Self {
             request,
             response,
-            service_provider,
+            service_provider: ReadOnly::new(service_provider),
             context_data: HashMap::new(),
             is_shareable: Arc::new(AtomicBool::new(true)),
         }
