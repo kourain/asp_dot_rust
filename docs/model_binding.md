@@ -52,22 +52,22 @@ impl UsersController {
         id: FromRoute<u32>,
         verbose: FromOptionQuery<bool>,
     ) -> impl ActionResult {
-        format!("user {id}, verbose={:?}", *verbose)
+        results::Ok(format!("user {id}, verbose={:?}", *verbose))
     }
 
     #[get("/search")]
     pub async fn search(&mut self, q: FromQuery<String>) -> impl ActionResult {
-        format!("q={}", *q)
+        results::Ok(format!("q={}", *q))
     }
 
     #[post("/")]
     pub async fn create(&mut self, body: FromBody<CreateUser>) -> impl ActionResult {
-        format!("created {}", body.name)
+        results::Ok(format!("created {}", body.name))
     }
 
     #[post("/raw")]
     pub async fn raw(&mut self, body: FromBody<String>) -> impl ActionResult {
-        body.into_inner()
+        results::Ok(body.into_inner())
     }
 }
 ```

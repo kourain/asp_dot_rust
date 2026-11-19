@@ -1,4 +1,4 @@
-use asp_dot_rust::controller::{ActionRoute, Routing};
+use asp_dot_rust::controller::{ActionResult, ActionRoute, Routing, RoutingError};
 use asp_dot_rust::dependency_injection::DependencyInjectableController;
 use asp_dot_rust::http_context::HttpContextRef;
 use asp_dot_rust::services::routing::{RoutingResult, RoutingService, RoutingServiceBuilder};
@@ -13,7 +13,9 @@ impl DependencyInjectableController for TestController {
 }
 #[async_trait::async_trait]
 impl Routing for TestController {
-    async fn routing(&mut self, _method_name: &'static str) {}
+    async fn routing(&mut self, _method_name: &'static str) -> Result<Box<dyn ActionResult + '_>, RoutingError> {
+        Err(RoutingError::ActionNotFound)
+    }
 }
 
 /// `/home` accepts GET and POST, `/home/{id}` accepts GET only.

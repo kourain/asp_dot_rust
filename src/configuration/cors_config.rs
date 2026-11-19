@@ -13,7 +13,7 @@ impl Default for CorsConfiguration {
     fn default() -> Self {
         Self {
             allowed_origins: ["*".into()].into(),
-            allowed_methods: [http::Method::GET, http::Method::POST, http::Method::PUT, http::Method::DELETE, http::Method::OPTIONS].into(),
+            allowed_methods: [http::Method::GET, http::Method::POST, http::Method::PUT, http::Method::DELETE, http::Method::OPTIONS, http::Method::QUERY].into(),
             allowed_headers: ["*".into()].into(),
             exposed_headers: ["*".into()].into(),
             allow_credentials: false,

@@ -10,8 +10,8 @@ use std::{
 use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,
     configuration::CompressionConfiguration,
-    controller::{ActionResult, get, route},
-    http_context::HttpContextRef,
+    controller::{ActionResult, FromQuery, FromRoute, get, results, route},
+    http_context::{HttpContextRef, HttpHeaderExt},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
     services::configuration::CfgEntryAllowReloadFile::NotAllowed,
@@ -39,17 +39,24 @@ fn large_body() -> Vec<u8> {
     (0..LARGE_BODY_SIZE).map(|i| (i % 251) as u8).collect()
 }
 
-/// A result without body, status 204.
-struct NoContent;
-impl ActionResult for NoContent {
+struct BorrowedText<'a>(&'a str);
+
+#[async_trait::async_trait]
+impl ActionResult for BorrowedText<'_> {
     async fn get_body_async(&self) -> Vec<u8> {
-        Vec::new()
+        self.0.as_bytes().to_vec()
     }
+
     fn status_code(&self) -> http::StatusCode {
-        http::StatusCode::NO_CONTENT
+        http::StatusCode::CREATED
     }
+
+    fn content_type(&self) -> &str {
+        "text/plain; charset=utf-8"
+    }
+
     fn content_length(&self) -> usize {
-        0
+        self.0.len()
     }
 }
 
@@ -67,37 +74,60 @@ impl StreamController {
     #[get("/complete/text")]
     pub async fn complete_text(&mut self) -> impl ActionResult {
         self.http_context.response.headers.insert_str("Content-Type", "text/html");
-        TEXT_BODY
+        results::Ok(TEXT_BODY)
+    }
+
+    #[get("/complete/borrowed")]
+    pub fn complete_borrowed(&self, id: FromQuery<u32>) -> Box<dyn ActionResult + '_> {
+        if *id != 42 {
+            return results::BadRequest("invalid id").into();
+        }
+        BorrowedText(self.http_context.request.uri.path()).into()
     }
 
     #[get("/complete/string")]
     pub async fn complete_string(&mut self) -> impl ActionResult {
-        "{\"ok\":true}".to_string()
+        results::Ok("{\"ok\":true}".to_string())
     }
 
     #[get("/complete/large")]
     pub async fn complete_large(&mut self) -> impl ActionResult {
-        large_body()
+        results::Ok(large_body())
     }
 
     #[get("/complete/compressible")]
     pub async fn complete_compressible(&mut self) -> impl ActionResult {
-        "a".repeat(10_000)
+        results::Ok("a".repeat(10_000))
     }
 
     #[get("/complete/empty")]
     pub async fn complete_empty(&mut self) -> impl ActionResult {
-        ""
+        results::Ok("")
     }
 
     #[get("/complete/no_content")]
     pub async fn complete_no_content(&mut self) -> impl ActionResult {
-        NoContent
+        results::NoContent
+    }
+
+    #[get("/complete/status/{status}")]
+    pub fn complete_status(&self, status: FromRoute<u16>) -> Box<dyn ActionResult> {
+        let location = "/complete/text";
+        match *status {
+            201 => results::Created("created").with_location(location).unwrap().into(),
+            301 => results::MovedPermanently::new(location).unwrap().into(),
+            302 => results::Redirect::new(location).unwrap().into(),
+            303 => results::SeeOther::new(location).unwrap().into(),
+            304 => results::NotModified.into(),
+            307 => results::TemporaryRedirect::new(location).unwrap().into(),
+            308 => results::PermanentRedirect::new(location).unwrap().into(),
+            _ => results::BadRequest("unsupported status").into(),
+        }
     }
 
     #[route(["get", "head"], "/complete/head")]
     pub async fn complete_head(&mut self) -> impl ActionResult {
-        TEXT_BODY
+        results::Ok(TEXT_BODY)
     }
 
     // ----- streamed responses -----
@@ -109,7 +139,7 @@ impl StreamController {
             self.http_context.response.write_async(part).await.unwrap();
             tokio::time::sleep(Duration::from_millis(300)).await;
         }
-        ""
+        results::Ok("")
     }
 
     #[get("/stream/status")]
@@ -117,19 +147,19 @@ impl StreamController {
         self.http_context.response.status_code = http::StatusCode::CREATED;
         self.http_context.response.headers.insert_str("X-Test", "yes");
         self.http_context.response.write_bytes_async("created".to_string()).await.unwrap();
-        ""
+        results::Ok("")
     }
 
     #[get("/stream/mixed")]
     pub async fn stream_mixed(&mut self) -> impl ActionResult {
         self.http_context.response.write_async(b"prefix-").await.unwrap();
-        "tail"
+        results::Ok("tail")
     }
 
     #[get("/stream/mixed_large")]
     pub async fn stream_mixed_large(&mut self) -> impl ActionResult {
         self.http_context.response.write_async(b"prefix-").await.unwrap();
-        "a".repeat(10_000)
+        results::Ok("a".repeat(10_000))
     }
 
     #[get("/stream/headers_only")]
@@ -138,7 +168,7 @@ impl StreamController {
         self.http_context.response.start_async().await.unwrap();
         tokio::time::sleep(Duration::from_millis(300)).await;
         self.http_context.response.write_async("late").await.unwrap();
-        ""
+        results::Ok("")
     }
 
     #[get("/stream/has_started")]
@@ -147,7 +177,7 @@ impl StreamController {
         self.http_context.response.write_async("x").await.unwrap();
         let after = self.http_context.response.has_started();
         self.http_context.response.write_async(format!("{before},{after}")).await.unwrap();
-        ""
+        results::Ok("")
     }
 
     #[get("/stream/complete")]
@@ -157,7 +187,7 @@ impl StreamController {
         self.http_context.response.complete_async().await.unwrap();
         // the client must not wait for this
         tokio::time::sleep(Duration::from_millis(500)).await;
-        ""
+        results::Ok("")
     }
 
     #[get("/stream/abort")]
@@ -165,13 +195,13 @@ impl StreamController {
         self.http_context.response.write_async("partial").await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         self.http_context.abort();
-        ""
+        results::Ok("")
     }
 
     #[get("/stream/abort_before")]
     pub async fn stream_abort_before(&mut self) -> impl ActionResult {
         self.http_context.abort();
-        "still complete"
+        results::Ok("still complete")
     }
 
     #[get("/stream/disconnect")]
@@ -183,7 +213,7 @@ impl StreamController {
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        ""
+        results::Ok("")
     }
 
     #[get("/stream/backpressure")]
@@ -195,7 +225,7 @@ impl StreamController {
             }
             PRODUCED_CHUNKS.fetch_add(1, Ordering::SeqCst);
         }
-        ""
+        results::Ok("")
     }
 
     #[get("/stream/panic_before")]
@@ -203,7 +233,7 @@ impl StreamController {
         if std::hint::black_box(true) {
             panic!("test panic before any write");
         }
-        ""
+        results::Ok("")
     }
 
     #[get("/stream/panic_after")]
@@ -213,7 +243,7 @@ impl StreamController {
         if std::hint::black_box(true) {
             panic!("test panic after the first write");
         }
-        ""
+        results::Ok("")
     }
 }
 
@@ -362,6 +392,47 @@ async fn complete_text_response_is_written_with_content_length() {
     assert!(head.header("connection").is_none(), "hyper manages the connection header");
     assert!(!head.is_chunked());
     assert_eq!(body, TEXT_BODY.as_bytes());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn routing_writes_borrowed_results_and_binding_errors() {
+    let port = start_server(|_| {}).await;
+    let mut conn = Conn::connect(port).await;
+
+    let (head, body) = conn.get("/complete/borrowed?id=42", &[]).await;
+    assert_eq!(head.status, 201);
+    assert_eq!(head.header("content-type"), Some("text/plain; charset=utf-8"));
+    assert_eq!(body, b"/complete/borrowed");
+
+    let (head, body) = conn.get("/complete/borrowed?id=0", &[]).await;
+    assert_eq!(head.status, 400);
+    assert_eq!(body, b"invalid id");
+
+    let (head, body) = conn.get("/complete/borrowed", &[]).await;
+    assert_eq!(head.status, 422);
+    assert_eq!(head.header("content-type"), Some("text/plain"));
+    assert_eq!(body, b"missing query parameter `id`");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn created_and_redirect_results_send_their_location_header() {
+    assert!(results::Redirect::new("/target\r\nX-Test: injected").is_err());
+    assert!(results::Created("created").with_location("/target\r\nX-Test: injected").is_err());
+
+    let port = start_server(|_| {}).await;
+    let mut conn = Conn::connect(port).await;
+    for status in [201, 301, 302, 303, 304, 307, 308] {
+        let (head, body) = conn.get(&format!("/complete/status/{status}"), &[]).await;
+        assert_eq!(head.status, status);
+        if status == 304 {
+            assert!(head.header("location").is_none());
+            assert!(head.header("content-length").is_none());
+        } else {
+            assert_eq!(head.header("location"), Some("/complete/text"));
+        }
+        let expected_body: &[u8] = if status == 201 { b"created" } else { b"" };
+        assert_eq!(body, expected_body);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

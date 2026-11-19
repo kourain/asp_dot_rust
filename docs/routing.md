@@ -20,7 +20,7 @@ into a `RoutingServiceBuilder`, then compiled once into an immutable
 ```rust
 use asp_dot_rust::{
     api_controller,
-    controller::{ActionResult, get, post, route},
+    controller::{ActionResult, get, post, results, route},
     http_context::HttpContextRef,
     macros::{controller_inject, controller_route},
 };
@@ -38,23 +38,23 @@ impl HomeController {
 
     #[get("/")] // -> GET /home
     pub async fn index(&mut self) -> impl ActionResult {
-        "Hello, World!"
+        results::Ok("Hello, World!")
     }
 
     #[get("/{id}")] // -> GET /home/{id}, a dynamic path parameter
     pub async fn show(&mut self) -> impl ActionResult {
         let id = self.http_context.request.routing_info.path_params.get("id").cloned().unwrap_or_default();
-        format!("home #{id}")
+        results::Ok(format!("home #{id}"))
     }
 
     #[post("/update")] // -> POST /home/update
     pub fn update(&mut self) -> impl ActionResult {
-        self.temp.clone()
+        results::Ok(self.temp.clone())
     }
 
     #[route(["get", "post"], "/health")] // multiple methods on the same path
     pub async fn health(&self) -> impl ActionResult {
-        "ok".to_string()
+        results::Ok("ok")
     }
 }
 ```
@@ -70,6 +70,31 @@ impl HomeController {
   HTTP method; registering the same controller twice, or two different
   controllers on the same route *and* method, panics at startup
   (`register_controller` / `add_controller_route`).
+
+## HTTP QUERY
+
+Use `#[query("/search")]` or `#[route(["QUERY"], "/search")]` to register the `http::Method::QUERY` method. QUERY is safe and idempotent and describes the operation in its request body. Clients must send `Content-Type`. Use `FromBody<T>` to bind a JSON or XML query, or read the body in the action for a custom query format. [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html#section-2)
+
+Generated OpenAPI 3.0 documents list QUERY under `x-oai-additionalOperations`. [OpenAPI extension registry](https://spec.openapis.org/registry/extension/x-oai-additionalOperations)
+
+## Action results
+
+Use the types in `asp_dot_rust::controller::results` to choose the HTTP status. `Ok<T>` returns 200, `Created<T>` returns 201, `BadRequest<T>` returns 400, and `NotFound<T>` returns 404. Use `NoContent` for 204 or `Ok("")` for 200 with an empty body.
+
+Use `Created(body).with_location("/items/42")` for 201 with a `Location` header. `Redirect::new("/items")` creates a 302 response with an empty body and a `Location` header. The other redirect types are `MovedPermanently` (301), `SeeOther` (303), `TemporaryRedirect` (307), and `PermanentRedirect` (308). These constructors return an error if the location is invalid as an HTTP header value. `NotModified` returns 304 with an empty body.
+
+The body types accept `AsRef<[u8]> + Send + Sync` values such as `&str`, `String`, and `Vec<u8>`. To return different result types from the same action, use `Box<dyn ActionResult>`.
+
+```rust
+use asp_dot_rust::controller::{ActionResult, results};
+
+fn look_up(id: u32) -> Box<dyn ActionResult> {
+    if id == 0 {
+        return results::BadRequest("id must be positive").into();
+    }
+    results::Ok(format!("item {id}")).into()
+}
+```
 
 ## Path parameter conflicts are caught at startup
 
@@ -121,11 +146,11 @@ specific request's method; it's used by the CORS middleware to compute
 #[controller_inject]
 impl FilesController {
     #[get("/list")]               // rate_limit = 100 (i32), zone = "files"
-    pub async fn list(&self) -> impl ActionResult { "list" }
+    pub async fn list(&self) -> impl ActionResult { results::Ok("list") }
 
     #[post("/upload")]
     #[attr(rate_limit = 5u8, audit = true)]   // rate_limit replaced (now a u8), audit added, zone kept
-    pub async fn upload(&self) -> impl ActionResult { "upload" }
+    pub async fn upload(&self) -> impl ActionResult { results::Ok("upload") }
 }
 ```
 

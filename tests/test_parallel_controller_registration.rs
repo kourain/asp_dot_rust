@@ -4,7 +4,7 @@ use std::sync::{Arc, Barrier};
 
 use asp_dot_rust::{
     ApplicationBuilder, api_controller,
-    controller::{ActionResult, get},
+    controller::{ActionResult, get, results},
     http_context::HttpContextRef,
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -21,7 +21,7 @@ impl ParallelController {
 
     #[get("/parallel")]
     pub async fn index(&mut self) -> impl ActionResult {
-        "ok"
+        results::Ok("ok")
     }
 }
 

@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use asp_dot_rust::{
     ApplicationBuilder, api_controller,
-    controller::{ActionResult, attr, get, post},
+    controller::{ActionResult, attr, get, post, results},
     http_context::HttpContextRef,
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -52,14 +52,14 @@ impl AttrController {
     // nothing of its own: every attribute of the impl
     #[get("/inherit")]
     pub async fn inherit(&self) -> impl ActionResult {
-        probe(&self.http_context)
+        results::Ok(probe(&self.http_context))
     }
 
     // `limit` is overridden (and is a u8 now), `extra` is new, the others come from the impl
     #[get("/override")]
     #[attr(limit = 5u8, extra = -7i8)]
     pub async fn override_limit(&self) -> impl ActionResult {
-        probe(&self.http_context)
+        results::Ok(probe(&self.http_context))
     }
 
     // several #[attr] on one action, any expression of a supported type
@@ -67,7 +67,7 @@ impl AttrController {
     #[attr(a = 1)]
     #[attr(b = "two", c = 10 * 1024u32)]
     pub async fn two(&self) -> impl ActionResult {
-        probe(&self.http_context)
+        results::Ok(probe(&self.http_context))
     }
 
     // the same attributes for each route of the action
@@ -75,14 +75,14 @@ impl AttrController {
     #[post("/multi")]
     #[attr(limit = 9)]
     pub async fn multi(&self) -> impl ActionResult {
-        probe(&self.http_context)
+        results::Ok(probe(&self.http_context))
     }
 
     // the action decides the type of the value too
     #[get("/retype")]
     #[attr(limit = "text")]
     pub async fn retype(&self) -> impl ActionResult {
-        probe(&self.http_context)
+        results::Ok(probe(&self.http_context))
     }
 }
 
@@ -102,13 +102,13 @@ mod plain {
         #[get("/none")]
         pub async fn none(&self) -> impl ActionResult {
             let attributes = self.http_context.request.route_attributes().expect("the request resolved to a route");
-            format!("{} {}", attributes.len(), attributes.is_empty())
+            results::Ok(format!("{} {}", attributes.len(), attributes.is_empty()))
         }
 
         #[get("/own")]
         #[attr(a = 1)]
         pub async fn own(&self) -> impl ActionResult {
-            super::probe(&self.http_context)
+            results::Ok(super::probe(&self.http_context))
         }
     }
 }

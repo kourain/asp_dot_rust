@@ -33,6 +33,8 @@ pub struct OpenApiPathItem {
     pub options: Option<OpenApiOperation>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub head: Option<OpenApiOperation>,
+    #[serde(rename = "x-oai-additionalOperations", skip_serializing_if = "BTreeMap::is_empty")]
+    pub additional_operations: BTreeMap<String, OpenApiOperation>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -104,6 +106,9 @@ impl OpenApiDocument {
                 "PATCH" => item.patch = Some(operation),
                 "OPTIONS" => item.options = Some(operation),
                 "HEAD" => item.head = Some(operation),
+                "QUERY" => {
+                    item.additional_operations.insert(op.method.to_string(), operation);
+                }
                 _ => {}
             }
         }

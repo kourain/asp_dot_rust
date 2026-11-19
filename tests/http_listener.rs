@@ -1,7 +1,7 @@
 use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,
-    controller::{ActionResult, get, post},
-    http_context::HttpContextRef,
+    controller::{ActionResult, FromBody, get, post, query, results, route},
+    http_context::{HttpContextRef, HttpHeaderExt},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
 };
@@ -9,9 +9,14 @@ use std::{sync::Arc, time::Duration};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-use asp_dot_rust::configuration::HyperConfig;
+use asp_dot_rust::configuration::{CorsConfiguration, HyperConfig};
 
 api_controller!(pub ListenerController {});
+
+#[derive(serde::Deserialize)]
+struct SearchFilter {
+    term: String,
+}
 
 #[controller_route]
 #[controller_inject]
@@ -21,18 +26,23 @@ impl ListenerController {
     }
     #[get("/listener")]
     pub async fn listener(&self) -> impl ActionResult {
-        "listening"
+        results::Ok("listening")
     }
     #[post("/upload")]
     pub async fn upload(&self) -> impl ActionResult {
-        "uploaded"
+        results::Ok("uploaded")
+    }
+    #[query("/search")]
+    #[route(["QuErY"], "/search-alias")]
+    async fn search(&self, filter: FromBody<SearchFilter>) -> impl ActionResult {
+        results::Ok(filter.into_inner().term)
     }
     #[get("/utf8-header")]
     pub async fn utf8_header(&mut self) -> impl ActionResult {
         // a UTF-8 value (e.g. a file name) is a valid header value (obs-text)
         self.http_context.response.headers.insert("x-file-name", http::HeaderValue::from_bytes("caf\u{e9}.txt".as_bytes()).unwrap());
         self.http_context.response.headers.insert("x-plain", http::HeaderValue::from_static("plain"));
-        "h"
+        results::Ok("h")
     }
 }
 
@@ -171,11 +181,15 @@ async fn non_ascii_header_values_are_sent() {
 /// Sends one raw HTTP/1.1 request to 127.0.0.1 and returns the whole response as text
 /// (or a string starting with `ERROR`/`TIMEOUT` when no complete response came back).
 async fn raw_request(port: u16, method: &str, path: &str, extra_headers: &str) -> String {
+    raw_request_with_body(port, method, path, extra_headers, "").await
+}
+
+async fn raw_request_with_body(port: u16, method: &str, path: &str, extra_headers: &str, body: &str) -> String {
     let mut stream = match TcpStream::connect(("127.0.0.1", port)).await {
         Ok(stream) => stream,
         Err(e) => return format!("ERROR connect: {e}"),
     };
-    let request = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n{extra_headers}\r\n");
+    let request = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n{extra_headers}\r\n{body}");
     if let Err(e) = stream.write_all(request.as_bytes()).await {
         return format!("ERROR write: {e}");
     }
@@ -185,6 +199,50 @@ async fn raw_request(port: u16, method: &str, path: &str, extra_headers: &str) -
         Ok(Err(e)) => format!("ERROR read: {e}"),
         Err(_) => "TIMEOUT: no complete response within 5s".to_string(),
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn query_routes_bind_body_and_are_discoverable() {
+    let port = 18709;
+    start(
+        port,
+        |builder| {
+            builder.configuration.insert(|_: &mut CorsConfiguration| {});
+        },
+        |app| {
+            app.use_cors().use_swagger();
+        },
+    )
+    .await;
+
+    let method = http::Method::QUERY.as_str();
+    let body = r#"{"term":"hello"}"#;
+    let length = format!("Content-Length: {}\r\n", body.len());
+    let json_headers = format!("{length}Content-Type: application/json\r\n");
+    for path in ["/search", "/search-alias"] {
+        let response = raw_request_with_body(port, method, path, &json_headers, body).await;
+        assert_eq!(status_of(&response), 200, "{response}");
+        assert_eq!(body_of(&response), "hello");
+    }
+
+    let missing_type = raw_request_with_body(port, method, "/search", &length, body).await;
+    assert_eq!(status_of(&missing_type), 400, "{missing_type}");
+    let text_headers = format!("{length}Content-Type: text/plain\r\n");
+    let unsupported = raw_request_with_body(port, method, "/search", &text_headers, body).await;
+    assert_eq!(status_of(&unsupported), 415, "{unsupported}");
+
+    let wrong_method = raw_request(port, "GET", "/search", "").await;
+    assert_eq!(status_of(&wrong_method), 405, "{wrong_method}");
+    assert_eq!(header_of(&wrong_method, "allow").as_deref(), Some(method));
+
+    let preflight = raw_request(port, "OPTIONS", "/search", "Origin: https://example.test\r\nAccess-Control-Request-Method: QUERY\r\n").await;
+    assert_eq!(status_of(&preflight), 204, "{preflight}");
+    assert_eq!(header_of(&preflight, "access-control-allow-methods").as_deref(), Some(method));
+
+    let swagger = raw_request(port, "GET", "/swagger/v1/swagger.json", "").await;
+    assert_eq!(status_of(&swagger), 200, "{swagger}");
+    let document: serde_json::Value = serde_json::from_str(body_of(&swagger)).unwrap();
+    assert!(document["paths"]["/search"]["x-oai-additionalOperations"][method].is_object());
 }
 
 /// `HTTP/1.1 200 OK ...` -> 200 (0 when the response is not an HTTP response)
