@@ -10,7 +10,7 @@ use crate::{
 /// Serves Swagger UI and the generated OpenAPI JSON document.
 ///
 /// - `GET /swagger` or `GET /swagger/`  HTML page (Swagger UI from CDN)
-/// - `GET /swagger/v1/swagger.json`  OpenAPI 3.0 JSON built from registered routes
+/// - `GET /swagger/v1/swagger.json`  OpenAPI 3.2 JSON built from registered routes
 pub struct SwaggerMiddleware {
     next: MiddlewareNext,
     routing_service: Serv<RoutingService>,
@@ -81,22 +81,32 @@ impl SwaggerMiddleware {
 }
 
 fn swagger_ui_html(title: &str, swagger_json_url: &str) -> String {
-    let mut html = String::new();
-    html.push_str("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n");
-    html.push_str("  <meta charset=\"UTF-8\">\n  <title>");
-    html.push_str(title);
-    html.push_str("</title>\n");
-    html.push_str("  <link rel=\"stylesheet\" href=\"https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css\">\n");
-    html.push_str("  <style>body { margin: 0; background: #fafafa; }</style>\n");
-    html.push_str("</head>\n<body>\n  <div id=\"swagger-ui\"></div>\n");
-    html.push_str("  <script src=\"https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js\"></script>\n");
-    html.push_str("  <script>\n    window.onload = function () {\n");
-    html.push_str("      window.ui = SwaggerUIBundle({\n        url: \"");
-    html.push_str(swagger_json_url);
-    html.push_str("\",\n        dom_id: \"#swagger-ui\",\n");
-    html.push_str("        presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],\n");
-    html.push_str("        layout: \"BaseLayout\"\n      });\n    };\n  </script>\n</body>\n</html>\n");
-    html
+    format!(
+        r##"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{title}</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.34.1/swagger-ui.css">
+  <style>body {{ margin: 0; background: #fafafa; }}</style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5.34.1/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = function () {{
+      window.ui = SwaggerUIBundle({{
+        url: "{swagger_json_url}",
+        dom_id: "#swagger-ui",
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+        layout: "BaseLayout"
+      }});
+    }};
+  </script>
+</body>
+</html>
+"##
+    )
 }
 
 impl Application {

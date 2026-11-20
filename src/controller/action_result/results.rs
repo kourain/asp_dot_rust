@@ -7,8 +7,10 @@ use http::{
     HeaderMap, HeaderValue, StatusCode,
     header::{InvalidHeaderValue, LOCATION},
 };
+use std::io;
 
 use super::ActionResult;
+use crate::http_context::HttpResponse;
 
 macro_rules! body_results {
     ($($(#[$meta:meta])* $name:ident => $status:ident),+ $(,)?) => {
@@ -23,12 +25,9 @@ macro_rules! body_results {
                     StatusCode::$status
                 }
 
-                async fn get_body_async(&self) -> Vec<u8> {
-                    self.0.as_ref().to_vec()
-                }
-
-                fn content_length(&self) -> usize {
-                    self.0.as_ref().len()
+                async fn write_body_async(&self, response: &mut HttpResponse) -> io::Result<()> {
+                    response.body.extend_from_slice(self.0.as_ref());
+                    Result::Ok(())
                 }
             }
         )+
@@ -73,12 +72,6 @@ impl<T> Created<T> {
     }
 }
 
-fn location_headers(location: &HeaderValue) -> HeaderMap {
-    let mut headers = HeaderMap::new();
-    headers.insert(LOCATION, location.clone());
-    headers
-}
-
 /// HTTP 201 Created with a `Location` header. Construct with [`Created::with_location`].
 #[derive(Debug)]
 pub struct CreatedAt<T> {
@@ -92,16 +85,13 @@ impl<T: AsRef<[u8]> + Send + Sync> ActionResult for CreatedAt<T> {
         StatusCode::CREATED
     }
 
-    async fn get_body_async(&self) -> Vec<u8> {
-        self.body.as_ref().to_vec()
+    fn write_header(&self, headers: &mut HeaderMap) {
+        headers.insert(LOCATION, self.location.clone());
     }
 
-    fn headers(&self) -> HeaderMap {
-        location_headers(&self.location)
-    }
-
-    fn content_length(&self) -> usize {
-        self.body.as_ref().len()
+    async fn write_body_async(&self, response: &mut HttpResponse) -> io::Result<()> {
+        response.body.extend_from_slice(self.body.as_ref());
+        Result::Ok(())
     }
 }
 
@@ -119,22 +109,13 @@ macro_rules! redirects {
                 }
             }
 
-            #[async_trait::async_trait]
             impl ActionResult for $name {
                 fn status_code(&self) -> StatusCode {
                     StatusCode::$status
                 }
 
-                async fn get_body_async(&self) -> Vec<u8> {
-                    Vec::new()
-                }
-
-                fn headers(&self) -> HeaderMap {
-                    location_headers(&self.0)
-                }
-
-                fn content_length(&self) -> usize {
-                    0
+                fn write_header(&self, headers: &mut HeaderMap) {
+                    headers.insert(LOCATION, self.0.clone());
                 }
             }
         )+
@@ -158,18 +139,9 @@ redirects! {
 #[derive(Debug)]
 pub struct NoContent;
 
-#[async_trait::async_trait]
 impl ActionResult for NoContent {
     fn status_code(&self) -> StatusCode {
         StatusCode::NO_CONTENT
-    }
-
-    async fn get_body_async(&self) -> Vec<u8> {
-        Vec::new()
-    }
-
-    fn content_length(&self) -> usize {
-        0
     }
 }
 
@@ -177,17 +149,8 @@ impl ActionResult for NoContent {
 #[derive(Debug)]
 pub struct NotModified;
 
-#[async_trait::async_trait]
 impl ActionResult for NotModified {
     fn status_code(&self) -> StatusCode {
         StatusCode::NOT_MODIFIED
-    }
-
-    async fn get_body_async(&self) -> Vec<u8> {
-        Vec::new()
-    }
-
-    fn content_length(&self) -> usize {
-        0
     }
 }

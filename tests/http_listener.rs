@@ -242,7 +242,14 @@ async fn query_routes_bind_body_and_are_discoverable() {
     let swagger = raw_request(port, "GET", "/swagger/v1/swagger.json", "").await;
     assert_eq!(status_of(&swagger), 200, "{swagger}");
     let document: serde_json::Value = serde_json::from_str(body_of(&swagger)).unwrap();
-    assert!(document["paths"]["/search"]["x-oai-additionalOperations"][method].is_object());
+    assert_eq!(document["openapi"], "3.2.1");
+    let search = &document["paths"]["/search"]["query"];
+    let alias = &document["paths"]["/search-alias"]["query"];
+    assert!(search.is_object());
+    assert!(alias.is_object());
+    assert_ne!(search["operationId"], alias["operationId"]);
+    assert!(document["paths"]["/listener"]["get"].is_object());
+    assert!(document["paths"]["/search"].get("additionalOperations").is_none());
 }
 
 /// `HTTP/1.1 200 OK ...` -> 200 (0 when the response is not an HTTP response)

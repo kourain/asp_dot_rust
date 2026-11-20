@@ -75,7 +75,7 @@ impl HomeController {
 
 Use `#[query("/search")]` or `#[route(["QUERY"], "/search")]` to register the `http::Method::QUERY` method. QUERY is safe and idempotent and describes the operation in its request body. Clients must send `Content-Type`. Use `FromBody<T>` to bind a JSON or XML query, or read the body in the action for a custom query format. [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html#section-2)
 
-Generated OpenAPI 3.0 documents list QUERY under `x-oai-additionalOperations`. [OpenAPI extension registry](https://spec.openapis.org/registry/extension/x-oai-additionalOperations)
+Generated OpenAPI 3.2 documents describe QUERY with the `query` field on the Path Item Object. [OpenAPI 3.2 Path Item Object](https://spec.openapis.org/oas/v3.2.1.html#path-item-object)
 
 ## Action results
 
@@ -84,6 +84,8 @@ Use the types in `asp_dot_rust::controller::results` to choose the HTTP status. 
 Use `Created(body).with_location("/items/42")` for 201 with a `Location` header. `Redirect::new("/items")` creates a 302 response with an empty body and a `Location` header. The other redirect types are `MovedPermanently` (301), `SeeOther` (303), `TemporaryRedirect` (307), and `PermanentRedirect` (308). These constructors return an error if the location is invalid as an HTTP header value. `NotModified` returns 304 with an empty body.
 
 The body types accept `AsRef<[u8]> + Send + Sync` values such as `&str`, `String`, and `Vec<u8>`. To return different result types from the same action, use `Box<dyn ActionResult>`.
+
+If the response has yet to start, the router applies the status from `status_code()` and the headers from `write_header` first. In `write_body_async(&self, response: &mut HttpResponse)`, fill `response.body` to buffer bytes or call `response.write_async(chunk).await?` to stream each chunk.
 
 ```rust
 use asp_dot_rust::controller::{ActionResult, results};

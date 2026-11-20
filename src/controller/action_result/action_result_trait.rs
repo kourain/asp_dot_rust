@@ -1,35 +1,23 @@
-use http::HeaderMap;
+use http::{HeaderMap, StatusCode};
+use std::io;
 
-use crate::{http_context::HttpContext, http_context::HttpHeaderExt};
+use crate::http_context::HttpResponse;
 
 #[async_trait::async_trait]
 pub trait ActionResult: Send + Sync {
-    fn status_code(&self) -> http::StatusCode {
-        http::StatusCode::OK
+    /// Returns the HTTP status for this result.
+    fn status_code(&self) -> StatusCode {
+        StatusCode::OK
     }
-    async fn get_body_async(&self) -> Vec<u8>;
-    fn set_headers(&self, http_context: &mut HttpContext) {
-        let response = &mut http_context.response;
-        response.status_code = self.status_code();
-        response.headers.extend(self.headers());
-        response.headers.set_content_length(self.content_length());
-        let content_type = self.content_type();
-        if !content_type.is_empty() {
-            response.headers.set_content_type(content_type);
-        }
+
+    /// Writes headers to merge into the response.
+    fn write_header(&self, _headers: &mut HeaderMap) {}
+
+    /// Sets the buffered body or streams bytes directly through the response.
+    /// If the response has not started, the router applies the result's status and headers first.
+    async fn write_body_async(&self, _response: &mut HttpResponse) -> io::Result<()> {
+        Ok(())
     }
-    async fn write_to_http_context_async(&self, http_context: &mut HttpContext) {
-        self.set_headers(http_context);
-        http_context.response.body = self.get_body_async().await;
-    }
-    /// Additional headers to apply to the response.
-    fn headers(&self) -> HeaderMap {
-        HeaderMap::new()
-    }
-    fn content_type(&self) -> &str {
-        ""
-    }
-    fn content_length(&self) -> usize;
 }
 
 impl<'a, T: ActionResult + 'a> From<T> for Box<dyn ActionResult + 'a> {

@@ -1,11 +1,12 @@
 use http::{
-    HeaderValue, Method, StatusCode,
+    HeaderMap, Method, StatusCode,
     header::{ALLOW, CONTENT_TYPE},
 };
 
 use crate::{
     controller::{BindError, RoutingError},
     http_context::{HttpContext, HttpContextRef, HttpHeaderExt, HttpResponse},
+    logging::LOGGER,
     middleware::{Middleware, MiddlewareNext},
     services::{
         routing::RoutingResult::{Found, MethodNotAllowed, NotFound},
@@ -45,20 +46,30 @@ impl Middleware for RoutingMiddleware {
                 let mut controller = activator_async(ctx_ref).await;
                 match controller.routing(action_name).await {
                     Ok(result) => {
-                        let body = result.get_body_async().await;
-                        let content_type = result.content_type();
-                        let content_type = (!content_type.is_empty()).then(|| HeaderValue::from_str(content_type).unwrap());
-                        let status_code = result.status_code();
-                        let headers = result.headers();
-                        drop(result);
-
-                        let response = &mut http_context.response;
-                        response.status_code = status_code;
-                        response.body = body;
-                        response.headers.extend(headers);
-                        if let Some(content_type) = content_type {
-                            response.headers.insert(CONTENT_TYPE, content_type);
+                        if http_context.response.has_finished() {
+                            return;
                         }
+                        if !http_context.response.has_started() {
+                            let status_code = result.status_code();
+                            let mut headers = HeaderMap::new();
+                            result.write_header(&mut headers);
+                            let response = &mut http_context.response;
+                            response.status_code = status_code;
+                            response.headers.extend(headers);
+                        }
+                        let response = &mut http_context.response;
+                        response.body.clear();
+                        let written = result.write_body_async(response).await;
+                        drop(result);
+                        if let Err(error) = written {
+                            LOGGER::debug(format!("Action result body not fully written: {error}"));
+                            if response.has_started() {
+                                response.abort();
+                            } else {
+                                set_status_response(response, StatusCode::INTERNAL_SERVER_ERROR);
+                            }
+                        }
+                        response.set_buffered_content_length();
                     }
                     Err(RoutingError::Bind(error)) => {
                         let response = &mut http_context.response;
@@ -68,11 +79,10 @@ impl Middleware for RoutingMiddleware {
                         };
                         response.body = error.to_string().into_bytes();
                         response.headers.set_content_type("text/plain");
+                        response.headers.set_content_length(response.body.len());
                     }
                     Err(RoutingError::ActionNotFound) => set_status_response(&mut http_context.response, StatusCode::NOT_FOUND),
                 }
-                let response = &mut http_context.response;
-                response.headers.set_content_length(response.body.len());
             }
             MethodNotAllowed(allowed_methods) => {
                 let response = &mut http_context.response;

@@ -11,7 +11,7 @@ use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,
     configuration::CompressionConfiguration,
     controller::{ActionResult, FromQuery, FromRoute, get, results, route},
-    http_context::{HttpContextRef, HttpHeaderExt},
+    http_context::{HttpContextRef, HttpHeaderExt, HttpResponse},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
     services::configuration::CfgEntryAllowReloadFile::NotAllowed,
@@ -21,6 +21,7 @@ use hyper::body::Bytes;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpStream,
+    sync::Semaphore,
 };
 
 // ---------------------------------------------------------------------------
@@ -29,6 +30,7 @@ use tokio::{
 
 static DISCONNECT_SEEN: AtomicBool = AtomicBool::new(false);
 static PRODUCED_CHUNKS: AtomicUsize = AtomicUsize::new(0);
+static NEXT_RESULT_CHUNK: Semaphore = Semaphore::const_new(0);
 
 const TEXT_BODY: &str = "<html><body>Hello world</body></html>";
 const LARGE_BODY_SIZE: usize = 1_000_000;
@@ -43,20 +45,36 @@ struct BorrowedText<'a>(&'a str);
 
 #[async_trait::async_trait]
 impl ActionResult for BorrowedText<'_> {
-    async fn get_body_async(&self) -> Vec<u8> {
-        self.0.as_bytes().to_vec()
-    }
-
     fn status_code(&self) -> http::StatusCode {
         http::StatusCode::CREATED
     }
 
-    fn content_type(&self) -> &str {
-        "text/plain; charset=utf-8"
+    fn write_header(&self, headers: &mut http::HeaderMap) {
+        headers.insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("text/plain; charset=utf-8"));
     }
 
-    fn content_length(&self) -> usize {
-        self.0.len()
+    async fn write_body_async(&self, response: &mut HttpResponse) -> io::Result<()> {
+        response.body.extend_from_slice(self.0.as_bytes());
+        Ok(())
+    }
+}
+
+struct StreamedText<'a>(&'a str);
+
+#[async_trait::async_trait]
+impl ActionResult for StreamedText<'_> {
+    fn status_code(&self) -> http::StatusCode {
+        http::StatusCode::ACCEPTED
+    }
+
+    fn write_header(&self, headers: &mut http::HeaderMap) {
+        headers.insert_str("Content-Type", "text/plain");
+    }
+
+    async fn write_body_async(&self, response: &mut HttpResponse) -> io::Result<()> {
+        response.write_async(self.0.as_bytes()).await?;
+        NEXT_RESULT_CHUNK.acquire().await.unwrap().forget();
+        response.write_async(b"last").await
     }
 }
 
@@ -83,6 +101,11 @@ impl StreamController {
             return results::BadRequest("invalid id").into();
         }
         BorrowedText(self.http_context.request.uri.path()).into()
+    }
+
+    #[get("/stream/result")]
+    pub fn stream_result(&self) -> Box<dyn ActionResult + '_> {
+        StreamedText(self.http_context.request.uri.path()).into()
     }
 
     #[get("/complete/string")]
@@ -494,6 +517,22 @@ async fn head_request_gets_the_headers_without_body() {
 // ---------------------------------------------------------------------------
 // Streamed responses
 // ---------------------------------------------------------------------------
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn custom_action_result_streams_through_the_response() {
+    let port = start_server(|_| {}).await;
+    let mut conn = Conn::connect(port).await;
+    conn.send("GET", "/stream/result", &[]).await;
+    let head = tokio::time::timeout(Duration::from_secs(2), conn.read_head()).await.unwrap();
+    assert_eq!(head.status, 202);
+    assert_eq!(head.header("content-type"), Some("text/plain"));
+    assert!(head.is_chunked());
+    let chunk = tokio::time::timeout(Duration::from_secs(2), conn.read_chunk()).await.unwrap().unwrap().unwrap();
+    assert_eq!(chunk, b"/stream/result");
+    NEXT_RESULT_CHUNK.add_permits(1);
+    assert_eq!(conn.read_chunk().await.unwrap().unwrap(), b"last");
+    assert!(conn.read_chunk().await.unwrap().is_none());
+}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn streamed_response_sends_chunks_when_they_are_written() {
