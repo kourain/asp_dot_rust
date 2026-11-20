@@ -12,7 +12,7 @@ use asp_dot_rust::{
     configuration::CompressionConfiguration,
     controller::{ActionResult, FromQuery, FromRoute, get, results, route},
     http_context::{HttpContextRef, HttpHeaderExt, HttpResponse},
-    logging::LOGGER,
+    logging::{LOGGER, LogCommand, LogLevel},
     macros::{controller_inject, controller_route},
     services::configuration::CfgEntryAllowReloadFile::NotAllowed,
 };
@@ -276,7 +276,7 @@ impl StreamController {
 
 /// Starts the application on a free loopback port, `configure` adds the middlewares.
 async fn start_server(configure: impl FnOnce(&mut Application)) -> u16 {
-    LOGGER::disable();
+    LOGGER::disable_default_logger();
     let port = {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         listener.local_addr().unwrap().port()
@@ -677,11 +677,46 @@ async fn abort_before_the_first_write_does_nothing() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn panic_before_any_write_returns_500() {
-    let port = start_server(|_| {}).await;
+    let port = start_server(|app| {
+        app.use_compression();
+    })
+    .await;
+    let mut logs = LOGGER::spawn_log_receiver();
     let mut conn = Conn::connect(port).await;
     let (head, body) = conn.get("/stream/panic_before", &[]).await;
     assert_eq!(head.status, 500);
     assert_eq!(body, b"Internal Server Error");
+
+    let panic_log = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let LogCommand::Log(log) = logs.recv().await.unwrap()
+                && log.message.contains("test panic before any write")
+            {
+                break log;
+            }
+        }
+    })
+    .await
+    .expect("request panic was not logged");
+    assert_eq!(panic_log.level, LogLevel::Error);
+    let (location, backtrace) = panic_log.message.split_once(": test panic before any write\nBacktrace:\n").unwrap();
+    let (request, origin) = location.split_once(", Unhandled panic at ").unwrap();
+    let (connection_id, request_id) = request.strip_prefix("Request ").unwrap().split_once(':').unwrap();
+    assert!(connection_id.parse::<ulid::Ulid>().is_ok(), "{connection_id}");
+    assert!(request_id.parse::<ulid::Ulid>().is_ok(), "{request_id}");
+    assert!(origin.starts_with(file!()), "{origin}");
+    assert!(!backtrace.trim().is_empty(), "{panic_log:?}");
+    if cfg!(debug_assertions) {
+        assert!(backtrace.contains("stream_panic_before"), "{backtrace}");
+        assert!(backtrace.contains("::middleware::compression::"), "{backtrace}");
+        assert!(
+            !backtrace.lines().any(|line| line.contains("::middleware::handle_error::") && line.contains("::inject_invoke_async")),
+            "{backtrace}"
+        );
+        assert!(!backtrace.contains("hyper::"), "{backtrace}");
+        assert!(!backtrace.contains("tokio::runtime"), "{backtrace}");
+    }
+
     // the connection is still usable
     let (head, body) = conn.get("/complete/text", &[]).await;
     assert_eq!((head.status, body.as_slice()), (200, TEXT_BODY.as_bytes()));

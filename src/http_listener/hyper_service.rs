@@ -9,13 +9,11 @@ use crate::{
         service_provider::ServiceProviderScope,
     },
 };
-use futures::{FutureExt, future::Either};
+use futures::future::Either;
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioIo, TokioTimer};
 use hyper_util::server::conn::auto as auto_conn;
-use std::sync::Arc;
-use std::time::Duration;
-use std::{convert::Infallible, panic::AssertUnwindSafe};
+use std::{convert::Infallible, sync::Arc, time::Duration};
 use tokio::net::TcpStream;
 use ulid::Ulid;
 
@@ -82,22 +80,7 @@ pub(crate) async fn hyper_service(
 
             let mut http_context = HttpContext::new(custom_req, custom_resp, service_provider.create_scope());
             let pipeline = async move {
-                match AssertUnwindSafe(middleware_pipeline.next_async(&mut http_context)).catch_unwind().await {
-                    Ok(()) => {}
-                    Err(panic_payload) => {
-                        LOGGER::error(format!(
-                            "Request {}:{}, Unhandled panic: {:?}",
-                            http_context.request.connection_id, http_context.request.request_id, panic_payload
-                        ));
-                        if http_context.response.has_started() {
-                            // the status is already sent, the only way to tell the client is to break the stream
-                            http_context.abort();
-                        } else {
-                            http_context.response.status_code = http::StatusCode::INTERNAL_SERVER_ERROR;
-                            http_context.response.body = b"Internal Server Error".to_vec();
-                        }
-                    }
-                }
+                middleware_pipeline.next_async(&mut http_context).await;
                 let duration = start.elapsed();
                 LOGGER::info(format!(
                     "{} {} {:?} {} {} in {:.3} ms",

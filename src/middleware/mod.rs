@@ -4,6 +4,7 @@ pub use authorize::AuthUser;
 pub(crate) mod auto_route;
 pub(crate) mod compression;
 pub(crate) mod cors;
+mod handle_error;
 pub(crate) mod rate_limit;
 pub(crate) mod request_timeout;
 pub(crate) mod static_file;

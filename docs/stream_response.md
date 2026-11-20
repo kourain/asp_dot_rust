@@ -49,5 +49,6 @@ pub async fn stream(&mut self) -> impl ActionResult {
 - Bytes still in `response.body` when the pipeline ends are written after the streamed bytes. The returned `""` adds nothing.
 - `complete_async` writes the head and `response.body` and ends the stream now, instead of when the pipeline ends.
 - `CompressionMiddleware` skips a response that is already streamed.
-- A panic or a request timeout after the first write breaks the stream, so the client does not see a body that looks complete. Before the first write they give 500 and 408.
+- A request timeout returns HTTP 408 before the headers are sent and breaks the stream afterward.
+- With `panic = "unwind"`, a panic returns HTTP 500 before the headers are sent and breaks the stream afterward. With `panic = "abort"`, a panic terminates the process.
 - `http_context.abort()` breaks the stream by hand. It does nothing before the first write.
