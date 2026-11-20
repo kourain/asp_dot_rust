@@ -100,8 +100,9 @@ Backtrace:
 ```
 
 With `panic = "abort"`, the hook writes the same diagnostic directly to
-stderr before Rust terminates the process. The server chains any existing
-panic hook. Both modes capture the backtrace at the panic site without
+stderr before Rust terminates the process. A panic outside a request still
+goes to the previous panic hook, a panic inside a request is only reported
+by the server, so it is not printed twice. Both modes capture the backtrace at the panic site without
 requiring `RUST_BACKTRACE`. The request log cuts off the backtrace at
 `HandleErrorMiddleware`, which wraps the application middleware and routing.
 When that frame is unavailable, the log retains the captured backtrace.

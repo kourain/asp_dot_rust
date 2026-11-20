@@ -259,6 +259,15 @@ impl StreamController {
         results::Ok("")
     }
 
+    #[get("/stream/panic_json")]
+    pub async fn stream_panic_json(&mut self) -> impl ActionResult {
+        self.http_context.response.headers.insert_str("Content-Type", "application/json");
+        if std::hint::black_box(true) {
+            panic!("test panic after a header");
+        }
+        results::Ok("")
+    }
+
     #[get("/stream/panic_after")]
     pub async fn stream_panic_after(&mut self) -> impl ActionResult {
         self.http_context.response.write_async("partial").await.unwrap();
@@ -720,6 +729,15 @@ async fn panic_before_any_write_returns_500() {
     // the connection is still usable
     let (head, body) = conn.get("/complete/text", &[]).await;
     assert_eq!((head.status, body.as_slice()), (200, TEXT_BODY.as_bytes()));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn panic_response_does_not_keep_the_content_type_of_the_handler() {
+    let port = start_server(|_| {}).await;
+    let (head, body) = Conn::connect(port).await.get("/stream/panic_json", &[]).await;
+    assert_eq!(head.status, 500);
+    assert_eq!(head.header("content-type"), Some("text/plain; charset=utf-8"));
+    assert_eq!(body, b"Internal Server Error");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

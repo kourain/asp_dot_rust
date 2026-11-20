@@ -35,6 +35,11 @@ impl LOGGER {
         }
     }
 
+    // check if logger running
+    pub fn is_running() -> bool {
+        LOG_RUNNING.load(Ordering::Relaxed)
+    }
+
     /// set format of log output, e.g. "[{level}] {requestid} {timestamp} {message}"
     pub fn with_format(format: impl Into<String>) {
         _ = Self::get_sender().send(LogCommand::SetLogFormat(format.into()));

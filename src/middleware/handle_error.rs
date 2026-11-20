@@ -1,22 +1,19 @@
-#[cfg(panic = "unwind")]
-use crate::logging::LOGGER;
 use crate::{
     http_context::HttpContext,
+    logging::LOGGER,
     middleware::{Middleware, MiddlewareNext},
     services::service_provider::ServiceProviderScope,
 };
-#[cfg(panic = "unwind")]
-use futures::FutureExt;
-#[cfg(panic = "abort")]
-use std::io::Write;
+use futures_util::FutureExt;
+use http::{HeaderValue, StatusCode, header::CONTENT_TYPE};
 use std::{
     any::Any,
     backtrace::Backtrace,
-    panic::{self, Location},
-    sync::Once,
+    cell::Cell,
+    io::Write,
+    panic::{self, AssertUnwindSafe, Location},
+    sync::{Arc, Once},
 };
-#[cfg(panic = "unwind")]
-use std::{cell::Cell, panic::AssertUnwindSafe};
 use ulid::Ulid;
 
 /// The outermost request middleware, responsible for panic diagnostics and recovery.
@@ -33,36 +30,35 @@ impl Middleware for HandleErrorMiddleware {
 
     async fn inject_invoke_async(&self, http_context: &mut HttpContext) {
         let request = RequestPanic {
-            connection_id: *http_context.request.connection_id,
-            request_id: http_context.request.request_id,
-            #[cfg(panic = "unwind")]
+            connection_id: http_context.request.connection_id.clone(),
+            request_id: *http_context.request.request_id,
             report: Cell::new(None),
         };
         REQUEST_PANIC
             .scope(request, async {
-                #[cfg(panic = "unwind")]
-                if let Err(payload) = AssertUnwindSafe(async { self.next.next_async(http_context).await }).catch_unwind().await {
-                    let report = REQUEST_PANIC.with(|request| request.report.take().unwrap_or_else(|| request.format_message(payload.as_ref(), None)));
-                    LOGGER::error(report);
-                    if http_context.response.has_started() {
-                        http_context.abort();
-                    } else {
-                        http_context.response.status_code = http::StatusCode::INTERNAL_SERVER_ERROR;
-                        http_context.response.body = b"Internal Server Error".to_vec();
-                    }
+                // With panic = "abort" the future never returns an error, the hook has already written the report.
+                let Err(payload) = AssertUnwindSafe(self.next.next_async(http_context)).catch_unwind().await else {
+                    return;
+                };
+                let report = REQUEST_PANIC.with(|request| request.report.take().unwrap_or_else(|| request.format_message(payload.as_ref(), None)));
+                LOGGER::error(report);
+                if http_context.response.has_started() {
+                    http_context.abort();
+                } else {
+                    http_context.response.status_code = StatusCode::INTERNAL_SERVER_ERROR;
+                    // Headers set by the failed handler (such as a JSON content type) do not describe this body.
+                    http_context.response.headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/plain; charset=utf-8"));
+                    http_context.response.body = b"Internal Server Error".to_vec();
                 }
-
-                #[cfg(panic = "abort")]
-                self.next.next_async(http_context).await;
             })
             .await;
     }
 }
 
 struct RequestPanic {
-    connection_id: Ulid,
+    connection_id: Arc<Ulid>,
     request_id: Ulid,
-    #[cfg(panic = "unwind")]
+    /// The report built by the panic hook, read after the panic is caught.
     report: Cell<Option<String>>,
 }
 
@@ -99,19 +95,18 @@ fn install_request_panic_hook() {
     INSTALL.call_once(|| {
         let previous_hook = panic::take_hook();
         panic::set_hook(Box::new(move |info| {
-            let _ = REQUEST_PANIC.try_with(|request| {
-                let message = request.format_message(info.payload(), info.location());
-                let backtrace = Backtrace::force_capture().to_string();
-                let report = format!("{message}\nBacktrace:\n{}", middleware_backtrace(&backtrace));
-                #[cfg(panic = "unwind")]
-                request.report.set(Some(report));
-                #[cfg(panic = "abort")]
-                {
-                    // The asynchronous logger may not run again before the process exits.
-                    let _ = writeln!(std::io::stderr().lock(), "{report}");
-                }
-            });
-            previous_hook(info);
+            let in_request = REQUEST_PANIC
+                .try_with(|request| {
+                    let message = request.format_message(info.payload(), info.location());
+                    let backtrace = Backtrace::force_capture().to_string();
+                    let report = format!("{message}\nBacktrace:\n{}", middleware_backtrace(&backtrace));
+                    request.report.set(Some(report));
+                })
+                .is_ok();
+            // A panic inside a request is already reported, so the previous hook would only print it a second time.
+            if !in_request {
+                previous_hook(info);
+            }
         }));
     });
 }
