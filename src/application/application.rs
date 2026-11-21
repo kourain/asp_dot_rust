@@ -55,6 +55,7 @@ impl Application {
         let configuration = service_provider.get_service::<ConfigurationService>().await;
         configuration.load_all_async().await;
         service_provider.store_instance(Arc::new(routing_builder.build()));
+        service_provider.validate_startup_dependencies(&configuration);
         drop(configuration);
 
         let middleware_pipeline = middleware_builder.build_pipeline(&service_provider).await;

@@ -11,7 +11,7 @@ into a `RoutingServiceBuilder`, then compiled once into an immutable
 | Concept | Type | Purpose |
 | ------- | ---- | ------- |
 | Route collector | `RoutingServiceBuilder` | Accumulates every `#[get]`/`#[post]`/... action declared on every controller. Lives behind a process-wide registry until `add_controllers()` is called. |
-| Compiled router | `RoutingService` | Built once from `RoutingServiceBuilder::build()`, registered as a singleton service, and used to resolve every incoming request. Read-only after startup. |
+| Compiled router | `RoutingService` | Registered as a singleton by `ApplicationBuilder::build()`. `Application::run()` stores the router prepared by `RoutingServiceBuilder` before initializing middleware. Read-only after startup. |
 | Resolution result | `ResolvedRoute` | Carries the matched `RoutingResult`, extracted `path_params`, and parsed `query_params` for one request. Reachable at `http_context.request.routing_info`. |
 | Match outcome | `RoutingResult` | `Found(info)`, `NotFound`, or `MethodNotAllowed(allowed_methods)`. |
 

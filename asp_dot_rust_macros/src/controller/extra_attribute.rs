@@ -1,9 +1,4 @@
-//! The built-in attribute macros: `#[name(value)]` is `#[attr(name = value)]` with the value typed as the declared type
-//! (see `attribute.rs` for how they are expanded and read by `#[controller_route]`).
-//!
-//! To add one, add an entry to `for_each_attr_alias!` below: `name: type`, with the doc comment of the macro. Nothing else has to change:
-//! the macro itself is defined in `lib.rs` (a `#[proc_macro_attribute]` has to be at the root of the crate) from this same list,
-//! and `ATTR_ALIASES` is the table `#[controller_route]` reads.
+//! Built-in typed aliases for `#[attr(name = value)]`.
 
 use super::attribute::AttrAlias;
 
@@ -23,7 +18,6 @@ macro_rules! define_attr_alias_macros {
 
 macro_rules! define_attr_alias_table {
     ($( $(#[$meta:meta])* $name:ident : $ty:ty ),* $(,)?) => {
-        /// Every built-in attribute macro.
         pub(crate) const ATTR_ALIASES: &[AttrAlias] = &[
             $( AttrAlias { name: stringify!($name), ty: stringify!($ty) } ),*
         ];
@@ -31,7 +25,6 @@ macro_rules! define_attr_alias_table {
 }
 for_each_attr_alias!(define_attr_alias_table);
 
-/// Calls `$callback!` with the whole list of built-in attribute macros.
 macro_rules! for_each_attr_alias {
     ($callback:ident) => {
         $callback! {

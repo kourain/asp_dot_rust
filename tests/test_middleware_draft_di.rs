@@ -5,7 +5,7 @@ use asp_dot_rust::{
     dependency_injection::{CfgOption, CfgReload, CfgRequire, Serv},
     http_context::{HttpContext, HttpContextRef},
     logging::LOGGER,
-    macros::{controller_inject, controller_route, middleware},
+    macros::{DependencyInjectableController, DependencyInjectableMiddleware, controller, middleware},
     middleware::MiddlewareNext,
     services::routing::RoutingService,
 };
@@ -21,10 +21,32 @@ use std::{
 
 static EVENTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static REQUESTS: AtomicUsize = AtomicUsize::new(0);
+static DERIVED_REQUESTS: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Default)]
 struct DiSettings {
     enabled: bool,
+}
+
+#[derive(DependencyInjectableMiddleware)]
+struct DerivedMiddleware {
+    continuation: MiddlewareNext,
+    routing: Serv<RoutingService>,
+    settings: CfgRequire<DiSettings>,
+    #[di(default)]
+    requests: AtomicUsize,
+}
+
+#[middleware]
+impl DerivedMiddleware {
+    async fn invoke_async(&self, http_context: &mut HttpContext, routing: Serv<RoutingService>) {
+        assert!(self.settings.enabled);
+        let startup_methods = self.routing.get_allowed_methods("/ok");
+        assert!(startup_methods.contains(&http::Method::GET));
+        assert_eq!(startup_methods, routing.get_allowed_methods("/ok"));
+        assert_eq!(self.requests.fetch_add(1, SeqCst), DERIVED_REQUESTS.fetch_add(1, SeqCst));
+        self.continuation.next_async(http_context).await;
+    }
 }
 
 pub struct DiMiddleware {
@@ -51,8 +73,7 @@ impl DiMiddleware {
 api_controller!(pub DiController {
     routing: Serv<RoutingService>,
 });
-#[controller_route]
-#[controller_inject]
+#[controller]
 impl DiController {
     fn new(http_context: HttpContextRef, routing: Serv<RoutingService>, config: CfgOption<DiSettings>) -> Self {
         assert!(config.unwrap().enabled);
@@ -62,6 +83,31 @@ impl DiController {
     pub async fn ok(&mut self) -> impl ActionResult {
         assert!(self.routing.get_allowed_methods(self.http_context.request.path()).contains(&http::Method::GET));
         "ok"
+    }
+}
+
+mod derived_controller {
+    use super::*;
+
+    api_controller!(
+        #[derive(DependencyInjectableController)]
+        DerivedController {
+            routing: Serv<RoutingService>,
+            settings: CfgRequire<DiSettings>,
+            #[di(default)]
+            marker: bool,
+        }
+    );
+
+    #[controller("derived")]
+    impl DerivedController {
+        #[get("/")]
+        async fn get(&self) -> impl ActionResult {
+            assert!(self.settings.enabled);
+            assert!(!self.marker);
+            assert!(self.routing.get_allowed_methods(self.http_context.request.path()).contains(&http::Method::GET));
+            "derived"
+        }
     }
 }
 
@@ -84,6 +130,7 @@ async fn startup_and_request_dependencies_are_injected() {
     builder.add_controllers();
     let mut app = builder.build();
     app.add_middleware::<DiMiddleware>();
+    app.add_middleware::<DerivedMiddleware>();
     // the middleware is created once when the application runs, not when it is added
     assert!(EVENTS.lock().unwrap().is_empty());
     tokio::spawn(app.run());
@@ -93,10 +140,12 @@ async fn startup_and_request_dependencies_are_injected() {
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    for _ in 0..3 {
-        let response = tokio::task::spawn_blocking(move || request(port, "/ok")).await.unwrap();
+    for (path, body) in [("/ok", "ok"), ("/derived", "derived"), ("/ok", "ok")] {
+        let response = tokio::task::spawn_blocking(move || request(port, path)).await.unwrap();
         assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+        assert!(response.ends_with(body), "{response}");
     }
     assert_eq!(*EVENTS.lock().unwrap(), ["new"]);
     assert_eq!(REQUESTS.load(SeqCst), 3);
+    assert_eq!(DERIVED_REQUESTS.load(SeqCst), 3);
 }

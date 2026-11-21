@@ -3,6 +3,7 @@ use syn::{Ident, Type};
 pub fn type_name(ty: &Type) -> Option<&Ident> {
     match ty {
         Type::Path(path) => path.path.segments.last().map(|segment| &segment.ident),
+        Type::Group(group) => type_name(&group.elem),
         _ => None,
     }
 }
@@ -25,6 +26,10 @@ pub fn get_exact_type(ty: &Type) -> &Type {
 /// so it works regardless of which crate path the wrapper was imported from.
 /// Used for dependency injection and action parameter binding.
 pub fn extract_wrapper_inner(ty: &Type, wrapper_name: &str) -> Option<Type> {
+    // A type forwarded by a macro_rules! `:ty` fragment can be wrapped in an invisible group.
+    if let Type::Group(group) = ty {
+        return extract_wrapper_inner(&group.elem, wrapper_name);
+    }
     if let Type::Path(p) = ty {
         let seg = p.path.segments.last()?;
         if seg.ident == wrapper_name {

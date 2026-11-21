@@ -6,8 +6,8 @@ use crate::utils::extract_type::{extract_wrapper_inner, type_name};
 
 #[derive(Default)]
 pub(super) struct Dependencies {
-    inner_types: Vec<Type>,
-    needs_configuration: bool,
+    services: Vec<Type>,
+    configurations: Vec<(Type, bool)>,
 }
 
 impl Dependencies {
@@ -21,13 +21,16 @@ impl Dependencies {
             "CfgReload" => quote! { configuration_service.get::<#inner>() },
             _ => return None,
         };
-        self.needs_configuration |= wrapper != "Serv";
-        self.inner_types.push(inner);
+        if wrapper == "Serv" {
+            self.services.push(inner);
+        } else {
+            self.configurations.push((inner, wrapper == "CfgRequire"));
+        }
         Some(expression)
     }
 
     pub(super) fn configuration_binding(&self, main_crate: &TokenStream) -> TokenStream {
-        if self.needs_configuration {
+        if !self.configurations.is_empty() {
             quote! {
                 let configuration_service = service_scope.get_service::<#main_crate::services::configuration::ConfigurationService>().await;
             }
@@ -36,15 +39,49 @@ impl Dependencies {
         }
     }
 
+    fn dependency_list(&self, main_crate: &TokenStream) -> TokenStream {
+        let services = &self.services;
+        let configurations = self.configurations.iter().map(|(ty, require_value)| {
+            quote! { #main_crate::dependency_injection::Dependency::configuration::<#ty, #require_value>() }
+        });
+        quote! {
+            #( #main_crate::dependency_injection::Dependency::service::<#services>(), )*
+            #( #configurations, )*
+        }
+    }
+
+    pub(super) fn check_registrations(&self, owner: &impl ToTokens) -> TokenStream {
+        let services = &self.services;
+        let configurations = self.configurations.iter().map(|(ty, _)| ty);
+        quote! {
+            #(
+                assert!(
+                    service_scope.contains_service::<#services>(),
+                    "Invalid dependency: {} -> service {} is not registered",
+                    std::any::type_name::<#owner>(), std::any::type_name::<#services>()
+                );
+            )*
+            #(
+                assert!(
+                    configuration_service.contains::<#configurations>(),
+                    "Invalid dependency: {} -> configuration {} is not registered",
+                    std::any::type_name::<#owner>(), std::any::type_name::<#configurations>()
+                );
+            )*
+        }
+    }
+
     pub(super) fn register(&self, main_crate: &TokenStream, owner: &impl ToTokens) -> TokenStream {
-        let owner_name = owner.to_token_stream().to_string();
-        let inner_types = &self.inner_types;
+        if self.services.is_empty() && self.configurations.is_empty() {
+            return TokenStream::new();
+        }
+        let dependencies = self.dependency_list(main_crate);
         quote! {
             #main_crate::third_party::inventory::submit! {
-                #main_crate::dependency_injection::DependencyEdge {
+                #main_crate::dependency_injection::ServiceDependencies {
                     owner: std::any::TypeId::of::<#owner>,
-                    owner_name: #owner_name,
-                    dependencies: || vec![ #( (std::any::TypeId::of::<#inner_types>(), std::any::type_name::<#inner_types>()) ),* ],
+                    owner_name: std::any::type_name::<#owner>,
+                    dependencies: || vec![#dependencies],
                 }
             }
         }

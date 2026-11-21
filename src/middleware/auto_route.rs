@@ -1,4 +1,5 @@
 use crate::{
+    dependency_injection::DependencyInjectableMiddleware,
     http_context::{HttpContext, HttpContextRef},
     middleware::{Middleware, MiddlewareNext},
     services::{
@@ -11,10 +12,14 @@ use crate::{
 /// Last middleware of the chain, calls the router.
 pub struct RoutingMiddleware;
 #[async_trait::async_trait]
-impl Middleware for RoutingMiddleware {
+impl DependencyInjectableMiddleware for RoutingMiddleware {
     async fn inject(_: &ServiceProviderScope, _: MiddlewareNext) -> Self {
-        Self {}
+        Self
     }
+}
+
+#[async_trait::async_trait]
+impl Middleware for RoutingMiddleware {
     async fn inject_invoke_async(&self, http_context: &mut HttpContext) {
         match &http_context.request.routing_info.router_info {
             Found(controller) => {
