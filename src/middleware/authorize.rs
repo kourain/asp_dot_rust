@@ -1,7 +1,7 @@
 use crate::{
     Application,
     configuration::JwtAuthConfiguration,
-    dependency_injection::CfgRequire,
+    dependency_injection::{CfgRequire, DependencyInjectableMiddleware},
     http_context::{HttpContext, USER_CONTEXT_KEY, HttpHeaderExt},
     macros::middleware,
     middleware::{Middleware, MiddlewareNext},
@@ -33,10 +33,14 @@ pub(crate) struct BasicAuthorizeMiddleware {
 }
 
 #[async_trait::async_trait]
-impl Middleware for BasicAuthorizeMiddleware {
+impl DependencyInjectableMiddleware for BasicAuthorizeMiddleware {
     async fn inject(_service_scope: &ServiceProviderScope, next: MiddlewareNext) -> Self {
         Self { next }
     }
+}
+
+#[async_trait::async_trait]
+impl Middleware for BasicAuthorizeMiddleware {
     async fn inject_invoke_async(&self, http_context: &mut HttpContext) {
         self.invoke_async(http_context).await;
     }

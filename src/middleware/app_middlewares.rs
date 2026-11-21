@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Creates a middleware from the next one, called once when the pipeline is built.
-/// The factory is async so that `Middleware::inject` (which may resolve services) can await.
+/// The factory is async so that `DependencyInjectableMiddleware::inject` can resolve services.
 type Factory = Box<dyn for<'a> Fn(&'a ServiceProviderScope, MiddlewareNext) -> Pin<Box<dyn Future<Output = MiddlewareNext> + Send + 'a>> + Send + Sync>;
 
 pub(crate) struct ApplicationMiddlewaresBuilder {

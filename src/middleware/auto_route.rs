@@ -5,6 +5,7 @@ use http::{
 
 use crate::{
     controller::{BindError, RoutingError},
+    dependency_injection::DependencyInjectableMiddleware,
     http_context::{HttpContext, HttpContextRef, HttpHeaderExt, HttpResponse},
     logging::LOGGER,
     middleware::{Middleware, MiddlewareNext},
@@ -24,10 +25,14 @@ fn set_status_response(response: &mut HttpResponse, status: StatusCode) {
 }
 
 #[async_trait::async_trait]
-impl Middleware for RoutingMiddleware {
+impl DependencyInjectableMiddleware for RoutingMiddleware {
     async fn inject(_: &ServiceProviderScope, _: MiddlewareNext) -> Self {
-        Self {}
+        Self
     }
+}
+
+#[async_trait::async_trait]
+impl Middleware for RoutingMiddleware {
     async fn inject_invoke_async(&self, http_context: &mut HttpContext) {
         match &http_context.request.routing_info.router_info {
             Found(controller) => {

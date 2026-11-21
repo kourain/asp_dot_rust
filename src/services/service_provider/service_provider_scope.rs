@@ -120,4 +120,7 @@ impl ServiceProviderScope {
     pub fn contains_type_id(&self, type_id: &TypeId) -> bool {
         self._inner_map.contains_key(type_id)
     }
+    pub(crate) fn registration(&self, type_id: &TypeId) -> Option<&ServiceInstance> {
+        self._inner_map.get(type_id)
+    }
 }

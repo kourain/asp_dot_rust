@@ -53,9 +53,9 @@ Any type that implements `Deserialize + Send + Sync + 'static` can be bound, it 
 
 ## Get a configuration
 
-`ConfigurationService::get::<T>()` returns a `CfgReload<T>`, a handle that follows every reload of the configuration. The other wrappers are made from it:
+`ConfigurationService::get::<T>()` returns a `CfgReload<T>` handle that follows every reload. All wrappers require a registered configuration type. Use `insert::<T>()` for a static value or `configure::<T>()` to bind a TOML section.
 
-| Type | Made by | No value |
+| Type | Made by | Registered entry without a value |
 | ---- | ------- | -------- |
 | `CfgReload<T>` | `get::<T>()` | the handle stays, its value is empty |
 | `CfgOption<T>` (`Cfg<T>`, deprecated) | `get::<T>().capture()` | `has_value()` is `false` |
@@ -64,7 +64,7 @@ Any type that implements `Deserialize + Send + Sync + 'static` can be bound, it 
 - `CfgOption<T>` is the value at the moment of `capture()`, it does not change when the file is reloaded. It has `has_value()`, `unwrap()` (panics when there is no value) and `unwrap_or_default()`, and it derefs to `Option<Arc<T>>`.
 - `CfgRequire<T>` derefs to `Arc<T>`, so the fields of `T` are used directly.
 - `Cfg<T>` is the old name of `CfgOption<T>`, it is deprecated and the struct will be renamed to `CfgOption<T>`.
-- A configuration has no value when it is not registered, its section is missing in every file, or it is not loaded yet.
+- A configured entry can be empty while waiting for its section to load.
 
 The injection macros (`#[inject]`, `#[derive(DependencyInjectableService)]` and `#[middleware]`) generate this code for parameters and fields of the three types, see [`dependency_injection.md`](./dependency_injection.md).
 
@@ -81,7 +81,7 @@ impl RateLimiterService {
 // let max = self.live.capture().unwrap().max_requests;
 ```
 
-Services are built after `Application::run` loaded the configuration, so a `CfgOption<T>` has its value there. A service built before the load (for example resolved from the builder) holds a `CfgOption<T>` without a value, its `CfgReload<T>` gets the value once the configuration is loaded.
+`Application::run` loads the configuration files before building the middleware pipeline. `CfgOption<T>` captures the entry's current value when injected. If the section loads later, `CfgReload<T>` picks up the value on the next capture.
 
 ## Hot reload
 
@@ -113,7 +113,7 @@ Every `add_toml_file(path, true)` file is watched by `ConfigurationWatcherBackgr
 | `configure_entry::<T>(key, allow_file)` | `ConfigurationService` | Same as `configure`, with a `CfgEntryAllowReloadFile` policy. |
 | `insert::<T>(custom)` | `ConfigurationService` | Static entry made from `T::default()` and `custom`, replaces an existing one. |
 | `contains::<T>()` | `ConfigurationService` | Check whether `T` is registered, it may still have no value. |
-| `get::<T>()` | `ConfigurationService` | The `CfgReload<T>` handle, empty if `T` is not registered. |
+| `get::<T>()` | `ConfigurationService` | Returns the `CfgReload<T>` handle. Panics if `T` is unregistered. |
 | `reload_all_async()` | `ConfigurationService` | Read every file and update every entry. |
 | `capture()` | `CfgReload<T>` | The `CfgOption<T>` value now. |
 | `has_value()` / `unwrap()` / `unwrap_or_default()` | `CfgOption<T>` | Check / get the `CfgRequire<T>`, panics without a value / get it or `T::default()`. |

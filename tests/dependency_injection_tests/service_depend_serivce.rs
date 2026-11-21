@@ -1,25 +1,23 @@
 // --- Circular dependency detection -----------------------------------------
 //
 // `CycleServiceX` depends on `CycleServiceY` and vice-versa. `#[inject]`
-// records this edge via `inventory::submit!`, and `ServiceProviderScope::check_dependency_cycles`
-// (invoked from `ApplicationBuilder::build`) must detect and panic on it.
+// records this edge via `inventory::submit!`. Startup dependency validation
+// in `Application::run` must detect and panic on it.
 // Since the fix in commit `a37438f`, this check runs in every build profile,
 // not just debug builds.
 
+use crate::dependency_injection_tests::services::*;
 use asp_dot_rust::ApplicationBuilder;
-use crate::{dependency_injection_tests::services::*};
-
 
 #[tokio::test]
 #[should_panic(expected = "Found circular dependency")]
-async fn build_panics_on_circular_dependency() {
+async fn run_panics_on_circular_dependency() {
     let mut builder = ApplicationBuilder::new("TestCircularDependency");
     builder.service.add_singleton::<CycleServiceX>();
     builder.service.add_singleton::<CycleServiceY>();
 
-    // `build()` runs `check_dependency_cycles()` internally and must panic
-    // before the application is ever returned.
-    let _ = builder.build();
+    let app = builder.build();
+    tokio::time::timeout(std::time::Duration::from_secs(5), app.run()).await.expect("startup should reject the cycle");
 }
 
 #[tokio::test]
