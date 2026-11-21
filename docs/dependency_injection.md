@@ -214,7 +214,7 @@ impl HomeController {
 
     #[get("/")]
     pub async fn index(&mut self) -> impl ActionResult {
-        self.ex_service.greet("world")
+        results::ok(self.ex_service.greet("world"))
     }
 }
 ```

@@ -1,5 +1,5 @@
 use asp_dot_rust::{
-    controller::{ActionRoute, Routing},
+    controller::{ActionResult, ActionRoute, Routing, RoutingError},
     dependency_injection::DependencyInjectableController,
     http_context::HttpContextRef,
     services::routing::RoutingServiceBuilder,
@@ -14,7 +14,9 @@ impl DependencyInjectableController for ControllerA {
 }
 #[async_trait::async_trait]
 impl Routing for ControllerA {
-    async fn routing(&mut self, _method_name: &'static str) {}
+    async fn routing(&mut self, _method_name: &'static str) -> Result<Box<dyn ActionResult + '_>, RoutingError> {
+        Err(RoutingError::ActionNotFound)
+    }
 }
 
 struct ControllerB;
@@ -26,7 +28,9 @@ impl DependencyInjectableController for ControllerB {
 }
 #[async_trait::async_trait]
 impl Routing for ControllerB {
-    async fn routing(&mut self, _method_name: &'static str) {}
+    async fn routing(&mut self, _method_name: &'static str) -> Result<Box<dyn ActionResult + '_>, RoutingError> {
+        Err(RoutingError::ActionNotFound)
+    }
 }
 
 #[test]

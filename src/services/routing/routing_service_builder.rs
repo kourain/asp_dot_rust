@@ -3,7 +3,7 @@ use crate::{
     dependency_injection::DependencyInjectableController,
     services::{
         openapi::RegisteredOperation,
-        routing::{ControllerInvoke, MAX_BODY_SIZE_ATTRIBUTE, Route, RouteAttribute, RouteAttributeMap, RoutingService},
+        routing::{ControllerActivator, MAX_BODY_SIZE_ATTRIBUTE, Route, RouteAttribute, RouteAttributeMap, RoutingService},
     },
 };
 use matchit::Router;
@@ -26,20 +26,14 @@ impl RoutingServiceBuilder {
     #[track_caller]
     pub fn register_controller<T>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>)
     where
-        T: DependencyInjectableController + Routing + Send + 'static,
+        T: DependencyInjectableController + Routing,
     {
-        let controller_invoker: ControllerInvoke = |http_context, action_name| {
-            Box::pin(async move {
-                let mut controller = T::inject(http_context).await;
-                controller.routing(action_name).await;
-            })
-        };
         if !self._registered_controllers.insert(TypeId::of::<T>()) {
             panic!("Registered Controller {} twice", std::any::type_name::<T>());
         }
         for action in action_routes {
             let route = Self::join_route(root_route, action.route);
-            self.add_controller_route::<T>(route, action.method, action.action_name, action.route_attribute_map, controller_invoker.clone());
+            self.add_controller_route::<T>(route, action.method, action.action_name, action.route_attribute_map);
         }
     }
 
@@ -63,9 +57,9 @@ impl RoutingServiceBuilder {
     }
 
     #[track_caller]
-    pub fn add_controller_route<T>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str, route_attr_map: RouteAttributeMap, invoker: ControllerInvoke)
+    pub fn add_controller_route<T>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str, route_attr_map: RouteAttributeMap)
     where
-        T: DependencyInjectableController + Routing + Send + 'static,
+        T: DependencyInjectableController + Routing,
     {
         // a limit that is not a usize would be ignored when a request comes in, refuse it at startup
         if route_attr_map.get(MAX_BODY_SIZE_ATTRIBUTE).is_some_and(|value| !value.is::<usize>()) {
@@ -77,12 +71,13 @@ impl RoutingServiceBuilder {
             );
         }
         let controller_name = std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>());
+        let activator_async: ControllerActivator = |http_context| Box::pin(async move { Box::new(T::inject(http_context).await) as Box<dyn Routing> });
         let route_info = Arc::new(Route {
             controller_name,
             controller_type_name: std::any::type_name::<T>(),
             action_name,
             route_attr: RouteAttribute::new(route_attr_map),
-            invoke_async: invoker,
+            activator_async,
         });
 
         // Remove by the exact pattern: matching a URL here could confuse static

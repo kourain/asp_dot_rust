@@ -1,7 +1,7 @@
 //! Middleware and controller dependency injection with startup and request arguments.
 use asp_dot_rust::{
     ApplicationBuilder, api_controller,
-    controller::{ActionResult, get},
+    controller::{ActionResult, get, results},
     dependency_injection::{CfgOption, CfgReload, CfgRequire, Serv},
     http_context::{HttpContext, HttpContextRef},
     logging::LOGGER,
@@ -82,11 +82,13 @@ impl DiController {
     #[get("/ok")]
     pub async fn ok(&mut self) -> impl ActionResult {
         assert!(self.routing.get_allowed_methods(self.http_context.request.path()).contains(&http::Method::GET));
-        "ok"
+        results::ok("ok")
     }
 }
 
 mod derived_controller {
+    use asp_dot_rust::controller::results::ok;
+
     use super::*;
 
     api_controller!(
@@ -106,7 +108,7 @@ mod derived_controller {
             assert!(self.settings.enabled);
             assert!(!self.marker);
             assert!(self.routing.get_allowed_methods(self.http_context.request.path()).contains(&http::Method::GET));
-            "derived"
+            ok("derived")
         }
     }
 }

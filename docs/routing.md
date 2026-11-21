@@ -20,7 +20,7 @@ into a `RoutingServiceBuilder`, then compiled once into an immutable
 ```rust
 use asp_dot_rust::{
     api_controller,
-    controller::{ActionResult, get, post, route},
+    controller::{ActionResult, get, post, results, route},
     http_context::HttpContextRef,
     macros::{controller_inject, controller_route},
 };
@@ -38,23 +38,23 @@ impl HomeController {
 
     #[get("/")] // -> GET /home
     pub async fn index(&mut self) -> impl ActionResult {
-        "Hello, World!"
+        results::ok("Hello, World!")
     }
 
     #[get("/{id}")] // -> GET /home/{id}, a dynamic path parameter
     pub async fn show(&mut self) -> impl ActionResult {
         let id = self.http_context.request.routing_info.path_params.get("id").cloned().unwrap_or_default();
-        format!("home #{id}")
+        results::ok(format!("home #{id}"))
     }
 
     #[post("/update")] // -> POST /home/update
     pub fn update(&mut self) -> impl ActionResult {
-        self.temp.clone()
+        results::ok(self.temp.clone())
     }
 
     #[route(["get", "post"], "/health")] // multiple methods on the same path
     pub async fn health(&self) -> impl ActionResult {
-        "ok".to_string()
+        results::ok("ok")
     }
 }
 ```
@@ -70,6 +70,59 @@ impl HomeController {
   HTTP method; registering the same controller twice, or two different
   controllers on the same route *and* method, panics at startup
   (`register_controller` / `add_controller_route`).
+
+## HTTP QUERY
+
+Use `#[query("/search")]` or `#[route(["QUERY"], "/search")]` to register the `http::Method::QUERY` method. QUERY is safe and idempotent and describes the operation in its request body. Clients must send `Content-Type`. Use `FromBody<T>` to bind a JSON or XML query, or read the body in the action for a custom query format. [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html#section-2)
+
+Generated OpenAPI 3.2 documents describe QUERY with the `query` field on the Path Item Object. [OpenAPI 3.2 Path Item Object](https://spec.openapis.org/oas/v3.2.1.html#path-item-object)
+
+## Action results
+
+The status functions in `asp_dot_rust::controller::results` return `RouteResult<T>`. For example, `ok(model)` returns 200 and `created(model).with_location("/items/42")` returns 201 with a validated `Location` header. Branches with the same payload type can return different statuses directly.
+
+Each status function also has a PascalCase alias. For example, `results::BadRequest("invalid id")` and `results::bad_request("invalid id")` call the same function.
+
+Use `result.headers_mut().insert(...)` to set a response header. For headers with multiple values, such as `Set-Cookie`, call `result.headers_mut().append(...)` for each value.
+
+```rust
+use asp_dot_rust::controller::{RouteResult, results};
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct Message {
+    text: &'static str,
+}
+
+fn look_up(found: bool) -> RouteResult<Message> {
+    if found {
+        results::ok(Message { text: "found" })
+    } else {
+        results::not_found(Message { text: "missing" })
+    }
+}
+```
+
+The router serializes the model according to the request's `Accept` header. It offers `application/json` and `application/xml`, honors weights and wildcards, and prefers JSON when both match equally or the header is absent. XML uses a `response` root with a `value` field so sequences and scalars can also form XML documents. Negotiated responses include `Vary: Accept`. An unsupported selection returns 406 with an empty body.
+
+Pass a `String` or `&str` directly for UTF-8 text. For example, `ok("default")` sends the seven bytes `default` with a default content type of `text/plain`. A model with `#[derive(Serialize)]` can be returned directly or in a collection. Vectors and slices, including `Vec<u8>`, use JSON/XML negotiation. Serde supports fixed arrays directly up to 32 elements. For longer arrays, use `ok(&array[..])` when the data outlives the result, or `ok(Vec::from(array))` to return owned data.
+
+Use `ok(Raw(bytes))` to send a byte vector, byte array, byte slice or `Bytes` with `application/octet-stream`. Use `created(Json(model))` or `ok(Xml(model))` to fix the format for any serializable value. The wrapper becomes part of the return type, such as `RouteResult<Json<Item>>`. Use `Box<dyn ActionResult>` for branches with different body types.
+
+Migrate a former `Ok(bytes)` call to `ok(Raw(bytes))` to preserve the response body. For empty responses, use `no_content()` for 204, `not_modified()` for 304, or `redirect("/items")` for 302 with a validated `Location`.
+
+If the response has yet to start, the router applies the status from `status_code()` and the headers from `write_header` first. In `write_body_async(&self, request_headers: &HeaderMap, response: &mut HttpResponse)`, fill `response.body` to buffer bytes or call `response.write_async(chunk).await?` to stream each chunk.
+
+```rust
+use asp_dot_rust::controller::{ActionResult, results};
+
+fn look_up(id: u32) -> Box<dyn ActionResult> {
+    if id == 0 {
+        return results::bad_request("id must be positive").into();
+    }
+    results::ok(format!("item {id}")).into()
+}
+```
 
 ## Path parameter conflicts are caught at startup
 
@@ -121,11 +174,11 @@ specific request's method; it's used by the CORS middleware to compute
 #[controller_inject]
 impl FilesController {
     #[get("/list")]               // rate_limit = 100 (i32), zone = "files"
-    pub async fn list(&self) -> impl ActionResult { "list" }
+    pub async fn list(&self) -> impl ActionResult { results::ok("list") }
 
     #[post("/upload")]
     #[attr(rate_limit = 5u8, audit = true)]   // rate_limit replaced (now a u8), audit added, zone kept
-    pub async fn upload(&self) -> impl ActionResult { "upload" }
+    pub async fn upload(&self) -> impl ActionResult { results::ok("upload") }
 }
 ```
 

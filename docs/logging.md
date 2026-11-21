@@ -88,13 +88,25 @@ after the middleware pipeline finishes:
 [INF] 2026-10-04 12:00:00 127.0.0.1:51514 GET HTTP/1.1 /users/42 200 OK in 1.230 ms
 ```
 
-If a handler or middleware panics, the panic is caught and logged
-separately as an error, including the request's identifiers, before a
-500 response is returned:
+With `panic = "unwind"`, the server catches a handler or middleware panic
+and logs an error with the request identifiers, source location, and backtrace.
+It sends HTTP 500 if the headers are still pending or aborts the stream if
+the headers were already sent.
 
 ```txt
-[ERR] 2026-10-04 12:00:00 Request <connection_id>:<request_id>, Unhandled panic: ...
+[ERR] 2026-10-04 12:00:00 Request <connection_id>:<request_id>, Unhandled panic at <file>:<line>:<column> (thread <name>): ...
+Backtrace:
+...
 ```
+
+The server captures the backtrace at the panic site without requiring
+`RUST_BACKTRACE`. A panic outside a request goes to the previous panic hook.
+The request log omits the panic hook and standard
+future polling frames. It keeps source locations for the remaining frames
+and cuts off the backtrace at `HandleError::run` when that frame is available.
+
+With `panic = "abort"`, Rust runs the process's existing panic hook before
+terminating the process. The server leaves that hook in place.
 
 `HttpContext::request.request_id` (`Ulid`, one per request) and
 `.connection_id` (`Ulid`, shared by every request on the same keep-alive

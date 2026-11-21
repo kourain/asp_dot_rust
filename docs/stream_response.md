@@ -4,12 +4,12 @@ A response is written to the connection in one of two ways.
 
 ## Complete response
 
-Return a value from the controller (`&str`, `String`, `Vec<u8>`, ...) or set `response.body`. Middlewares can still change the status, headers and body (for example compression). When the pipeline ends, the head and the whole body are written to the stream in 64KB chunks, with `Content-Length` set.
+Return an action result such as `results::ok(body)` from the controller or set `response.body`. Middlewares can still change the status, headers and body (for example compression). When the pipeline ends, the head and the whole body are written to the stream in 64KB chunks, with `Content-Length` set.
 
 ```rust
 #[get("/")]
 pub async fn index(&mut self) -> impl ActionResult {
-    "<html><body>Hello world</body></html>"
+    results::ok("<html><body>Hello world</body></html>")
 }
 ```
 
@@ -26,7 +26,7 @@ pub async fn stream(&mut self) -> impl ActionResult {
             break; // the client is gone
         }
     }
-    ""
+    results::ok("")
 }
 ```
 
@@ -49,5 +49,6 @@ pub async fn stream(&mut self) -> impl ActionResult {
 - Bytes still in `response.body` when the pipeline ends are written after the streamed bytes. The returned `""` adds nothing.
 - `complete_async` writes the head and `response.body` and ends the stream now, instead of when the pipeline ends.
 - `CompressionMiddleware` skips a response that is already streamed.
-- A panic or a request timeout after the first write breaks the stream, so the client does not see a body that looks complete. Before the first write they give 500 and 408.
+- A request timeout returns HTTP 408 before the headers are sent and breaks the stream afterward.
+- With `panic = "unwind"`, a panic returns HTTP 500 before the headers are sent and breaks the stream afterward. With `panic = "abort"`, a panic terminates the process.
 - `http_context.abort()` breaks the stream by hand. It does nothing before the first write.

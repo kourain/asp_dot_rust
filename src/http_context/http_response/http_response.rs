@@ -97,6 +97,11 @@ impl HttpResponse {
         self.written_phase >= WritenPhase::HTTP_HEADERS
     }
 
+    /// Returns `true` once the response stream has been completed or aborted.
+    pub fn has_finished(&self) -> bool {
+        self.written_phase == WritenPhase::END
+    }
+
     /// The status that is on the wire, or `status_code` if the head is not sent yet.
     pub(crate) fn final_status(&self) -> StatusCode {
         self.committed_status.unwrap_or(self.status_code)
@@ -170,6 +175,12 @@ impl HttpResponse {
             return Ok(());
         }
         self.send_chunk(data).await
+    }
+
+    pub(crate) fn set_buffered_content_length(&mut self) {
+        if !self.has_started() && !status_forbids_body(self.status_code) {
+            self.headers.set_content_length(self.body.len());
+        }
     }
 
     /// Writes the bytes of `body` to the stream, the head is sent first with Content-Length = `body.len()` if it is not sent yet.

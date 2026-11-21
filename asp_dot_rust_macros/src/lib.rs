@@ -26,11 +26,12 @@ pub fn controller(args: TokenStream, item: TokenStream) -> TokenStream {
 /// using the controller_route attribute to define a controller and its routes
 ///
 ///```no_run
+///use asp_dot_rust::controller::results::ok;
 ///#[controller_route("")]
 ///impl HomeController {
 ///    #[get("/")]
 ///    pub async fn index(&mut self) -> impl ActionResult {
-///       "Hello, World!"
+///       ok("Hello, World!")
 ///   }
 /// }
 /// ```
@@ -51,7 +52,7 @@ pub fn controller_route(args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn route(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::http_action(item, "")
+    item
 }
 
 /// sets attributes of a route as `key = value` pairs. The value is any expression of a type that is `Send + Sync + 'static`
@@ -60,15 +61,16 @@ pub fn route(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// it sets them for all the routes of the controller, an attribute with the same key on an action overrides it.
 ///
 /// ```no_run
+/// use asp_dot_rust::controller::results::ok;
 /// #[controller_route("files")]
 /// #[attr(rate_limit = 100, zone = "files")]
 /// impl FilesController {
 ///     #[get("/list")]
-///     pub async fn list(&self) -> impl ActionResult { "list" }
+///     pub async fn list(&self) -> impl ActionResult { ok("list") }
 ///
 ///     #[post("/upload")]
 ///     #[attr(rate_limit = 5u8, audit = true)]
-///     pub async fn upload(&self) -> impl ActionResult { "upload" }
+///     pub async fn upload(&self) -> impl ActionResult { ok("upload") }
 /// }
 /// ```
 /// Read them with `http_context.request.route_attribute::<u8>("rate_limit")`.
@@ -87,7 +89,7 @@ for_each_attr_alias!(define_attr_alias_macros);
 /// ```
 #[proc_macro_attribute]
 pub fn get(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::http_action(item, "GET")
+    item
 }
 
 /// registers a function as a POST route handler <br>
@@ -98,7 +100,7 @@ pub fn get(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn post(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::http_action(item, "POST")
+    item
 }
 
 /// registers a function as a PUT route handler <br>
@@ -109,7 +111,7 @@ pub fn post(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn put(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::http_action(item, "PUT")
+    item
 }
 
 /// registers a function as a DELETE route handler <br>
@@ -120,7 +122,7 @@ pub fn put(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::http_action(item, "DELETE")
+    item
 }
 
 /// registers a function as a PATCH route handler <br>
@@ -131,7 +133,7 @@ pub fn delete(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn patch(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::http_action(item, "PATCH")
+    item
 }
 
 /// registers a function as an OPTIONS route handler <br>
@@ -142,7 +144,7 @@ pub fn patch(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn options(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::http_action(item, "OPTIONS")
+    item
 }
 
 /// registers a function as a HEAD route handler <br>
@@ -153,7 +155,17 @@ pub fn options(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
-    controller::http_action(item, "HEAD")
+    item
+}
+
+/// Registers a function as a QUERY route handler for requests with a query body.
+///
+/// ```no_run
+/// #[query("/search")]
+/// ```
+#[proc_macro_attribute]
+pub fn query(_args: TokenStream, item: TokenStream) -> TokenStream {
+    item
 }
 
 /// inject service and config <br>

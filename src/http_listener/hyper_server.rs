@@ -46,6 +46,8 @@ pub(crate) async fn hyper_server(ips: HashSet<IpAddr>, http_ports: HashSet<u16>,
         configuration_service.get::<crate::configuration::HyperConfig>().capture().unwrap_or_default().0
     };
     let app_service_provider = Arc::new(app_service_provider);
+    #[cfg(panic = "unwind")]
+    super::handle_error::HandleError::install_request_panic_hook();
     futures::future::try_join_all(listeners.into_iter().map(|listener| {
         let app_service_provider = app_service_provider.clone();
         let middleware_pipeline = middleware_pipeline.clone();
@@ -74,7 +76,7 @@ pub(crate) async fn hyper_server(ips: HashSet<IpAddr>, http_ports: HashSet<u16>,
                                 LOGGER::error(format!("Failed to accept TCP connection: {}", error));
                             }
                         }
-                            continue;
+                        continue;
                     }
                 }
             }

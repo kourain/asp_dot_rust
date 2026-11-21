@@ -8,7 +8,7 @@ use std::{
 
 use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,
-    controller::{ActionResult, get},
+    controller::{ActionResult, get, results::ok},
     dependency_injection::{Cfg, CfgOption, CfgReload, CfgRequire, DependencyInjectableService, Serv},
     hosted_service::BackGroundService,
     http_context::{HttpContext, HttpContextRef},
@@ -46,6 +46,8 @@ impl ResolutionProbe {
 }
 
 mod request_controller {
+    use asp_dot_rust::controller::results::ok;
+
     use super::*;
 
     api_controller!(RegistrationController {});
@@ -67,7 +69,7 @@ mod request_controller {
 
         #[get("/registration-check")]
         async fn get(&self) -> impl ActionResult {
-            "unexpected"
+            ok("unexpected")
         }
     }
 }
@@ -91,7 +93,7 @@ impl DependencyController {
 
     #[get("/dependency")]
     async fn get(&mut self) -> impl ActionResult {
-        "ok"
+        ok("ok")
     }
 }
 
@@ -349,7 +351,7 @@ async fn request_injection_checks_all_registrations_before_resolving_arguments()
         let task = tokio::spawn(app.run());
         let mut stream = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
-                if let Ok(stream) = TcpStream::connect(("127.0.0.1", port)).await {
+                if let Result::Ok(stream) = TcpStream::connect(("127.0.0.1", port)).await {
                     break stream;
                 }
                 assert!(!task.is_finished(), "request dependencies should be checked when the request is injected");
