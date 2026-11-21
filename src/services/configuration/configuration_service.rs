@@ -144,7 +144,7 @@ pub struct ConfigurationService {
 impl ConfigurationService {
     pub fn new() -> Self {
         let mut _self = Self::default();
-        _self.add_toml_file(r".\appsetting.toml", true);
+        _self.add_toml_file(r".\appsettings.toml", true);
         _self.insert::<crate::configuration::StartupArgsConfiguration>(|_| {});
         _self.configure_default_entry::<HyperConfig>(
             "hyper_server",

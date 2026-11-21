@@ -1,11 +1,12 @@
 use crate::{
     Application,
     configuration::{CompressionConfiguration, CompressionLevel},
-    dependency_injection::{CfgOption, CfgRequire},
+    dependency_injection::{CfgOption, CfgRequire, Serv},
     http_context::{HttpContext, HttpHeaderExt, HttpResponse},
     logging::LOGGER,
     macros::middleware,
     middleware::MiddlewareNext,
+    services::configuration::ConfigurationService,
 };
 use async_compression::{
     Level,
@@ -123,7 +124,12 @@ pub struct CompressionMiddleware {
 }
 #[middleware]
 impl CompressionMiddleware {
-    pub fn new(next: MiddlewareNext, configuration: CfgOption<CompressionConfiguration>) -> Self {
+    pub fn new(next: MiddlewareNext, configuration_service: Serv<ConfigurationService>) -> Self {
+        let configuration: CfgOption<CompressionConfiguration> = if configuration_service.contains::<CompressionConfiguration>() {
+            configuration_service.get().capture()
+        } else {
+            CfgOption(Some(Default::default()))
+        };
         Self {
             next,
             configuration: configuration.unwrap_or_default(),
