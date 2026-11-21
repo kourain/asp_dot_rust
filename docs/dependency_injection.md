@@ -12,7 +12,7 @@ controllers.
 | ------- | ---- | ------- |
 | Container | `ServiceProviderScope` | Holds every registered service and resolves them by type. Exposed as the public `service` field on `ApplicationBuilder`. |
 | Injectable service | `#[inject]` on an `impl` block | Marks a type as constructible by the container and records its dependency edges for cycle detection. |
-| Injectable controller | `#[controller_inject]` on an `impl` block | Same as above, but for controllers, which additionally may receive an `HttpContextRef`. |
+| Injectable controller | `#[controller_inject]` on an `impl` block or `#[derive(DependencyInjectableController)]` on a struct | Injects request dependencies and can provide an `HttpContextRef`. |
 | Lifetime | `ServiceType::{Singleton, Scope, Transient}` | Controls how long a resolved instance is reused. |
 
 ## Registering a service
@@ -206,9 +206,10 @@ parameters:
 use asp_dot_rust::prelude::*;
 
 #[controller_route("home")]
+#[controller_inject]
 impl HomeController {
-    fn new(ctx: HttpContextRef, ex_service: Serv<ExService>) -> Self {
-        HomeController { ctx, ex_service }
+    fn new(http_context: HttpContextRef, ex_service: Serv<ExService>) -> Self {
+        HomeController { http_context, ex_service }
     }
 
     #[get("/")]
@@ -217,6 +218,34 @@ impl HomeController {
     }
 }
 ```
+
+`#[controller("home")]` combines `#[controller_route("home")]` and
+`#[controller_inject]`. Use `#[controller]` to omit the route prefix.
+Without `fn new`, `#[controller_inject]` leaves construction to a derive
+or a manual `DependencyInjectableController` implementation.
+
+Use the derive to inject fields directly from the request scope:
+
+```rust
+use asp_dot_rust::{
+    api_controller,
+    dependency_injection::Serv,
+    macros::DependencyInjectableController,
+};
+
+api_controller!(
+    #[derive(DependencyInjectableController)]
+    HomeController {
+        ex_service: Serv<ExService>,
+    }
+);
+```
+
+`api_controller!` supplies the `http_context: HttpContextRef` field used by
+`#[controller_route]`. When deriving on a struct that intentionally omits an
+`HttpContextRef` field, add `#[di(ignore_missing_http_context)]` below the
+derive to suppress the warning. Use `#[di(default)]` on fields initialized
+with `Default::default()`.
 
 ## Startup dependency validation
 

@@ -5,7 +5,23 @@ mod utils;
 use proc_macro::TokenStream;
 
 use crate::controller::extra_attribute::{define_attr_alias_macros, for_each_attr_alias};
-use crate::dependency_injection::InjectTarget;
+
+/// Registers routes and generates constructor injection when the impl contains `fn new`.
+///
+/// Use `#[controller]` for the root or `#[controller("prefix")]` for a route prefix.
+/// Without `fn new`, the controller can derive `DependencyInjectableController`.
+#[proc_macro_attribute]
+pub fn controller(args: TokenStream, item: TokenStream) -> TokenStream {
+    let main_crate = crate::utils::find_crate::asp_dot_rust_crate_path();
+    let args = proc_macro2::TokenStream::from(args);
+    let item = proc_macro2::TokenStream::from(item);
+    quote::quote! {
+        #[#main_crate::macros::controller_route(#args)]
+        #[#main_crate::macros::controller_inject]
+        #item
+    }
+    .into()
+}
 
 /// using the controller_route attribute to define a controller and its routes
 ///
@@ -154,8 +170,8 @@ pub fn head(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
-    dependency_injection::inject(args, item, InjectTarget::Service)
+pub fn inject(_args: TokenStream, item: TokenStream) -> TokenStream {
+    dependency_injection::inject_service::expand(item)
 }
 
 /// middleware in the style of ASP.NET: the next middleware is given to the constructor <br>
@@ -181,7 +197,7 @@ pub fn inject(args: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn middleware(args: TokenStream, item: TokenStream) -> TokenStream {
-    dependency_injection::inject(args, item, InjectTarget::Middleware)
+    dependency_injection::inject_middleware::expand(args, item)
 }
 
 /// Implements `DependencyInjectableMiddleware` for a struct with one `MiddlewareNext` field.
@@ -198,6 +214,7 @@ pub fn derive_dependency_injectable_middleware(item: TokenStream) -> TokenStream
 ///
 /// ```no_run
 /// #[controller_route("")]
+/// #[controller_inject]
 /// impl Controller1 {
 ///     fn new(http_context: HttpContextRef,service2: Serv<Service2>, service3: Serv<Service3>, configuration1: CfgOption<Configuration1>) -> Self
 ///     {
@@ -207,8 +224,18 @@ pub fn derive_dependency_injectable_middleware(item: TokenStream) -> TokenStream
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn controller_inject(args: TokenStream, item: TokenStream) -> TokenStream {
-    dependency_injection::inject(args, item, InjectTarget::Controller)
+pub fn controller_inject(_args: TokenStream, item: TokenStream) -> TokenStream {
+    dependency_injection::inject_controller::expand(item)
+}
+
+/// Injects a controller's service, configuration, and `HttpContextRef` fields from the request.
+///
+/// Use `#[di(default)]` on fields initialized with `Default::default()`.
+/// Use `#[di(ignore_missing_http_context)]` on the struct to silence the warning
+/// when it has no `HttpContextRef` field.
+#[proc_macro_derive(DependencyInjectableController, attributes(di))]
+pub fn derive_dependency_injectable_controller(item: TokenStream) -> TokenStream {
+    dependency_injection::derive_controller::derive_injectable_controller(item)
 }
 
 /// Derive `DependencyInjectableService` directly from struct fields, when
