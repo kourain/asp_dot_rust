@@ -64,7 +64,7 @@ impl Middleware for RoutingMiddleware {
                         }
                         let response = &mut http_context.response;
                         response.body.clear();
-                        let written = result.write_body_async(response).await;
+                        let written = result.write_body_async(&http_context.request.headers, response).await;
                         drop(result);
                         if let Err(error) = written {
                             LOGGER::debug(format!("Action result body not fully written: {error}"));

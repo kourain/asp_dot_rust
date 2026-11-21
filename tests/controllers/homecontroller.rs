@@ -24,21 +24,21 @@ impl HomeController {
         LOGGER::info("Handling index action".to_string());
         self.http_context.response.headers.insert_str("Content-Type", "text/html");
         self.http_context.response.status_code = http::StatusCode::OK;
-        results::Ok("<html><body><h1>Hello, World!</h1></body></html>")
+        results::ok("<html><body><h1>Hello, World!</h1></body></html>")
     }
 
     #[post("/update")]
     pub fn update(&mut self) -> impl ActionResult {
-        results::Ok(self.temp.clone())
+        results::ok(self.temp.clone())
     }
 
     #[put("/replace")]
     pub async fn replace(&mut self) -> impl ActionResult {
-        results::Ok(self.temp.clone())
+        results::ok(self.temp.clone())
     }
 
     #[route(["get", "post"], "/health")]
     pub async fn health(&self) -> impl ActionResult {
-        results::Ok("ok".to_string())
+        results::ok("ok".to_string())
     }
 }

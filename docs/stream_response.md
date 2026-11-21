@@ -4,12 +4,12 @@ A response is written to the connection in one of two ways.
 
 ## Complete response
 
-Return an action result such as `results::Ok(body)` from the controller or set `response.body`. Middlewares can still change the status, headers and body (for example compression). When the pipeline ends, the head and the whole body are written to the stream in 64KB chunks, with `Content-Length` set.
+Return an action result such as `results::ok(body)` from the controller or set `response.body`. Middlewares can still change the status, headers and body (for example compression). When the pipeline ends, the head and the whole body are written to the stream in 64KB chunks, with `Content-Length` set.
 
 ```rust
 #[get("/")]
 pub async fn index(&mut self) -> impl ActionResult {
-    results::Ok("<html><body>Hello world</body></html>")
+    results::ok("<html><body>Hello world</body></html>")
 }
 ```
 
@@ -26,7 +26,7 @@ pub async fn stream(&mut self) -> impl ActionResult {
             break; // the client is gone
         }
     }
-    results::Ok("")
+    results::ok("")
 }
 ```
 

@@ -21,7 +21,7 @@ impl ParallelController {
 
     #[get("/parallel")]
     pub async fn index(&mut self) -> impl ActionResult {
-        results::Ok("ok")
+        results::ok("ok")
     }
 }
 

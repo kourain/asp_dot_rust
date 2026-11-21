@@ -13,9 +13,9 @@ pub trait ActionResult: Send + Sync {
     /// Writes headers to merge into the response.
     fn write_header(&self, _headers: &mut HeaderMap) {}
 
-    /// Sets the buffered body or streams bytes directly through the response.
+    /// Buffers or streams the body, using the request headers for content negotiation when needed.
     /// If the response has not started, the router applies the result's status and headers first.
-    async fn write_body_async(&self, _response: &mut HttpResponse) -> io::Result<()> {
+    async fn write_body_async(&self, _request_headers: &HeaderMap, _response: &mut HttpResponse) -> io::Result<()> {
         Ok(())
     }
 }

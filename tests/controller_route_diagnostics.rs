@@ -10,6 +10,8 @@ use std::{
 };
 
 mod first {
+    use asp_dot_rust::controller::results::ok;
+
     use super::*;
     api_controller!(FirstController {});
 
@@ -23,12 +25,14 @@ mod first {
 
         #[get("/{id}")]
         async fn get(&self) -> impl ActionResult {
-            "first"
+            ok("first")
         }
     }
 }
 
 mod second {
+    use asp_dot_rust::controller::results::ok;
+
     use super::*;
     api_controller!(SecondController {});
 
@@ -42,7 +46,7 @@ mod second {
 
         #[get("/{name}")]
         async fn get(&self) -> impl ActionResult {
-            "second"
+            ok("second")
         }
     }
 }

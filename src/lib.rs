@@ -15,7 +15,7 @@ pub mod macros {
 pub mod prelude {
     pub use crate::controller::{
         ActionResult, BindError, FromBody, FromForm, FromOptionQuery, FromQuery, FromRoute, controller_inject, controller_route, delete, get, head, options, patch, post, put, query, results,
-        route,
+        results::RouteResult,
     };
     #[allow(deprecated)]
     pub use crate::dependency_injection::Cfg;

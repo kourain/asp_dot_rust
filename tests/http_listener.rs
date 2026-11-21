@@ -26,23 +26,23 @@ impl ListenerController {
     }
     #[get("/listener")]
     pub async fn listener(&self) -> impl ActionResult {
-        results::Ok("listening")
+        results::ok("listening")
     }
     #[post("/upload")]
     pub async fn upload(&self) -> impl ActionResult {
-        results::Ok("uploaded")
+        results::ok("uploaded")
     }
     #[query("/search")]
     #[route(["QuErY"], "/search-alias")]
     async fn search(&self, filter: FromBody<SearchFilter>) -> impl ActionResult {
-        results::Ok(filter.into_inner().term)
+        results::ok(filter.into_inner().term)
     }
     #[get("/utf8-header")]
     pub async fn utf8_header(&mut self) -> impl ActionResult {
         // a UTF-8 value (e.g. a file name) is a valid header value (obs-text)
         self.http_context.response.headers.insert("x-file-name", http::HeaderValue::from_bytes("caf\u{e9}.txt".as_bytes()).unwrap());
         self.http_context.response.headers.insert("x-plain", http::HeaderValue::from_static("plain"));
-        results::Ok("h")
+        results::ok("h")
     }
 }
 

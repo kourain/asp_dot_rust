@@ -1,6 +1,9 @@
 //! Integration tests of the response stream: a complete response (controller result) and a streamed response (`write_async`).
 //! Every test starts a real server on a free loopback port and talks to it with raw TCP (HTTP/1.1) or the hyper client (HTTP/2).
 
+#[path = "stream_response/action_result_body.rs"]
+mod action_result_body;
+
 use std::{
     io,
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -44,6 +47,11 @@ fn large_body() -> Vec<u8> {
 
 struct BorrowedText<'a>(&'a str);
 
+#[derive(serde::Serialize)]
+pub struct Item {
+    name: &'static str,
+}
+
 #[async_trait::async_trait]
 impl ActionResult for BorrowedText<'_> {
     fn status_code(&self) -> http::StatusCode {
@@ -54,7 +62,7 @@ impl ActionResult for BorrowedText<'_> {
         headers.insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("text/plain; charset=utf-8"));
     }
 
-    async fn write_body_async(&self, response: &mut HttpResponse) -> io::Result<()> {
+    async fn write_body_async(&self, _request_headers: &http::HeaderMap, response: &mut HttpResponse) -> io::Result<()> {
         response.body.extend_from_slice(self.0.as_bytes());
         Ok(())
     }
@@ -72,7 +80,7 @@ impl ActionResult for StreamedText<'_> {
         headers.insert_str("Content-Type", "text/plain");
     }
 
-    async fn write_body_async(&self, response: &mut HttpResponse) -> io::Result<()> {
+    async fn write_body_async(&self, _request_headers: &http::HeaderMap, response: &mut HttpResponse) -> io::Result<()> {
         response.write_async(self.0.as_bytes()).await?;
         NEXT_RESULT_CHUNK.acquire().await.unwrap().forget();
         response.write_async(b"last").await
@@ -90,16 +98,43 @@ impl StreamController {
 
     // ----- complete responses -----
 
+    #[get("/complete/model")]
+    pub fn complete_model(&self) -> results::RouteResult<Item> {
+        results::created(Item { name: "A&B" }).with_location("/items/1").unwrap()
+    }
+
+    #[get("/complete/collection/{kind}")]
+    pub fn complete_collection(&self, kind: FromRoute<String>) -> Box<dyn ActionResult> {
+        match kind.as_str() {
+            "items" => results::ok(vec![Item { name: "A&B" }]).into(),
+            "vec" => results::ok(vec![0u8, 255]).into(),
+            "array" => results::ok([0u8, 255]).into(),
+            "slice" => results::ok(&[0u8, 255][..]).into(),
+            "binary" => results::ok(results::Raw([0u8, 255])).into(),
+            _ => results::not_found("unknown collection").into(),
+        }
+    }
+
+    #[get("/complete/model/{format}")]
+    pub fn complete_model_format(&self, format: FromRoute<String>) -> Box<dyn ActionResult> {
+        let model = Item { name: "A&B" };
+        match format.as_str() {
+            "json" => results::created(results::Json(model)).into(),
+            "xml" => results::created(results::Xml(model)).into(),
+            _ => results::not_found("unknown format").into(),
+        }
+    }
+
     #[get("/complete/text")]
     pub async fn complete_text(&mut self) -> impl ActionResult {
         self.http_context.response.headers.insert_str("Content-Type", "text/html");
-        results::Ok(TEXT_BODY)
+        results::ok(TEXT_BODY)
     }
 
     #[get("/complete/borrowed")]
     pub fn complete_borrowed(&self, id: FromQuery<u32>) -> Box<dyn ActionResult + '_> {
         if *id != 42 {
-            return results::BadRequest("invalid id").into();
+            return results::bad_request("invalid id").into();
         }
         BorrowedText(self.http_context.request.uri.path()).into()
     }
@@ -111,47 +146,54 @@ impl StreamController {
 
     #[get("/complete/string")]
     pub async fn complete_string(&mut self) -> impl ActionResult {
-        results::Ok("{\"ok\":true}".to_string())
+        results::ok("{\"ok\":true}".to_string())
     }
 
     #[get("/complete/large")]
     pub async fn complete_large(&mut self) -> impl ActionResult {
-        results::Ok(large_body())
+        results::ok(results::Raw(large_body()))
     }
 
     #[get("/complete/compressible")]
     pub async fn complete_compressible(&mut self) -> impl ActionResult {
-        results::Ok("a".repeat(10_000))
+        results::ok("a".repeat(10_000))
     }
 
     #[get("/complete/empty")]
     pub async fn complete_empty(&mut self) -> impl ActionResult {
-        results::Ok("")
+        results::ok("")
     }
 
     #[get("/complete/no_content")]
     pub async fn complete_no_content(&mut self) -> impl ActionResult {
-        results::NoContent
+        results::no_content()
     }
 
     #[get("/complete/status/{status}")]
     pub fn complete_status(&self, status: FromRoute<u16>) -> Box<dyn ActionResult> {
         let location = "/complete/text";
         match *status {
-            201 => results::Created("created").with_location(location).unwrap().into(),
-            301 => results::MovedPermanently::new(location).unwrap().into(),
-            302 => results::Redirect::new(location).unwrap().into(),
-            303 => results::SeeOther::new(location).unwrap().into(),
-            304 => results::NotModified.into(),
-            307 => results::TemporaryRedirect::new(location).unwrap().into(),
-            308 => results::PermanentRedirect::new(location).unwrap().into(),
-            _ => results::BadRequest("unsupported status").into(),
+            201 => {
+                let mut result = results::created("created").with_location(location).unwrap();
+                let headers = result.headers_mut();
+                headers.insert_str("Cache-Control", "no-store");
+                headers.append_str("Set-Cookie", "a=1");
+                headers.append_str("Set-Cookie", "b=2");
+                result.into()
+            }
+            301 => results::moved_permanently(location).unwrap().into(),
+            302 => results::redirect(location).unwrap().into(),
+            303 => results::see_other(location).unwrap().into(),
+            304 => results::not_modified().into(),
+            307 => results::temporary_redirect(location).unwrap().into(),
+            308 => results::permanent_redirect(location).unwrap().into(),
+            _ => results::bad_request("unsupported status").into(),
         }
     }
 
     #[route(["get", "head"], "/complete/head")]
     pub async fn complete_head(&mut self) -> impl ActionResult {
-        results::Ok(TEXT_BODY)
+        results::ok(TEXT_BODY)
     }
 
     // ----- streamed responses -----
@@ -163,7 +205,7 @@ impl StreamController {
             self.http_context.response.write_async(part).await.unwrap();
             tokio::time::sleep(Duration::from_millis(300)).await;
         }
-        results::Ok("")
+        results::ok("")
     }
 
     #[get("/stream/status")]
@@ -171,19 +213,19 @@ impl StreamController {
         self.http_context.response.status_code = http::StatusCode::CREATED;
         self.http_context.response.headers.insert_str("X-Test", "yes");
         self.http_context.response.write_bytes_async("created".to_string()).await.unwrap();
-        results::Ok("")
+        results::ok("")
     }
 
     #[get("/stream/mixed")]
     pub async fn stream_mixed(&mut self) -> impl ActionResult {
         self.http_context.response.write_async(b"prefix-").await.unwrap();
-        results::Ok("tail")
+        results::ok("tail")
     }
 
     #[get("/stream/mixed_large")]
     pub async fn stream_mixed_large(&mut self) -> impl ActionResult {
         self.http_context.response.write_async(b"prefix-").await.unwrap();
-        results::Ok("a".repeat(10_000))
+        results::ok("a".repeat(10_000))
     }
 
     #[get("/stream/headers_only")]
@@ -192,7 +234,7 @@ impl StreamController {
         self.http_context.response.start_async().await.unwrap();
         tokio::time::sleep(Duration::from_millis(300)).await;
         self.http_context.response.write_async("late").await.unwrap();
-        results::Ok("")
+        results::ok("")
     }
 
     #[get("/stream/has_started")]
@@ -201,7 +243,7 @@ impl StreamController {
         self.http_context.response.write_async("x").await.unwrap();
         let after = self.http_context.response.has_started();
         self.http_context.response.write_async(format!("{before},{after}")).await.unwrap();
-        results::Ok("")
+        results::ok("")
     }
 
     #[get("/stream/complete")]
@@ -211,7 +253,7 @@ impl StreamController {
         self.http_context.response.complete_async().await.unwrap();
         // the client must not wait for this
         tokio::time::sleep(Duration::from_millis(500)).await;
-        results::Ok("")
+        results::ok("")
     }
 
     #[get("/stream/abort")]
@@ -219,13 +261,13 @@ impl StreamController {
         self.http_context.response.write_async("partial").await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         self.http_context.abort();
-        results::Ok("")
+        results::ok("")
     }
 
     #[get("/stream/abort_before")]
     pub async fn stream_abort_before(&mut self) -> impl ActionResult {
         self.http_context.abort();
-        results::Ok("still complete")
+        results::ok("still complete")
     }
 
     #[get("/stream/disconnect")]
@@ -237,7 +279,7 @@ impl StreamController {
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        results::Ok("")
+        results::ok("")
     }
 
     #[get("/stream/backpressure")]
@@ -249,7 +291,7 @@ impl StreamController {
             }
             PRODUCED_CHUNKS.fetch_add(1, Ordering::SeqCst);
         }
-        results::Ok("")
+        results::ok("")
     }
 
     #[get("/stream/panic_before")]
@@ -257,7 +299,7 @@ impl StreamController {
         if std::hint::black_box(true) {
             panic!("test panic before any write");
         }
-        results::Ok("")
+        results::ok("")
     }
 
     #[get("/stream/panic_json")]
@@ -266,7 +308,7 @@ impl StreamController {
         if std::hint::black_box(true) {
             panic!("test panic after a header");
         }
-        results::Ok("")
+        results::ok("")
     }
 
     #[get("/stream/panic_after")]
@@ -276,7 +318,7 @@ impl StreamController {
         if std::hint::black_box(true) {
             panic!("test panic after the first write");
         }
-        results::Ok("")
+        results::ok("")
     }
 }
 
@@ -415,6 +457,75 @@ async fn gunzip(data: &[u8]) -> Vec<u8> {
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn negotiates_the_model_from_accept() {
+    let port = start_server(|_| {}).await;
+    let mut conn = Conn::connect(port).await;
+    let (head, body) = conn.get("/complete/collection/items", &[]).await;
+    assert_eq!(head.header("content-type"), Some("application/json"));
+    assert_eq!(body, br#"[{"name":"A&B"}]"#);
+    let (head, body) = conn.get("/complete/collection/items", &[("Accept", "application/xml")]).await;
+    assert_eq!(head.header("content-type"), Some("application/xml"));
+    assert_eq!(body, b"<response><value><name>A&amp;B</name></value></response>");
+    for headers in [vec![], vec![("Accept", "*/*")], vec![("Content-Type", "application/xml")]] {
+        let (head, body) = conn.get("/complete/model", &headers).await;
+        assert_eq!(head.status, 201);
+        assert_eq!(head.header("location"), Some("/items/1"));
+        assert_eq!(head.header("vary"), Some("Accept"));
+        assert_eq!(head.header("content-type"), Some("application/json"));
+        assert_eq!(body, br#"{"name":"A&B"}"#);
+    }
+    for headers in [
+        vec![("Accept", "application/json;q=0.2, application/xml;q=0.9")],
+        vec![("Accept", "application/json;q=0"), ("Accept", "application/*")],
+    ] {
+        let (head, body) = conn.get("/complete/model", &headers).await;
+        assert_eq!(head.status, 201);
+        assert_eq!(head.header("content-type"), Some("application/xml"));
+        assert_eq!(body, b"<response><value><name>A&amp;B</name></value></response>");
+    }
+    for accept in ["text/html", "application/*;q=0, */*;q=1"] {
+        let (head, body) = conn.get("/complete/model", &[("Accept", accept)]).await;
+        assert_eq!(head.status, 406);
+        assert_eq!(head.header("vary"), Some("Accept"));
+        assert!(head.header("content-type").is_none());
+        assert!(head.header("location").is_none());
+        assert!(body.is_empty());
+    }
+    for (path, content_type, expected) in [
+        ("/complete/model/json", "application/json", br#"{"name":"A&B"}"#.as_slice()),
+        ("/complete/model/xml", "application/xml", b"<response><value><name>A&amp;B</name></value></response>".as_slice()),
+    ] {
+        let (head, body) = conn.get(path, &[("Accept", "text/html")]).await;
+        assert_eq!(head.status, 201);
+        assert_eq!(head.header("content-type"), Some(content_type));
+        assert!(head.header("vary").is_none());
+        assert_eq!(body, expected);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn byte_collections_are_negotiated_until_wrapped_in_raw() {
+    let port = start_server(|_| {}).await;
+    let mut conn = Conn::connect(port).await;
+    for kind in ["vec", "array", "slice"] {
+        let path = format!("/complete/collection/{kind}");
+        let (head, body) = conn.get(&path, &[]).await;
+        assert_eq!(head.header("content-type"), Some("application/json"));
+        assert_eq!(body, b"[0,255]");
+        let (head, body) = conn.get(&path, &[("Accept", "application/xml")]).await;
+        assert_eq!(head.header("content-type"), Some("application/xml"));
+        assert_eq!(body, b"<response><value>0</value><value>255</value></response>");
+    }
+    let (head, body) = conn.get("/complete/collection/binary", &[("Accept", "application/json")]).await;
+    assert_eq!(head.header("content-type"), Some("application/octet-stream"));
+    assert_eq!(body, [0, 255]);
+    let (head, body) = conn.get("/complete/collection/missing", &[("Accept", "application/xml")]).await;
+    assert_eq!(head.status, 404);
+    assert_eq!(head.header("content-type"), Some("text/plain"));
+    assert_eq!(body, b"unknown collection");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn complete_text_response_is_written_with_content_length() {
     let port = start_server(|_| {}).await;
     let (head, body) = Conn::connect(port).await.get("/complete/text", &[]).await;
@@ -449,8 +560,8 @@ async fn routing_writes_borrowed_results_and_binding_errors() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn created_and_redirect_results_send_their_location_header() {
-    assert!(results::Redirect::new("/target\r\nX-Test: injected").is_err());
-    assert!(results::Created("created").with_location("/target\r\nX-Test: injected").is_err());
+    assert!(results::redirect("/target\r\nX-Test: injected").is_err());
+    assert!(results::created("created").with_location("/target\r\nX-Test: injected").is_err());
 
     let port = start_server(|_| {}).await;
     let mut conn = Conn::connect(port).await;
@@ -465,6 +576,11 @@ async fn created_and_redirect_results_send_their_location_header() {
         }
         let expected_body: &[u8] = if status == 201 { b"created" } else { b"" };
         assert_eq!(body, expected_body);
+        if status == 201 {
+            assert_eq!(head.header("cache-control"), Some("no-store"));
+            let cookies: Vec<_> = head.headers.iter().filter(|(key, _)| key.eq_ignore_ascii_case("set-cookie")).map(|(_, value)| value.as_str()).collect();
+            assert_eq!(cookies, ["a=1", "b=2"]);
+        }
     }
 }
 
@@ -749,11 +865,14 @@ async fn panic_while_creating_a_middleware_future_returns_500() {
     struct PanicBeforeFuture;
 
     #[async_trait::async_trait]
-    impl Middleware for PanicBeforeFuture {
+    impl asp_dot_rust::dependency_injection::DependencyInjectableMiddleware for PanicBeforeFuture {
         async fn inject(_: &ServiceProviderScope, _: MiddlewareNext) -> Self {
             Self
         }
+    }
 
+    #[async_trait::async_trait]
+    impl Middleware for PanicBeforeFuture {
         async fn inject_invoke_async(&self, _: &mut HttpContext) {
             panic!("test panic before creating a middleware future");
         }

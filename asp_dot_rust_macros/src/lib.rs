@@ -26,11 +26,12 @@ pub fn controller(args: TokenStream, item: TokenStream) -> TokenStream {
 /// using the controller_route attribute to define a controller and its routes
 ///
 ///```no_run
+///use asp_dot_rust::controller::results::ok;
 ///#[controller_route("")]
 ///impl HomeController {
 ///    #[get("/")]
 ///    pub async fn index(&mut self) -> impl ActionResult {
-///       asp_dot_rust::controller::results::Ok("Hello, World!")
+///       ok("Hello, World!")
 ///   }
 /// }
 /// ```
@@ -60,15 +61,16 @@ pub fn route(_args: TokenStream, item: TokenStream) -> TokenStream {
 /// it sets them for all the routes of the controller, an attribute with the same key on an action overrides it.
 ///
 /// ```no_run
+/// use asp_dot_rust::controller::results::ok;
 /// #[controller_route("files")]
 /// #[attr(rate_limit = 100, zone = "files")]
 /// impl FilesController {
 ///     #[get("/list")]
-///     pub async fn list(&self) -> impl ActionResult { asp_dot_rust::controller::results::Ok("list") }
+///     pub async fn list(&self) -> impl ActionResult { ok("list") }
 ///
 ///     #[post("/upload")]
 ///     #[attr(rate_limit = 5u8, audit = true)]
-///     pub async fn upload(&self) -> impl ActionResult { asp_dot_rust::controller::results::Ok("upload") }
+///     pub async fn upload(&self) -> impl ActionResult { ok("upload") }
 /// }
 /// ```
 /// Read them with `http_context.request.route_attribute::<u8>("rate_limit")`.

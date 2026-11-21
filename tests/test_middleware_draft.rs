@@ -70,12 +70,12 @@ impl HookController {
     #[get("/ok")]
     pub async fn ok(&mut self) -> impl ActionResult {
         event("handler");
-        results::Ok("ok")
+        results::ok("ok")
     }
     #[get("/blocked")]
     pub async fn blocked(&mut self) -> impl ActionResult {
         event("handler");
-        results::Ok("blocked")
+        results::ok("blocked")
     }
 }
 

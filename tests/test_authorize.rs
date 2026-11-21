@@ -31,7 +31,7 @@ impl AuthController {
             Some(user) => format!("{}:{}", user.scheme, user.name),
             None => "none".to_string(),
         };
-        results::Ok(body)
+        results::ok(body)
     }
 }
 
