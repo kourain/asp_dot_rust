@@ -8,6 +8,7 @@ pub use http_context::{HttpContext, USER_CONTEXT_KEY};
 pub use http_header::HttpHeaderExt;
 pub use http_request::{HttpRequest, RequestBody};
 pub use http_response::HttpResponse;
+pub(crate) use http_response::ResponseHead;
 use std::ops::{Deref, DerefMut};
 
 /// Access to the current request context supplied to a controller.

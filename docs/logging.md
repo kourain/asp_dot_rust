@@ -94,18 +94,19 @@ It sends HTTP 500 if the headers are still pending or aborts the stream if
 the headers were already sent.
 
 ```txt
-[ERR] 2026-10-04 12:00:00 Request <connection_id>:<request_id>, Unhandled panic at <file>:<line>:<column>: ...
+[ERR] 2026-10-04 12:00:00 Request <connection_id>:<request_id>, Unhandled panic at <file>:<line>:<column> (thread <name>): ...
 Backtrace:
 ...
 ```
 
-With `panic = "abort"`, the hook writes the same diagnostic directly to
-stderr before Rust terminates the process. A panic outside a request still
-goes to the previous panic hook, a panic inside a request is only reported
-by the server, so it is not printed twice. Both modes capture the backtrace at the panic site without
-requiring `RUST_BACKTRACE`. The request log cuts off the backtrace at
-`HandleErrorMiddleware`, which wraps the application middleware and routing.
-When that frame is unavailable, the log retains the captured backtrace.
+The server captures the backtrace at the panic site without requiring
+`RUST_BACKTRACE`. A panic outside a request goes to the previous panic hook.
+The request log omits the panic hook and standard
+future polling frames. It keeps source locations for the remaining frames
+and cuts off the backtrace at `HandleError::run` when that frame is available.
+
+With `panic = "abort"`, Rust runs the process's existing panic hook before
+terminating the process. The server leaves that hook in place.
 
 `HttpContext::request.request_id` (`Ulid`, one per request) and
 `.connection_id` (`Ulid`, shared by every request on the same keep-alive

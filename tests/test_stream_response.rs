@@ -11,10 +11,11 @@ use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,
     configuration::CompressionConfiguration,
     controller::{ActionResult, FromQuery, FromRoute, get, results, route},
-    http_context::{HttpContextRef, HttpHeaderExt, HttpResponse},
+    http_context::{HttpContext, HttpContextRef, HttpHeaderExt, HttpResponse},
     logging::{LOGGER, LogCommand, LogLevel},
     macros::{controller_inject, controller_route},
-    services::configuration::CfgEntryAllowReloadFile::NotAllowed,
+    middleware::{Middleware, MiddlewareNext},
+    services::{configuration::CfgEntryAllowReloadFile::NotAllowed, service_provider::service_provider_scope::ServiceProviderScope},
 };
 use http_body_util::{BodyExt, Empty};
 use hyper::body::Bytes;
@@ -686,27 +687,40 @@ async fn abort_before_the_first_write_does_nothing() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn panic_before_any_write_returns_500() {
+    let mut logs = LOGGER::spawn_log_receiver();
     let port = start_server(|app| {
         app.use_compression();
     })
     .await;
-    let mut logs = LOGGER::spawn_log_receiver();
     let mut conn = Conn::connect(port).await;
+    let client_addr = conn.reader.get_ref().local_addr().unwrap();
     let (head, body) = conn.get("/stream/panic_before", &[]).await;
     assert_eq!(head.status, 500);
     assert_eq!(body, b"Internal Server Error");
 
+    // The connection is still usable after a panic.
+    let (head, body) = conn.get("/complete/text", &[]).await;
+    assert_eq!((head.status, body.as_slice()), (200, TEXT_BODY.as_bytes()));
+
+    let followup_access_log = format!("{client_addr} GET HTTP/1.1 ");
+    println!("--- LOGGER BEGIN ---");
     let panic_log = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut panic_log = None;
         loop {
-            if let LogCommand::Log(log) = logs.recv().await.unwrap()
-                && log.message.contains("test panic before any write")
-            {
-                break log;
+            if let LogCommand::Log(log) = logs.recv().await.unwrap() {
+                println!("[{}] {} {}", &log.level.as_str()[..3], log.timestamp.format("%Y-%m-%d %H:%M:%S"), log.message);
+                if log.message.contains("test panic before any write") {
+                    panic_log = Some(log);
+                } else if log.message.starts_with(&followup_access_log) && log.message.split_ascii_whitespace().any(|part| part == "/complete/text") {
+                    break panic_log;
+                }
             }
         }
     })
     .await
+    .expect("follow-up request was not logged")
     .expect("request panic was not logged");
+    println!("--- LOGGER END ---");
     assert_eq!(panic_log.level, LogLevel::Error);
     let (location, backtrace) = panic_log.message.split_once(": test panic before any write\nBacktrace:\n").unwrap();
     let (request, origin) = location.split_once(", Unhandled panic at ").unwrap();
@@ -714,21 +728,44 @@ async fn panic_before_any_write_returns_500() {
     assert!(connection_id.parse::<ulid::Ulid>().is_ok(), "{connection_id}");
     assert!(request_id.parse::<ulid::Ulid>().is_ok(), "{request_id}");
     assert!(origin.starts_with(file!()), "{origin}");
+    assert!(origin.contains(" (thread "), "{origin}");
     assert!(!backtrace.trim().is_empty(), "{panic_log:?}");
     if cfg!(debug_assertions) {
-        assert!(backtrace.contains("stream_panic_before"), "{backtrace}");
+        let first_frame = backtrace.lines().next().unwrap();
+        assert!(first_frame.trim_start().starts_with("0: ") && first_frame.contains("stream_panic_before"), "{backtrace}");
         assert!(backtrace.contains("::middleware::compression::"), "{backtrace}");
-        assert!(
-            !backtrace.lines().any(|line| line.contains("::middleware::handle_error::") && line.contains("::inject_invoke_async")),
-            "{backtrace}"
-        );
+        assert!(backtrace.contains("::middleware::auto_route::"), "{backtrace}");
+        assert!(!backtrace.contains("install_request_panic_hook"), "{backtrace}");
+        assert!(!backtrace.contains("core::panicking::"), "{backtrace}");
+        assert!(!backtrace.contains("core::future::future::"), "{backtrace}");
+        assert!(!backtrace.lines().any(|line| line.contains("::handle_error::") && line.contains("::run::")), "{backtrace}");
         assert!(!backtrace.contains("hyper::"), "{backtrace}");
         assert!(!backtrace.contains("tokio::runtime"), "{backtrace}");
     }
+}
 
-    // the connection is still usable
-    let (head, body) = conn.get("/complete/text", &[]).await;
-    assert_eq!((head.status, body.as_slice()), (200, TEXT_BODY.as_bytes()));
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn panic_while_creating_a_middleware_future_returns_500() {
+    struct PanicBeforeFuture;
+
+    #[async_trait::async_trait]
+    impl Middleware for PanicBeforeFuture {
+        async fn inject(_: &ServiceProviderScope, _: MiddlewareNext) -> Self {
+            Self
+        }
+
+        async fn inject_invoke_async(&self, _: &mut HttpContext) {
+            panic!("test panic before creating a middleware future");
+        }
+    }
+
+    let port = start_server(|app| {
+        app.add_middleware::<PanicBeforeFuture>();
+    })
+    .await;
+    let (head, body) = Conn::connect(port).await.get("/complete/text", &[]).await;
+    assert_eq!(head.status, 500);
+    assert_eq!(body, b"Internal Server Error");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

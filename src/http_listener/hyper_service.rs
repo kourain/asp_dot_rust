@@ -9,13 +9,14 @@ use crate::{
         service_provider::ServiceProviderScope,
     },
 };
-use futures::future::Either;
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioIo, TokioTimer};
 use hyper_util::server::conn::auto as auto_conn;
 use std::{convert::Infallible, sync::Arc, time::Duration};
 use tokio::net::TcpStream;
 use ulid::Ulid;
+
+use super::handle_error::HandleError;
 
 /// Size of the headers: name + value + 4 bytes (`: ` and CRLF) for each of them.
 fn headers_size(headers: &http::HeaderMap) -> usize {
@@ -62,7 +63,6 @@ pub(crate) async fn hyper_service(
         let service_provider = service_provider.clone();
         let middleware_pipeline = middleware_pipeline.clone();
         let limits = limits.clone();
-        let start = std::time::Instant::now();
         let routing_service = routing_service.clone();
         let connection_id = connection_id.clone();
         let routing_info = routing_service.resolve(req.uri(), req.method());
@@ -78,38 +78,8 @@ pub(crate) async fn hyper_service(
             // The response sends its head through `head_rx` as soon as the first byte is written or the response is complete
             let (custom_resp, head_rx) = HttpResponse::new_streaming();
 
-            let mut http_context = HttpContext::new(custom_req, custom_resp, service_provider.create_scope());
-            let pipeline = async move {
-                middleware_pipeline.next_async(&mut http_context).await;
-                let duration = start.elapsed();
-                LOGGER::info(format!(
-                    "{} {} {:?} {} {} in {:.3} ms",
-                    http_context.request.client_socket_addr,
-                    http_context.request.method,
-                    http_context.request.http_version,
-                    http_context.request.uri,
-                    http_context.response.final_status(),
-                    duration.as_secs_f64() * 1000.0
-                ));
-                if let Err(e) = http_context.response.complete_async().await {
-                    LOGGER::debug(format!("Response not fully written: {}", e));
-                }
-            };
-            // Run the pipeline here: a complete response of normal size is written in a single poll and needs no task.
-            // When the pipeline waits after the head is sent (streaming, slow client), it continues in its own task while hyper reads the body.
-            let response = match futures::future::select(Box::pin(pipeline), head_rx).await {
-                Either::Left((_, head_rx)) => head_rx.await.ok(),
-                Either::Right((head, pipeline)) => {
-                    if head.is_ok() {
-                        tokio::spawn(pipeline);
-                    }
-                    head.ok()
-                }
-            };
-            Ok::<_, Infallible>(response.unwrap_or_else(|| {
-                LOGGER::error("Pipeline ended without a response");
-                HttpResponse::internal_server_error()
-            }))
+            let http_context = HttpContext::new(custom_req, custom_resp, service_provider.create_scope());
+            Ok::<_, Infallible>(HandleError::run(middleware_pipeline, http_context, head_rx).await)
         }
     });
     let mut builder = auto_conn::Builder::new(hyper_util::rt::TokioExecutor::new());

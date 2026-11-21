@@ -3,7 +3,7 @@ use std::{future::Future, pin::Pin, sync::Arc};
 use crate::{
     Application,
     logging::LOGGER,
-    middleware::{Middleware, MiddlewareNext, auto_route::RoutingMiddleware, handle_error::HandleErrorMiddleware},
+    middleware::{Middleware, MiddlewareNext, auto_route::RoutingMiddleware},
     services::service_provider::service_provider_scope::ServiceProviderScope,
 };
 
@@ -30,7 +30,7 @@ impl ApplicationMiddlewaresBuilder {
         for factory in self.builder.into_iter().rev() {
             root = factory(service_scope, root).await;
         }
-        MiddlewareNext::new(HandleErrorMiddleware::inject(service_scope, root).await)
+        root
     }
 }
 
