@@ -100,7 +100,7 @@ impl StreamController {
 
     #[get("/complete/model")]
     pub fn complete_model(&self) -> results::RouteResult<Item> {
-        results::created(Item { name: "A&B" }).with_location("/items/1").unwrap()
+        results::Created(Item { name: "A&B" }).with_location("/items/1").unwrap()
     }
 
     #[get("/complete/collection/{kind}")]
@@ -128,13 +128,13 @@ impl StreamController {
     #[get("/complete/text")]
     pub async fn complete_text(&mut self) -> impl ActionResult {
         self.http_context.response.headers.insert_str("Content-Type", "text/html");
-        results::ok(TEXT_BODY)
+        results::Ok(TEXT_BODY)
     }
 
     #[get("/complete/borrowed")]
     pub fn complete_borrowed(&self, id: FromQuery<u32>) -> Box<dyn ActionResult + '_> {
         if *id != 42 {
-            return results::bad_request("invalid id").into();
+            return results::BadRequest("invalid id").into();
         }
         BorrowedText(self.http_context.request.uri.path()).into()
     }
@@ -166,7 +166,7 @@ impl StreamController {
 
     #[get("/complete/no_content")]
     pub async fn complete_no_content(&mut self) -> impl ActionResult {
-        results::no_content()
+        results::NoContent()
     }
 
     #[get("/complete/status/{status}")]
@@ -182,7 +182,7 @@ impl StreamController {
                 result.into()
             }
             301 => results::moved_permanently(location).unwrap().into(),
-            302 => results::redirect(location).unwrap().into(),
+            302 => results::Redirect(location).unwrap().into(),
             303 => results::see_other(location).unwrap().into(),
             304 => results::not_modified().into(),
             307 => results::temporary_redirect(location).unwrap().into(),

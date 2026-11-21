@@ -7,7 +7,7 @@ use http::{
     header::{InvalidHeaderValue, LOCATION},
 };
 
-use super::{ActionResult, negotiation};
+use super::{ActionResult, content_negotiation};
 use crate::http_context::HttpResponse;
 
 mod body;
@@ -93,50 +93,52 @@ impl<T: Send + Sync> ActionResult for RouteResult<T> {
 }
 
 macro_rules! body_results {
-    ($($name:ident => $status:ident),+ $(,)?) => {
+    ($($name:ident as $alias:ident => $status:ident),+ $(,)?) => {
         $(
             #[doc = concat!("Buffered response with status `", stringify!($status), "`.")]
             pub fn $name<T: ResponseBody>(body: T) -> RouteResult<T> {
                 RouteResult::new(StatusCode::$status, body)
             }
+            pub use self::$name as $alias;
         )+
     };
 }
 
 body_results! {
-    ok => OK,
-    created => CREATED,
-    accepted => ACCEPTED,
-    bad_request => BAD_REQUEST,
-    unauthorized => UNAUTHORIZED,
-    forbidden => FORBIDDEN,
-    not_found => NOT_FOUND,
-    conflict => CONFLICT,
-    gone => GONE,
-    unsupported_media_type => UNSUPPORTED_MEDIA_TYPE,
-    unprocessable_entity => UNPROCESSABLE_ENTITY,
-    too_many_requests => TOO_MANY_REQUESTS,
-    internal_server_error => INTERNAL_SERVER_ERROR,
-    service_unavailable => SERVICE_UNAVAILABLE,
+    ok as Ok => OK,
+    created as Created => CREATED,
+    accepted as Accepted => ACCEPTED,
+    bad_request as BadRequest => BAD_REQUEST,
+    unauthorized as Unauthorized => UNAUTHORIZED,
+    forbidden as Forbidden => FORBIDDEN,
+    not_found as NotFound => NOT_FOUND,
+    conflict as Conflict => CONFLICT,
+    gone as Gone => GONE,
+    unsupported_media_type as UnsupportedMediaType => UNSUPPORTED_MEDIA_TYPE,
+    unprocessable_entity as UnprocessableEntity => UNPROCESSABLE_ENTITY,
+    too_many_requests as TooManyRequests => TOO_MANY_REQUESTS,
+    internal_server_error as InternalServerError => INTERNAL_SERVER_ERROR,
+    service_unavailable as ServiceUnavailable => SERVICE_UNAVAILABLE,
 }
 
 macro_rules! redirects {
-    ($($name:ident => $status:ident),+ $(,)?) => {
+    ($($name:ident as $alias:ident => $status:ident),+ $(,)?) => {
         $(
             #[doc = concat!("Empty redirect with status `", stringify!($status), "` and a Location header.")]
             pub fn $name(location: impl AsRef<str>) -> Result<RouteResult<()>, InvalidHeaderValue> {
                 RouteResult::empty(StatusCode::$status).with_location(location)
             }
+            pub use self::$name as $alias;
         )+
     };
 }
 
 redirects! {
-    moved_permanently => MOVED_PERMANENTLY,
-    redirect => FOUND,
-    see_other => SEE_OTHER,
-    temporary_redirect => TEMPORARY_REDIRECT,
-    permanent_redirect => PERMANENT_REDIRECT,
+    moved_permanently as MovedPermanently => MOVED_PERMANENTLY,
+    redirect as Redirect => FOUND,
+    see_other as SeeOther => SEE_OTHER,
+    temporary_redirect as TemporaryRedirect => TEMPORARY_REDIRECT,
+    permanent_redirect as PermanentRedirect => PERMANENT_REDIRECT,
 }
 
 /// HTTP 204 No Content.
@@ -148,3 +150,5 @@ pub const fn no_content() -> RouteResult<()> {
 pub const fn not_modified() -> RouteResult<()> {
     RouteResult::empty(StatusCode::NOT_MODIFIED)
 }
+
+pub use self::{no_content as NoContent, not_modified as NotModified};

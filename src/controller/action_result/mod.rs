@@ -1,5 +1,5 @@
 mod r#trait;
-mod negotiation;
+mod content_negotiation;
 pub mod results;
 
 pub use r#trait::ActionResult;

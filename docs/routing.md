@@ -81,6 +81,8 @@ Generated OpenAPI 3.2 documents describe QUERY with the `query` field on the Pat
 
 The status functions in `asp_dot_rust::controller::results` return `RouteResult<T>`. For example, `ok(model)` returns 200 and `created(model).with_location("/items/42")` returns 201 with a validated `Location` header. Branches with the same payload type can return different statuses directly.
 
+Each status function also has a PascalCase alias. For example, `results::BadRequest("invalid id")` and `results::bad_request("invalid id")` call the same function.
+
 Use `result.headers_mut().insert(...)` to set a response header. For headers with multiple values, such as `Set-Cookie`, call `result.headers_mut().append(...)` for each value.
 
 ```rust

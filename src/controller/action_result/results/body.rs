@@ -11,7 +11,7 @@ use serde::Serialize;
 
 use super::{
     HttpResponse,
-    negotiation::{self, Format},
+    content_negotiation::{self, Format},
 };
 
 pub trait ResponseBody {
@@ -32,7 +32,7 @@ impl<T: Serialize> ResponseBody for T {
         // Compare concrete types without imposing 'static on borrowed strings or DTOs.
         let ty = typeid::of::<T>();
         if ![TypeId::of::<String>(), TypeId::of::<&str>(), TypeId::of::<&String>(), TypeId::of::<&&str>()].contains(&ty) {
-            return negotiation::write(self, headers, response);
+            return content_negotiation::write(self, headers, response);
         }
         if !response.has_started() {
             response.headers.entry(CONTENT_TYPE).or_insert(HeaderValue::from_static("text/plain"));
@@ -86,12 +86,12 @@ impl<const N: usize> ResponseBody for Raw<&[u8; N]> {
 
 impl<T: Serialize> ResponseBody for Json<T> {
     fn write(&self, _: &HeaderMap, response: &mut HttpResponse) -> io::Result<()> {
-        negotiation::write_format(Format::Json, &self.0, response)
+        content_negotiation::write_format(Format::Json, &self.0, response)
     }
 }
 
 impl<T: Serialize> ResponseBody for Xml<T> {
     fn write(&self, _: &HeaderMap, response: &mut HttpResponse) -> io::Result<()> {
-        negotiation::write_format(Format::Xml, &self.0, response)
+        content_negotiation::write_format(Format::Xml, &self.0, response)
     }
 }
