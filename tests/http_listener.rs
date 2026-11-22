@@ -207,6 +207,7 @@ async fn query_routes_bind_body_and_are_discoverable() {
     start(
         port,
         |builder| {
+            builder.add_swagger_gen();
             builder.configuration.insert(|_: &mut CorsConfiguration| {});
         },
         |app| {

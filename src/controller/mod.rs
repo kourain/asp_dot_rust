@@ -7,3 +7,8 @@ pub use crate::macros::{attr, controller_inject, controller_route, delete, get, 
 pub use action_params::{BindError, FromBody, FromForm, FromOptionQuery, FromParamValue, FromQuery, FromRoute};
 pub use action_result::{ActionResult, results};
 pub use routing::*;
+
+#[async_trait::async_trait]
+pub trait Controller: Send + 'static {
+    async fn routing(&mut self, method_name: &'static str) -> Result<Box<dyn ActionResult + '_>, RoutingError>;
+}

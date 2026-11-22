@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 
-use crate::controller::{ActionResult, BindError};
+use crate::controller::BindError;
 use crate::services::routing::RouteAttributeMap;
 
-#[async_trait::async_trait]
-pub trait Routing: Send + 'static {
-    async fn routing(&mut self, method_name: &'static str) -> Result<Box<dyn ActionResult + '_>, RoutingError>;
-}
+#[deprecated(note = "Routing will be removed, use Controller instead")]
+pub use crate::controller::Controller as Routing;
 
 /// A failure to dispatch an action or bind its arguments.
 #[derive(Debug)]
