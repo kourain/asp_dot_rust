@@ -54,7 +54,9 @@ impl Application {
         }
         let configuration = service_provider.get_service::<ConfigurationService>().await;
         configuration.load_all_async().await;
-        service_provider.store_instance(Arc::new(routing_builder.build()));
+        let (routing_sv, open_api_sv) = routing_builder.build();
+        service_provider.store_instance(Arc::new(routing_sv));
+        service_provider.store_instace_if_exist(Arc::new(open_api_sv));
         service_provider.validate_startup_dependencies(&configuration);
         drop(configuration);
 

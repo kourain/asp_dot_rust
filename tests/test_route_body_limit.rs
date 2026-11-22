@@ -56,6 +56,12 @@ impl LimitController {
         results::ok("default")
     }
 
+    #[post("/non_usize_limit")]
+    #[attr(max_body_size = 1024i32)]
+    pub async fn non_usize_limit(&self) -> impl ActionResult {
+        results::ok("default")
+    }
+
     #[route(["post", "put"], "/multi")]
     #[max_body_size(10)]
     pub async fn multi(&self) -> impl ActionResult {
@@ -182,6 +188,13 @@ async fn route_without_limit_uses_the_default_limit() {
     let port = start_server().await;
     assert_eq!(post_sized(port, "/default", DEFAULT_LIMIT).await, (200, "default".into()));
     assert_eq!(post_sized(port, "/default", DEFAULT_LIMIT + 1).await.0, 413);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn non_usize_route_limit_uses_the_configured_default() {
+    let port = start_server().await;
+    assert_eq!(post_sized(port, "/non_usize_limit", DEFAULT_LIMIT).await, (200, "default".into()));
+    assert_eq!(post_sized(port, "/non_usize_limit", DEFAULT_LIMIT + 1).await.0, 413);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

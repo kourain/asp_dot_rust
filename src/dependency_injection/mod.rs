@@ -13,6 +13,12 @@ pub trait DependencyInjectableService: Send + Sync + 'static {
     async fn inject(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
     where
         Self: Sized;
+    fn forgot_register_message() -> String
+    where
+        Self: Sized,
+    {
+        format!("Service {} not registered yet, did you forget?", std::any::type_name::<Self>())
+    }
 }
 
 #[async_trait::async_trait]

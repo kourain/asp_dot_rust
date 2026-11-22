@@ -1,8 +1,8 @@
 use std::{any::Any, collections::HashMap, pin::Pin};
 
-use crate::{controller::Routing, http_context::HttpContextRef};
+use crate::{controller::Controller, http_context::HttpContextRef};
 
-pub(crate) type ControllerActivator = fn(HttpContextRef) -> Pin<Box<dyn Future<Output = Box<dyn Routing>> + Send>>;
+pub(crate) type ControllerActivator = fn(HttpContextRef) -> Pin<Box<dyn Future<Output = Box<dyn Controller>> + Send>>;
 /// Key of the attribute that is the request body limit of a route, in bytes (`#[max_body_size(..)]` sets it). Its value is a `usize`.
 pub const MAX_BODY_SIZE_ATTRIBUTE: &str = "max_body_size";
 pub type RouteAttributeMap = HashMap<&'static str, Box<dyn Any + Send + Sync + 'static>>;

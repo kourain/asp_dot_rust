@@ -247,7 +247,17 @@ async fn middleware_constructor_dependencies_are_validated() {
     let mut app = ApplicationBuilder::new("middleware_constructor_dependency").build();
     app.add_middleware::<RequestMiddleware>();
     let error = startup_error(app).await;
-    assert!(error.contains("Service startup_dependency_validation::ConstructorService not found in scope"), "{error}");
+    let expected = format!("Service {} not registered", type_name::<ConstructorService>());
+    assert!(error.contains(&expected), "{error}");
+}
+
+#[tokio::test]
+async fn swagger_without_registration_names_the_required_builder_call() {
+    let mut app = ApplicationBuilder::new("unregistered_swagger").build();
+    app.use_swagger();
+    let error = startup_error(app).await;
+    assert!(error.contains("OpenApiService"), "{error}");
+    assert!(error.contains("builder.add_swagger_gen()"), "{error}");
 }
 
 #[tokio::test]
@@ -291,7 +301,8 @@ async fn hosted_service_is_validated_before_it_is_spawned() {
     let mut builder = ApplicationBuilder::new("hosted_dependency");
     builder.add_hosted_service::<HostedWorker>();
     let error = startup_error(builder.build()).await;
-    assert!(error.contains("Service startup_dependency_validation::MissingService not found in scope"), "{error}");
+    let expected = format!("Service {} not registered", type_name::<MissingService>());
+    assert!(error.contains(&expected), "{error}");
 }
 
 #[tokio::test]

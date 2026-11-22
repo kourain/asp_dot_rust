@@ -1,9 +1,9 @@
 use crate::{
-    controller::{ActionRoute, Routing},
+    controller::{ActionRoute, Controller},
     dependency_injection::DependencyInjectableController,
     services::{
-        openapi::RegisteredOperation,
-        routing::{ControllerActivator, MAX_BODY_SIZE_ATTRIBUTE, Route, RouteAttribute, RouteAttributeMap, RoutingService},
+        openapi::{OpenApiService, RegisteredOperation},
+        routing::{ControllerActivator, Route, RouteAttribute, RouteAttributeMap, RoutingService},
     },
 };
 use matchit::Router;
@@ -26,7 +26,7 @@ impl RoutingServiceBuilder {
     #[track_caller]
     pub fn register_controller<T>(&mut self, root_route: &'static str, action_routes: Vec<ActionRoute>)
     where
-        T: DependencyInjectableController + Routing,
+        T: DependencyInjectableController + Controller,
     {
         if !self._registered_controllers.insert(TypeId::of::<T>()) {
             panic!("Registered Controller {} twice", std::any::type_name::<T>());
@@ -59,19 +59,10 @@ impl RoutingServiceBuilder {
     #[track_caller]
     pub fn add_controller_route<T>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str, route_attr_map: RouteAttributeMap)
     where
-        T: DependencyInjectableController + Routing,
+        T: DependencyInjectableController + Controller,
     {
-        // a limit that is not a usize would be ignored when a request comes in, refuse it at startup
-        if route_attr_map.get(MAX_BODY_SIZE_ATTRIBUTE).is_some_and(|value| !value.is::<usize>()) {
-            panic!(
-                "Attribute `{}` of {}::{} must be a usize (the limit in bytes)",
-                MAX_BODY_SIZE_ATTRIBUTE,
-                std::any::type_name::<T>(),
-                action_name
-            );
-        }
-        let controller_name = std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>());
-        let activator_async: ControllerActivator = |http_context| Box::pin(async move { Box::new(T::inject(http_context).await) as Box<dyn Routing> });
+        let controller_name: &'static str = std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>());
+        let activator_async: ControllerActivator = |http_context| Box::pin(async move { Box::new(T::inject(http_context).await) as Box<dyn Controller> });
         let route_info = Arc::new(Route {
             controller_name,
             controller_type_name: std::any::type_name::<T>(),
@@ -106,10 +97,7 @@ impl RoutingServiceBuilder {
             panic!("Failed to insert route {route} at {}::{action_name}: {error}", std::any::type_name::<T>());
         }
     }
-    pub fn build(self) -> RoutingService {
-        RoutingService {
-            _router: self._router,
-            _operations: self._operations,
-        }
+    pub fn build(self) -> (RoutingService, OpenApiService) {
+        (RoutingService { _router: self._router }, OpenApiService { _operations: self._operations })
     }
 }

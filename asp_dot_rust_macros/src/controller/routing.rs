@@ -168,7 +168,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
     let expanded = quote! {
         #input_impl_tokens
         #[async_trait::async_trait]
-        impl #main_crate_path::controller::Routing for #self_ty {
+        impl #main_crate_path::controller::Controller for #self_ty {
             async fn routing(&mut self, method_name: &'static str) -> ::core::result::Result<
                 ::std::boxed::Box<dyn #main_crate_path::controller::ActionResult + '_>,
                 #main_crate_path::controller::RoutingError,
