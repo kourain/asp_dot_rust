@@ -43,6 +43,10 @@ fn list_lit_str_from_expr(expr: &Expr) -> Option<Vec<LitStr>> {
     }
 }
 
+fn unexpected_route_argument(values: &Punctuated<Expr, Token![,]>) -> Option<String> {
+    values.iter().nth(2).map(|_| "#[route(...)] accepts exactly two arguments: HTTP methods and path".to_string())
+}
+
 struct RouteRegistration {
     self_ty: syn::Type,
     root_route: LitStr,
@@ -133,6 +137,10 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                     attr,
                     format!("Invalid #[route(...)] on `{}`", method_name)
                 );
+
+                if let Some(error) = unexpected_route_argument(&values) {
+                    return create_compiler_error(attr, error);
+                }
 
                 let mut route_iter = values.iter();
                 let method_expr = some_or_error!(route_iter.next(), attr, "Missing HTTP method or path in #[route]");
