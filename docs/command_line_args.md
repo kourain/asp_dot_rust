@@ -1,17 +1,17 @@
-# Command-Line Arguments (`StartupAppConfiguration`)
+# Command-line arguments
 
-ASP.RS automatically parses `std::env::args()` on every application start,
-similar in spirit to ASP.NET Core's command-line configuration provider. The
-raw process arguments are turned into a flat `key -> value` map
-(`StartupAppConfiguration`) that is:
+`ApplicationBuilder::new()` registers an empty `StartupArgsConfiguration`. To read the process arguments, call `with_args()` on that configuration before `build()`. It skips the executable name and parses the remaining arguments. You can read custom flags immediately. The builder applies the IP and port flags during `build()`.
 
-1. Used to populate a few framework-recognized settings directly on the
-   `ApplicationBuilder` (`ip`, `http-port`, `https-port`).
-2. Registered in `ConfigurationService` so any application-defined flag can
-   be read back later, including from an injectable service.
+```rust
+use asp_dot_rust::{ApplicationBuilder, configuration::StartupArgsConfiguration};
 
-This happens automatically — `ApplicationBuilder::new()` calls the internal
-`with_args()` step for you. There is no public method to opt out of it.
+let mut builder = ApplicationBuilder::new("MyApp");
+builder.configuration.update::<StartupArgsConfiguration>(|cli| cli.with_args());
+
+let cli = builder.configuration.get::<StartupArgsConfiguration>().capture().unwrap();
+let worker_threads = cli.get_parsed::<u32>("worker-threads").unwrap_or(4);
+let app = builder.build();
+```
 
 ## Recognized token forms
 
@@ -37,82 +37,52 @@ Additional parsing rules, verified against `tests/command_line_configuration.rs`
 
 ## Framework-recognized flags
 
-These flags are consumed by `ApplicationBuilder::with_args()` and applied
-directly to the builder, in addition to being stored in
-`StartupAppConfiguration` like any other flag:
+During `build()` the builder reads these keys from the registered configuration.
 
-| Flag | Applied via | Notes | Version require |
-| ---- | ----------- | ----- | --------------- |
-| `--ip <addr>` | `ApplicationBuilder::with_ip` | Must parse as `std::net::IpAddr`; an invalid value panics (`Invalid IP address format`). | 0.2.0 |
-| `--http-port <port>` | `ApplicationBuilder::with_http_port` | Parsed as `u16` via `get_parsed`; silently ignored if missing or not a valid `u16`. | 0.2.0 |
-| `--https-port <port>` | `ApplicationBuilder::with_https_port` | Same parsing as `--http-port`. HTTPS support itself is not implemented yet (see [Known limitations](#known-limitations-what-not-work)). | 0.2.0 |
+| Flag | Applied via | Behavior |
+| ---- | ----------- | -------- |
+| `--ip <addr>` | `with_ip` | Parses a `std::net::IpAddr`. An invalid address panics during `build()`. |
+| `--http-port <port>` | `with_http_port` | Adds the port if the value parses as `u16`. |
+| `--https-port <port>` | `with_https_port` | Records the port and logs a warning. The server currently opens HTTP listeners only. Using the same port for HTTP and HTTPS panics. |
 
 Any other flag (e.g. `--verbose`, `--env=dev`, `--worker-threads 4`) is
 parsed and stored, but **not** interpreted by the framework — reading it is
 entirely up to your own code.
 
-## Reading custom flags in application code
-
-Once `ApplicationBuilder::new()` has run, `StartupAppConfiguration` is
-already registered in `ConfigurationService`, so it can be read the same way
-as any other configuration object — either directly off the builder, or
-later through dependency injection.
+## Reading flags in an injectable service
 
 ```rust
-use asp_dot_rust::{ApplicationBuilder, configuration::StartupAppConfiguration};
-
-let mut builder = ApplicationBuilder::new("MyApp");
-
-let cli = builder.configuration.get::<StartupAppConfiguration>().unwrap();
-
-if cli.contains("verbose") {
-    // --verbose was passed
-}
-
-let worker_threads: u32 = cli.get_parsed("worker-threads").unwrap_or(4);
-```
-
-From an injectable service, using the same `Option<Arc<T>>` pattern
-documented in `docs/dependency_injection.md`:
-
-```rust
-use std::sync::Arc;
-use asp_dot_rust::macros::inject_require;
-use asp_dot_rust::configuration::StartupAppConfiguration;
+use asp_dot_rust::{
+    configuration::StartupArgsConfiguration,
+    dependency_injection::CfgRequire,
+    macros::inject,
+};
 
 pub struct WorkerService {
     thread_count: u32,
 }
 
-#[inject_require]
+#[inject]
 impl WorkerService {
-    pub fn new(cli: Option<Arc<StartupAppConfiguration>>) -> Self {
-        let thread_count = cli
-            .and_then(|c| c.get_parsed::<u32>("worker-threads"))
-            .unwrap_or(4);
-        Self { thread_count }
+    pub fn new(cli: CfgRequire<StartupArgsConfiguration>) -> Self {
+        Self { thread_count: cli.get_parsed("worker-threads").unwrap_or(4) }
     }
 }
 ```
 
 ## Parsing an arbitrary argument list directly
 
-`StartupAppConfiguration::parse` is public so tests (and other custom entry
-points) can parse a source other than `std::env::args()`:
+`parse()` replaces the values in the existing configuration and returns `&mut Self`. Keep the configuration in a variable to use it after parsing.
 
 ```rust
-use asp_dot_rust::configuration::StartupAppConfiguration;
+use asp_dot_rust::configuration::StartupArgsConfiguration;
 
-let cli = StartupAppConfiguration::default()
-    .parse(["--http-port", "8080", "--verbose"].iter().map(|s| s.to_string()));
+let mut cli = StartupArgsConfiguration::default();
+cli.parse(["--http-port", "8080", "--verbose"]);
 
 assert_eq!(cli.get("http-port"), Some("8080"));
 assert_eq!(cli.get("verbose"), Some("true"));
 ```
-
-In normal application code you should not need this — it exists mainly for
-testing and for callers who want to parse a custom source instead of the
-real process arguments.
 
 ## Known limitations (what not work)
 
@@ -123,16 +93,16 @@ real process arguments.
 - **No validation of unknown flags.** Any `--something` not recognized by
   the framework is stored but never flagged as invalid or unused — typos in
   flag names fail silently.
-- **Invalid `--ip` panics immediately** (`expect("Invalid IP address format")`)
-  rather than falling back to a default or returning an error.
+- An invalid `ip` value panics when `build()` applies the configuration.
 
 ## API summary
 
 | Method | On | Description |
 | ------ | -- | ----------- |
-| `parse(args)` | `StartupAppConfiguration` | Parses an arbitrary iterator of string-like tokens into a fresh `StartupAppConfiguration`. Mainly for tests/custom entry points — production code gets this for free via `ApplicationBuilder::new()`. |
-| `get(key)` | `StartupAppConfiguration` | Returns the raw `&str` value for `key`, or `None` if not present. |
-| `get_parsed::<T>(key)` | `StartupAppConfiguration` | Returns the value for `key` parsed as `T: FromStr`, or `None` if missing or unparsable. |
-| `contains(key)` | `StartupAppConfiguration` | Returns whether `key` was present on the command line. |
-| `len()` | `StartupAppConfiguration` | Number of distinct keys parsed. |
-| `is_empty()` | `StartupAppConfiguration` | Whether no flags were parsed at all. |
+| `with_args()` | `StartupArgsConfiguration` | Replace the current values with parsed process arguments. |
+| `parse(args)` | `StartupArgsConfiguration` | Replace the current values with those from an iterator and return a mutable reference to the configuration. |
+| `get(key)` | `StartupArgsConfiguration` | Returns the raw `&str` value for `key`, or `None` if not present. |
+| `get_parsed::<T>(key)` | `StartupArgsConfiguration` | Returns the value for `key` parsed as `T: FromStr`, or `None` if missing or unparsable. |
+| `contains(key)` | `StartupArgsConfiguration` | Returns whether `key` was present on the command line. |
+| `len()` | `StartupArgsConfiguration` | Number of distinct keys parsed. |
+| `is_empty()` | `StartupArgsConfiguration` | Whether no flags were parsed at all. |

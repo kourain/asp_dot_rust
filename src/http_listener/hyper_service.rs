@@ -1,6 +1,6 @@
 use crate::{
     configuration::HyperConfig,
-    dependency_injection::Serv,
+    dependency_injection::{CfgRequire, Serv},
     http_context::{HttpContext, HttpRequest, HttpResponse},
     logging::LOGGER,
     middleware::MiddlewareNext,
@@ -53,7 +53,7 @@ pub(crate) async fn hyper_service(
     service_provider: Arc<ServiceProviderScope>,
     middleware_pipeline: MiddlewareNext,
     routing_service: Serv<RoutingService>,
-    hypercfg: Arc<HyperConfig>,
+    hypercfg: CfgRequire<HyperConfig>,
 ) -> std::io::Result<()> {
     let client_socket_addr = stream.peer_addr().unwrap();
     let local_listen_socket_addr = stream.local_addr().unwrap();

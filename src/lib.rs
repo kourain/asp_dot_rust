@@ -27,10 +27,18 @@ pub mod prelude {
 pub mod utils;
 pub mod third_party {
     pub use async_trait;
+    pub use chrono;
+    pub use http;
+    pub use http_body;
+    pub use http_body_util;
     pub use inventory;
+    pub use jsonwebtoken;
+    pub use matchit;
+    pub use quick_xml;
     pub use regex;
     pub use serde;
     pub use serde_json;
+    pub use serde_urlencoded;
     pub use tokio;
     pub use toml;
     pub use urlencoding;
@@ -40,3 +48,4 @@ pub mod third_party {
 pub use application::{Application, ApplicationBuilder};
 
 pub type MutexAsync<T> = tokio::sync::Mutex<T>;
+pub type ArcAny = std::sync::Arc<dyn std::any::Any + Send + Sync + 'static>;

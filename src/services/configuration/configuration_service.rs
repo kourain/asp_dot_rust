@@ -1,6 +1,5 @@
 #![allow(deprecated)]
 use std::{
-    any::Any,
     collections::HashSet,
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -13,9 +12,8 @@ use regex::Regex;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 
-use crate::{configuration::HyperConfig, dependency_injection::CfgReload, logging::LOGGER, utils::path::get_executable_folder};
+use crate::{ArcAny, configuration::HyperConfig, dependency_injection::CfgReload, logging::LOGGER, utils::path::get_executable_folder};
 
-pub type ArcAny = Arc<dyn Any + Send + Sync + 'static>;
 /// Value of an entry: `None` until the entry is loaded. Every `CfgReload` of the entry shares it,
 /// so a reload is seen by all of them.
 pub type EntryValue<T> = Arc<ArcSwapOption<T>>;
@@ -144,7 +142,7 @@ pub struct ConfigurationService {
 impl ConfigurationService {
     pub fn new() -> Self {
         let mut _self = Self::default();
-        _self.add_toml_file(r".\appsetting.toml", true);
+        _self.add_toml_file(r".\appsettings.toml", true);
         _self.insert::<crate::configuration::StartupArgsConfiguration>(|_| {});
         _self.configure_default_entry::<HyperConfig>(
             "hyper_server",

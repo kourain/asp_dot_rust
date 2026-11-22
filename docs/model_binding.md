@@ -9,8 +9,8 @@ Action methods may take binder parameters. The `#[controller_route]` macro resol
 | `FromRoute<T>` | `path_params` | HTTP 404 |
 | `FromQuery<T>` | `query_params` | HTTP 422 |
 | `FromOptionQuery<T>` | `query_params` | `None` (no error) |
-| `FromBody<T>` | request body | HTTP 422 (or 400 if body cannot be read) |
-| `FromForm<T>` | form body | HTTP 422 (or 400 if body cannot be read) |
+| `FromBody<T>` | request body | HTTP 422 for invalid data, 400 for read failures. See the `QUERY` exceptions below. |
+| `FromForm<T>` | form body | Same as `FromBody<T>`. |
 
 Supported scalar `T` for route/query: `String`, integers, floats, `bool`, `char` (`FromParamValue`).
 
@@ -20,17 +20,18 @@ A route may have at most one of `FromBody` or `FromForm`.
 
 | `T` | Behaviour |
 | --- | --- |
-| `String` | Body is read as UTF-8 text (no serde). |
-| other (`Deserialize`) | JSON or XML by `Content-Type` (`FromBody`); form-urlencoded (`FromForm`). |
+| `String` written as a single identifier | Reads raw UTF-8 text after checking the media type. |
+| Other type spelling or a deserializable model | `FromBody` uses JSON or XML. `FromForm` uses form-urlencoded deserialization. |
 
-`FromBody` media types: `application/json`, `text/json`, `application/xml`, `text/xml` (missing header defaults to JSON). Mismatch → 422.
+For `FromBody<T>`, the serde path accepts `application/json`, `text/json`, `application/xml` and `text/xml`. A missing header defaults to JSON. The raw `FromBody<String>` path additionally accepts `text/plain` and assumes plain text when the header is absent. The macro selects raw text by the spelling `String`. A type alias or `std::string::String` selects serde for either binder.
 
-`FromForm` media type: `application/x-www-form-urlencoded`. Mismatch → 422.
+`FromForm<T>` accepts `application/x-www-form-urlencoded` and also attempts binding when the header is missing or the media type is empty. Both binders ignore media type parameters and compare media types case-insensitively.
 
 ## Example
 
 ```rust
 use asp_dot_rust::prelude::*;
+use asp_dot_rust::third_party::async_trait;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -38,6 +39,8 @@ struct CreateUser {
     name: String,
     age: u32,
 }
+
+asp_dot_rust::api_controller!(UsersController {});
 
 #[controller_route("users")]
 #[controller_inject]
@@ -52,7 +55,7 @@ impl UsersController {
         id: FromRoute<u32>,
         verbose: FromOptionQuery<bool>,
     ) -> impl ActionResult {
-        results::ok(format!("user {id}, verbose={:?}", *verbose))
+        results::ok(format!("user {}, verbose={:?}", *id, *verbose))
     }
 
     #[get("/search")]
@@ -74,7 +77,7 @@ impl UsersController {
 
 ## Errors
 
-`BindError` carries the message written as `text/plain` body. Status codes: route → 404, query/body/form → 422, body read failure → 400.
+The router writes the `BindError` message as `text/plain`. Route parameter errors return 404, body read failures return 400, and invalid query, body or form values normally return 422. For a matched HTTP `QUERY` action, the router returns 400 before binding if `Content-Type` is missing or blank. An unsupported media type reported by a binder on `QUERY` returns 415.
 
 ## Body buffering (multiple reads)
 

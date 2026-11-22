@@ -43,7 +43,7 @@ pub(crate) async fn hyper_server(ips: HashSet<IpAddr>, http_ports: HashSet<u16>,
     let routing_service = app_service_provider.get_service::<RoutingService>().await;
     let hypercfg = {
         let configuration_service = app_service_provider.get_service::<ConfigurationService>().await;
-        configuration_service.get::<crate::configuration::HyperConfig>().capture().unwrap_or_default().0
+        configuration_service.get::<crate::configuration::HyperConfig>()
     };
     let app_service_provider = Arc::new(app_service_provider);
     #[cfg(panic = "unwind")]
@@ -60,7 +60,7 @@ pub(crate) async fn hyper_server(ips: HashSet<IpAddr>, http_ports: HashSet<u16>,
                         let app_service_provider = app_service_provider.clone();
                         let middleware_pipeline = middleware_pipeline.clone();
                         let routing_service = routing_service.clone();
-                        let hypercfg = hypercfg.clone();
+                        let hypercfg = hypercfg.capture().unwrap_or_default();
                         tokio::spawn(async move {
                             if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, app_service_provider, middleware_pipeline, routing_service, hypercfg).await {
                                 LOGGER::error(format!("Error occurred: {}", e));
