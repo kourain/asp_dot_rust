@@ -16,7 +16,6 @@ impl RoutingServiceBuilder {
 }
 
 impl ApplicationBuilder {
-    #[track_caller]
     pub fn add_controllers(&mut self) -> &mut Self {
         self.routing_builder.bootstrap_registered_controllers();
         self
