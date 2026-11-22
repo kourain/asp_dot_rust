@@ -2,7 +2,7 @@
 
 `CompressionMiddleware` compresses the response body with gzip, deflate, brotli or zstd.
 The algorithm is chosen from the `Accept-Encoding` request header (highest q-value first,
-then zstd > br > gzip > deflate). It follows the behavior of `CompressionLayer` in `tower-http`.
+then zstd > br > gzip > deflate).
 
 ## Usage
 
@@ -27,10 +27,12 @@ level = "default" # fastest | default | best
 ```
 
 ```rust
+use asp_dot_rust::configuration::CompressionConfiguration;
+
 builder.configuration.configure::<CompressionConfiguration>("compression");
 ```
 
-Missing fields use the values above. Without any configuration the defaults are used.
+The middleware captures its settings when the pipeline is built. Missing TOML fields use the defaults below. An unregistered configuration or a registered entry with no value also uses those defaults.
 
 | Field | Default | Effect |
 | ----- | ------- | ------ |
@@ -40,12 +42,12 @@ Missing fields use the values above. Without any configuration the defaults are 
 
 ## Behavior
 
-- Skipped: empty body, `204`, `304`, `206`, existing `Content-Encoding` or `Content-Range`,
-  `Cache-Control: no-transform`, and content types `image/*` (except `image/svg+xml`),
-  `audio/*`, `video/*`, `text/event-stream`, `application/grpc`.
+- Compression skips a response whose headers have already been sent, an empty body, a body below `min_size`, and responses with status 1xx, 204, 304 or 206.
+- It also skips responses with `Content-Encoding` or `Content-Range`, or whose first `Cache-Control` value contains `no-transform` (case-insensitive substring match).
+- Excluded content types use case-insensitive prefix matching for `image/` (except `image/svg+xml`), `audio/`, `video/`, `text/event-stream` and `application/grpc`.
 - On a compressed response: `Content-Encoding` is set, `Content-Length` is replaced,
   `Accept-Ranges` is removed.
-- `Vary: Accept-Encoding` is added to every response that could be compressed.
+- Eligible responses get `Vary: Accept-Encoding` before an encoding is chosen, unless an existing `Vary` value already contains `accept-encoding` (case-insensitive substring match).
 - If the compressed body is not smaller, the original body is sent.
 - `deflate` uses the zlib format, as required by HTTP.
 

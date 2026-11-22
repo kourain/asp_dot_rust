@@ -60,6 +60,21 @@ impl LogMiddleware {
 
 `DependencyInjectableMiddleware::inject` takes ownership of `MiddlewareNext` and passes it directly to the constructor or stores it in the derived field.
 
+## Built-in middleware
+
+Register middleware on the `Application` returned by `build()`. The first one registered is the outermost. The router runs at the end of the chain.
+
+| Method on `Application` | Behavior | Configuration at pipeline startup |
+| --- | --- | --- |
+| `use_compression()` | Compresses eligible buffered responses after the inner middleware returns. | Optional `CompressionConfiguration`. [Compression](./compression.md) |
+| `use_cors()` | Applies the origin policy and answers allowed preflight requests. | Register `CorsConfiguration`. An empty entry uses its default. |
+| `use_rate_limit()` | Counts requests per client socket IP and returns 429 when the limit is exceeded. | Requires a populated `RateLimitConfiguration`. |
+| `use_request_timeout()` | Limits the time spent in the inner pipeline. On timeout it returns 408 or aborts a response that has already started. | Requires a populated `RequestTimeoutConfiguration`. |
+| `use_static_files()` | Copies matching files into the response buffer. Middleware must also set a body-permitting status such as 200 for those bytes to be sent if the response still has the initial 204 status. | Register `StaticFileConfiguration`. The configured directory must exist. |
+| `use_authorize_basic()` | Parses Basic credentials into an `AuthUser` under `USER_CONTEXT_KEY`. The application is responsible for verifying the username and password. | No configuration required. |
+| `use_authorize_bearer()` | Validates a bearer JWT using HS256 and the configured issuer and audience, then stores the user in the request context. | Requires a populated `JwtAuthConfiguration`. |
+| `use_swagger()` | Serves the UI and generated API document. | Uses the routing service. [Swagger endpoints](./swagger.md#endpoints) |
+
 ## Limits
 
 - A middleware is a singleton, take request scoped services in the parameters of `invoke_async`, not in `new`.

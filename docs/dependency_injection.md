@@ -18,7 +18,6 @@ controllers.
 ## Registering a service
 
 ```rust
-use std::sync::Arc;
 use asp_dot_rust::macros::inject;
 
 pub struct ExService {
@@ -40,8 +39,6 @@ impl ExService {
 ```rust
 let mut builder = ApplicationBuilder::new("MyApp");
 builder.service.add_singleton::<ExService>();
-builder.service.add_scope::<ExService>();
-builder.service.add_transient::<ExService>();
 ```
 
 `add_singleton`, `add_scope`, and `add_transient` only register the type;
@@ -103,7 +100,7 @@ skipped entirely:
 
 ```rust
 use asp_dot_rust::dependency_injection::Serv;
-use asp_dot_rust_macros::DependencyInjectableService;
+use asp_dot_rust::macros::DependencyInjectableService;
 
 #[derive(DependencyInjectableService)]
 pub struct Ex2Service {
@@ -146,17 +143,9 @@ pub struct Ex3Service {
 }
 ```
 
-Misuse of the attribute is a compile error rather than a silent no-op:
+The service derive recognizes `default` on ordinary fields. It ignores unknown or empty `di` options. A misspelling such as `#[di(defualt)]` on an ordinary field leaves the default-field warning active.
 
-| Written | Result |
-| --- | --- |
-| `#[di(default)]` on a non-wrapper field | defaulted, no warning |
-| `#[di(default)]` on `Serv<T>` / `CfgOption<T>` / `CfgRequire<T>` / `CfgReload<T>` | **error** — it would replace a real dependency with `Default::default()` |
-| `#[di]` or `#[di()]` | **error** — the option is missing |
-| `#[di(defualt)]` and other unknown options | **error** — unknown `di` option |
-
-A `#[di(default)]` field registers no dependency edge, so it is ignored by
-the startup cycle check.
+On a recognized DI wrapper, injection takes precedence even if the field carries `#[di(default)]`. The macro resolves the wrapper and records its dependency. Ordinary defaulted fields contribute no dependency edge.
 
 If the field needs real construction logic rather than just a default, use
 `#[inject]` on a hand-written `fn new` instead.
@@ -174,17 +163,12 @@ All three wrappers require `T` to be registered in the application's
 | `CfgReload<T>` | `ConfigurationService::get::<T>()` | a handle without a value |
 
 ```rust
-use asp_dot_rust::dependency_injection::{CfgOption, CfgRequire};
+use asp_dot_rust::{dependency_injection::CfgRequire, macros::inject};
 
 #[inject]
-impl Ex2Service {
-    pub fn new(config: CfgOption<AuditConfiguration>) -> Self {
-        Ex2Service { enabled: config.has_value() && config.unwrap().enabled }
-    }
-
-    // or, if the service cannot function without this configuration:
-    pub fn new_strict(config: CfgRequire<AuditConfiguration>) -> Self {
-        Ex2Service { enabled: config.enabled }
+impl AuditService {
+    pub fn new(config: CfgRequire<AuditConfiguration>) -> Self {
+        Self { enabled: config.enabled }
     }
 }
 ```
@@ -193,7 +177,7 @@ impl Ex2Service {
 application is running, `capture()` gives the value now. `CfgOption<T>` and
 `CfgRequire<T>` are values captured when the service is built (see
 [`appsettings.md`](./appsettings.md) for `configure::<T>()` and
-`reload_all_async()`).
+`load_all_async()`).
 
 ## Injecting into a controller
 
@@ -204,6 +188,7 @@ parameters:
 
 ```rust
 use asp_dot_rust::prelude::*;
+use asp_dot_rust::third_party::async_trait;
 
 #[controller_route("home")]
 #[controller_inject]
@@ -270,9 +255,7 @@ a value when resolved, while `CfgOption<T>` and `CfgReload<T>` allow an empty en
 
 ## Known limitations (What not work)
 
-- `fn new` cannot be `async`. Services that require asynchronous
-  initialization (opening a database connection pool, calling an external
-  API, etc.) must perform that work lazily inside a method other than `new`.
+- Services using `#[inject]` may define `async fn new`. Resolution awaits the constructor. The `#[controller_inject]` and `#[middleware]` constructor macros require a synchronous `fn new`.
 - `get_service::<T>()` panics rather than returning `Option`/`Result` when
   `T` was never registered; there is currently no `try_get_service`.
 - Only a single implementation per concrete type is supported. Registering
