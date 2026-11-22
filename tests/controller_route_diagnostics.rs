@@ -15,7 +15,7 @@ mod first {
     use super::*;
     api_controller!(FirstController {});
 
-    pub const IMPL_LINE: u32 = line!() + 3;
+    pub const ROUTE_LINE: u32 = line!() + 8;
     #[controller_route("/conflict")]
     #[controller_inject]
     impl FirstController {
@@ -36,7 +36,7 @@ mod second {
     use super::*;
     api_controller!(SecondController {});
 
-    pub const IMPL_LINE: u32 = line!() + 3;
+    pub const ROUTE_LINE: u32 = line!() + 8;
     #[controller_route("/conflict")]
     #[controller_inject]
     impl SecondController {
@@ -52,7 +52,7 @@ mod second {
 }
 
 #[test]
-fn route_conflicts_report_the_controller_source() {
+fn route_conflicts_report_the_action_route_source() {
     // This integration-test binary has one test, so the temporary panic hook
     // cannot capture an unrelated test's panic.
     let location = Arc::new(Mutex::new(None));
@@ -73,5 +73,5 @@ fn route_conflicts_report_the_controller_source() {
     assert!(message.contains("Failed to insert route") && message.contains("Controller::get"), "{message}");
     let (file, line) = location.lock().unwrap().clone().expect("expected a panic location");
     assert_eq!(file, file!());
-    assert!([first::IMPL_LINE, second::IMPL_LINE].contains(&line), "panic should point to a controller impl, got {file}:{line}");
+    assert!([first::ROUTE_LINE, second::ROUTE_LINE].contains(&line), "panic should point to a route attribute, got {file}:{line}");
 }

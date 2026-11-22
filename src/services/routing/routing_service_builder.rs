@@ -3,7 +3,7 @@ use crate::{
     dependency_injection::DependencyInjectableController,
     services::{
         openapi::{OpenApiService, RegisteredOperation},
-        routing::{ControllerActivator, Route, RouteAttribute, RouteAttributeMap, RoutingService},
+        routing::{ControllerActivator, Route, RouteAttribute, RoutingService},
     },
 };
 use matchit::Router;
@@ -28,12 +28,19 @@ impl RoutingServiceBuilder {
     where
         T: DependencyInjectableController + Controller,
     {
+        self.register_controller_type::<T>();
+        for action in action_routes {
+            self.add_controller_route::<T>(root_route, action);
+        }
+    }
+
+    #[track_caller]
+    pub fn register_controller_type<T>(&mut self)
+    where
+        T: DependencyInjectableController + Controller,
+    {
         if !self._registered_controllers.insert(TypeId::of::<T>()) {
             panic!("Registered Controller {} twice", std::any::type_name::<T>());
-        }
-        for action in action_routes {
-            let route = Self::join_route(root_route, action.route);
-            self.add_controller_route::<T>(route, action.method, action.action_name, action.route_attribute_map);
         }
     }
 
@@ -57,24 +64,26 @@ impl RoutingServiceBuilder {
     }
 
     #[track_caller]
-    pub fn add_controller_route<T>(&mut self, route: String, methods: Vec<&'static str>, action_name: &'static str, route_attr_map: RouteAttributeMap)
+    pub fn add_controller_route<T>(&mut self, root_route: &str, action: ActionRoute)
     where
         T: DependencyInjectableController + Controller,
     {
+        let route = Self::join_route(root_route, action.route);
+        let action_name = action.action_name;
         let controller_name: &'static str = std::any::type_name::<T>().rsplit("::").next().unwrap_or(std::any::type_name::<T>());
         let activator_async: ControllerActivator = |http_context| Box::pin(async move { Box::new(T::inject(http_context).await) as Box<dyn Controller> });
         let route_info = Arc::new(Route {
             controller_name,
             controller_type_name: std::any::type_name::<T>(),
             action_name,
-            route_attr: RouteAttribute::new(route_attr_map),
+            route_attr: RouteAttribute::new(action.route_attribute_map),
             activator_async,
         });
 
         // Remove by the exact pattern: matching a URL here could confuse static
         // routes with parameters or silently merge different parameter names.
         let mut method_map = self._router.remove(&route).unwrap_or_default();
-        for method in methods {
+        for method in action.method {
             let http_method = match http::Method::from_str(&method.to_uppercase()) {
                 Ok(method) => method,
                 Err(error) => panic!("Invalid HTTP method {method} for route {route} at {}::{action_name}: {error}", std::any::type_name::<T>()),
