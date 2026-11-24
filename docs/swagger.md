@@ -9,11 +9,12 @@ use asp_dot_rust::ApplicationBuilder;
 
 let mut builder = ApplicationBuilder::new("MyApp");
 builder.add_controllers();
+builder.add_swagger_gen();
 let mut app = builder.build();
 app.use_swagger();
 ```
 
-Call `use_swagger()` after `add_controllers()` so the route list is available.
+Call `builder.add_swagger_gen()` before `builder.build()` to register the `OpenApiService` required by Swagger. Then call `app.use_swagger()` to serve the UI and OpenAPI document.
 
 ## Endpoints
 
