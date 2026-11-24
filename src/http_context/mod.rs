@@ -6,6 +6,7 @@ mod http_response;
 use crate::utils::ShareMutPtr;
 pub use http_context::{HttpContext, USER_CONTEXT_KEY};
 pub use http_header::HttpHeaderExt;
+pub(crate) use http_header::append_vary;
 pub use http_request::{HttpRequest, RequestBody};
 pub use http_response::HttpResponse;
 pub(crate) use http_response::ResponseHead;

@@ -9,7 +9,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-use asp_dot_rust::configuration::{CorsConfiguration, HyperConfig};
+use asp_dot_rust::configuration::{CorsConfiguration, HyperConfig, RequestTimeoutConfiguration};
 
 api_controller!(pub ListenerController {});
 
@@ -50,6 +50,70 @@ asp_dot_rust::middleware!(pub RuntimeMiddleware, |ctx, next| {
     ctx.response.headers.insert_str("X-Runtime-Middleware", "active");
     next.next_async(ctx).await;
 });
+
+asp_dot_rust::middleware!(pub VaryByLanguage, |ctx, next| {
+    ctx.response.headers.insert_str("Vary", "Accept-Language");
+    next.next_async(ctx).await;
+});
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cors_preserves_vary_and_routes_ordinary_options() {
+    let port = 18710;
+    start(
+        port,
+        |builder| {
+            builder.configuration.insert(|cors: &mut CorsConfiguration| {
+                cors.allow_origin("https://example.test");
+            });
+        },
+        |app| {
+            app.add_middleware::<VaryByLanguage>().use_cors();
+        },
+    )
+    .await;
+
+    for (headers, expected_status) in [("", 405), ("Origin: https://example.test\r\n", 405), ("Origin: https://other.test\r\n", 403)] {
+        let response = raw_request(port, "OPTIONS", "/listener", headers).await;
+        assert_eq!(status_of(&response), expected_status, "{response}");
+        let vary: Vec<_> = response
+            .lines()
+            .filter_map(|line| line.split_once(':'))
+            .filter(|(key, _)| key.eq_ignore_ascii_case("vary"))
+            .flat_map(|(_, value)| value.split(',').map(str::trim))
+            .collect();
+        assert!(vary.contains(&"Accept-Language") && vary.contains(&"Origin"), "{response}");
+    }
+}
+
+asp_dot_rust::middleware!(pub StalledResponse, |ctx, _next| {
+    ctx.response.headers.insert_str("Content-Encoding", "gzip");
+    ctx.response.headers.insert_str("Content-Type", "application/json");
+    ctx.response.headers.insert_str("ETag", "\"original\"");
+    ctx.response.headers.insert_str("Content-Length", "999");
+    std::future::pending::<()>().await;
+});
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn timeout_sends_headers_for_its_own_body() {
+    let port = 18711;
+    start(
+        port,
+        |builder| {
+            builder.configuration.insert(|cfg: &mut RequestTimeoutConfiguration| cfg.timeout_seconds = 0);
+        },
+        |app| {
+            app.use_request_timeout().add_middleware::<StalledResponse>();
+        },
+    )
+    .await;
+    let response = raw_request(port, "GET", "/listener", "").await;
+    assert_eq!(status_of(&response), 408, "{response}");
+    assert_eq!(body_of(&response), "Request Timeout");
+    assert_eq!(header_of(&response, "content-type").as_deref(), Some("text/plain; charset=utf-8"));
+    assert_eq!(header_of(&response, "content-length").as_deref(), Some("15"));
+    assert!(header_of(&response, "content-encoding").is_none());
+    assert!(header_of(&response, "etag").is_none());
+}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn startup_factory_data_is_released_while_the_pipeline_keeps_serving() {
