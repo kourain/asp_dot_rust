@@ -1,5 +1,5 @@
 use asp_dot_rust::{
-    ApplicationBuilder, api_controller,
+    Application, ApplicationBuilder, api_controller,
     configuration::{RequestTimeoutConfiguration, WebSocketOptions},
     controller::{ActionResult, results, route},
     http_context::{HttpContextRef, WebSocketAcceptContext, WebSocketMessage},
@@ -10,7 +10,10 @@ use http::{Request, StatusCode, header};
 use http_body_util::Empty;
 use hyper::body::Bytes;
 use hyper_util::rt::{TokioExecutor, TokioIo};
-use std::time::Duration;
+use std::{
+    sync::atomic::{AtomicU64, Ordering},
+    time::{Duration, Instant},
+};
 use tokio::{
     net::TcpStream,
     time::{sleep, timeout},
@@ -23,6 +26,9 @@ use tokio_tungstenite::{
         protocol::{CloseFrame, Role, frame::coding::CloseCode},
     },
 };
+
+// Milliseconds `close_async` took on /close-silent, 0 while it is still running.
+static SILENT_CLOSE_MILLIS: AtomicU64 = AtomicU64::new(0);
 
 api_controller!(pub SocketController {});
 
@@ -82,6 +88,15 @@ impl SocketController {
         results::ok(())
     }
 
+    #[route(["GET"], "/close-silent")]
+    async fn close_silent(&mut self) -> impl ActionResult {
+        let mut socket = self.http_context.web_sockets().accept_web_socket_async().await.unwrap();
+        let started = Instant::now();
+        socket.close_async(None).await.unwrap();
+        SILENT_CLOSE_MILLIS.store(started.elapsed().as_millis() as u64, Ordering::SeqCst);
+        results::ok(())
+    }
+
     #[route(["GET"], "/request-lifetime")]
     async fn request_lifetime(&mut self) -> impl ActionResult {
         let mut socket = self.http_context.web_sockets().accept_web_socket_async().await.unwrap();
@@ -90,16 +105,14 @@ impl SocketController {
     }
 }
 
-async fn server(options: Option<WebSocketOptions>) -> u16 {
+async fn server(register: impl FnOnce(&mut Application) -> &mut Application) -> u16 {
     let port = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap().local_addr().unwrap().port();
     let mut builder = ApplicationBuilder::new("WebSocketTest");
     builder.with_loopback_ip().with_http_port(port).add_controllers();
     builder.configuration.insert::<RequestTimeoutConfiguration>(|cfg| cfg.timeout_seconds = 1);
     let mut app = builder.build();
     app.use_request_timeout();
-    if let Some(options) = options {
-        app.use_web_sockets_with_options(options);
-    }
+    register(&mut app);
     tokio::spawn(app.run());
     timeout(Duration::from_secs(5), async {
         while TcpStream::connect(("127.0.0.1", port)).await.is_err() {
@@ -122,7 +135,7 @@ async fn handshake(port: u16, req: Request<()>) -> Result<(WebSocketStream<TcpSt
 
 #[tokio::test]
 async fn http1_subprotocol_echo_ping_and_close_survive_request_timeout() {
-    let port = server(Some(WebSocketOptions::default())).await;
+    let port = server(Application::use_web_sockets).await;
     let mut req = request(port);
     req.headers_mut().insert(header::SEC_WEBSOCKET_PROTOCOL, "other, chat".parse().unwrap());
     let (mut socket, response) = handshake(port, req).await.unwrap();
@@ -149,11 +162,7 @@ async fn http1_subprotocol_echo_ping_and_close_survive_request_timeout() {
 
 #[tokio::test]
 async fn middleware_is_opt_in_and_only_filters_origins_of_valid_handshakes() {
-    let port = server(Some(WebSocketOptions {
-        allowed_origins: vec!["https://example.org".into()],
-        ..Default::default()
-    }))
-    .await;
+    let port = server(|app| app.use_web_sockets_with_options(|options| options.allowed_origins = vec!["https://example.org".into()])).await;
     let mut req = request(port);
     req.headers_mut().insert(header::ORIGIN, "https://other.test".parse().unwrap());
     assert!(matches!(handshake(port, req.clone()).await, Err(Error::Http(resp)) if resp.status() == StatusCode::FORBIDDEN));
@@ -163,13 +172,13 @@ async fn middleware_is_opt_in_and_only_filters_origins_of_valid_handshakes() {
     allowed.headers_mut().insert(header::ORIGIN, "https://example.org".parse().unwrap());
     assert!(handshake(port, allowed).await.is_ok());
     assert!(handshake(port, request(port)).await.is_ok());
-    let disabled = server(None).await;
+    let disabled = server(|app| app).await;
     assert!(matches!(handshake(disabled, request(disabled)).await, Err(Error::Http(resp)) if resp.status() == StatusCode::BAD_REQUEST));
 }
 
 #[tokio::test]
 async fn returning_from_the_action_terminates_a_socket_held_by_a_background_task() {
-    let port = server(Some(Default::default())).await;
+    let port = server(Application::use_web_sockets).await;
     let req = format!("ws://127.0.0.1:{port}/request-lifetime").into_client_request().unwrap();
     let (mut socket, _) = handshake(port, req).await.unwrap();
     assert!(matches!(timeout(Duration::from_secs(3), socket.next()).await.unwrap(), Some(Err(_)) | None));
@@ -177,7 +186,7 @@ async fn returning_from_the_action_terminates_a_socket_held_by_a_background_task
 
 #[tokio::test]
 async fn an_unoffered_subprotocol_can_be_declined_before_the_response_is_committed() {
-    let port = server(Some(Default::default())).await;
+    let port = server(Application::use_web_sockets).await;
     let req = format!("ws://127.0.0.1:{port}/optional-protocol").into_client_request().unwrap();
     let (mut socket, response) = handshake(port, req).await.unwrap();
     assert!(!response.headers().contains_key(header::SEC_WEBSOCKET_PROTOCOL));
@@ -187,7 +196,7 @@ async fn an_unoffered_subprotocol_can_be_declined_before_the_response_is_committ
 
 #[tokio::test]
 async fn http2_extended_connect_uses_the_same_action_and_keeps_other_streams_available() {
-    let port = server(Some(WebSocketOptions::default())).await;
+    let port = server(Application::use_web_sockets).await;
     let tcp = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     let (mut sender, connection) = hyper::client::conn::http2::handshake(TokioExecutor::new(), TokioIo::new(tcp)).await.unwrap();
     tokio::spawn(connection);
@@ -226,15 +235,18 @@ async fn http2_extended_connect_uses_the_same_action_and_keeps_other_streams_ava
 
 #[tokio::test]
 async fn keep_alive_requires_the_matching_pong_only_when_a_timeout_is_configured() {
-    let mut opts = WebSocketOptions {
-        keep_alive_interval: Duration::from_millis(50),
-        ..Default::default()
+    let heartbeat_server = |timeout| {
+        server(move |app| {
+            app.use_web_sockets_with_options(|options| {
+                options.keep_alive_interval = Duration::from_millis(50);
+                options.keep_alive_timeout = timeout;
+            })
+        })
     };
-    let port = server(Some(opts.clone())).await;
+    let port = heartbeat_server(None).await;
     let (mut socket, _) = handshake(port, request(port)).await.unwrap();
     assert!(matches!(timeout(Duration::from_secs(3), socket.next()).await.unwrap(), Some(Ok(WebSocketMessage::Pong(_)))));
-    opts.keep_alive_timeout = Some(Duration::from_millis(250));
-    let port = server(Some(opts)).await;
+    let port = heartbeat_server(Some(Duration::from_millis(250))).await;
     let (mut socket, _) = handshake(port, request(port)).await.unwrap();
     timeout(Duration::from_secs(3), async {
         assert!(matches!(socket.next().await, Some(Ok(WebSocketMessage::Ping(_)))));
@@ -243,6 +255,49 @@ async fn keep_alive_requires_the_matching_pong_only_when_a_timeout_is_configured
         socket.send(WebSocketMessage::Pong("unrelated".into())).await.unwrap();
         // Replacing the queued automatic Pong leaves the second Ping unanswered.
         assert!(matches!(socket.next().await, Some(Err(_)) | None));
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn close_async_drops_a_silent_peer_after_the_configured_timeout() {
+    assert_eq!(WebSocketOptions::default().close_timeout, Duration::from_secs(1));
+    let close_timeout = Duration::from_millis(1500);
+    let port = server(|app| app.use_web_sockets_with_options(|options| options.close_timeout = close_timeout)).await;
+    let req = format!("ws://127.0.0.1:{port}/close-silent").into_client_request().unwrap();
+    // The client does not read, so it never answers the Close frame.
+    let (mut socket, _) = handshake(port, req).await.unwrap();
+    timeout(Duration::from_secs(5), async {
+        while SILENT_CLOSE_MILLIS.load(Ordering::SeqCst) == 0 {
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let elapsed = Duration::from_millis(SILENT_CLOSE_MILLIS.load(Ordering::SeqCst));
+    assert!(elapsed >= close_timeout, "close_async took {elapsed:?}");
+    timeout(Duration::from_secs(3), async { while let Some(Ok(_)) = socket.next().await {} }).await.unwrap();
+}
+
+#[tokio::test]
+async fn messages_above_the_configured_size_limit_end_the_connection() {
+    let port = server(|app| {
+        app.use_web_sockets_with_options(|options| {
+            options.max_message_size = Some(16);
+            options.max_frame_size = Some(16);
+        })
+    })
+    .await;
+    let (mut socket, _) = handshake(port, request(port)).await.unwrap();
+    timeout(Duration::from_secs(5), async {
+        let small = WebSocketMessage::text("0123456789abcdef");
+        socket.send(small.clone()).await.unwrap();
+        assert_eq!(socket.next().await.unwrap().unwrap(), small);
+        socket.send(WebSocketMessage::text("0123456789abcdef!")).await.unwrap();
+        while let Some(Ok(message)) = socket.next().await {
+            assert!(message.is_close(), "an oversized message must not be echoed: {message:?}");
+        }
     })
     .await
     .unwrap();

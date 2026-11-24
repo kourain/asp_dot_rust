@@ -1,10 +1,11 @@
 mod socket;
 
-use super::HttpContext;
+use super::{HttpContext, HttpResponse};
 use crate::configuration::WebSocketOptions;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use http::{HeaderMap, HeaderValue, Method, StatusCode, Version, header};
 use hyper::upgrade::OnUpgrade;
+use socket::KeepAlive;
 use std::{
     io,
     sync::{
@@ -13,18 +14,24 @@ use std::{
     },
     time::Duration,
 };
-use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
+use tokio::task::AbortHandle;
+use tokio_tungstenite::tungstenite::{handshake::derive_accept_key, protocol::WebSocketConfig};
 
 pub use socket::WebSocket;
 pub use tokio_tungstenite::tungstenite::{Message as WebSocketMessage, protocol::CloseFrame as WebSocketCloseFrame};
 
-pub(crate) struct WebSocketHandshake {
-    upgrade: Option<OnUpgrade>,
+/// The protocol switch that is not committed yet.
+struct PendingUpgrade {
+    on_upgrade: OnUpgrade,
     // HTTP/2 extended CONNECT does not use Sec-WebSocket-Accept.
     accept_key: Option<HeaderValue>,
+}
+
+pub(crate) struct WebSocketHandshake {
+    pending: Option<PendingUpgrade>,
     pub(crate) options: Option<Arc<WebSocketOptions>>,
     pub(crate) accepted: Arc<AtomicBool>,
-    active_socket: Option<tokio::task::AbortHandle>,
+    active_socket: Option<AbortHandle>,
 }
 
 fn tokens(headers: &HeaderMap, name: header::HeaderName) -> impl Iterator<Item = &str> {
@@ -58,9 +65,9 @@ impl WebSocketHandshake {
             Version::HTTP_2 if req.method() == Method::CONNECT && req.extensions().get::<hyper::ext::Protocol>()?.as_str() == "websocket" => None,
             _ => return None,
         };
+        let on_upgrade = req.extensions_mut().remove::<OnUpgrade>()?;
         Some(Self {
-            upgrade: Some(req.extensions_mut().remove::<OnUpgrade>()?),
-            accept_key,
+            pending: Some(PendingUpgrade { on_upgrade, accept_key }),
             options: None,
             accepted: Arc::default(),
             active_socket: None,
@@ -115,36 +122,49 @@ impl WebSocketManager<'_> {
         if self.0.response.has_started() {
             return Err(io::Error::other("HTTP response already started"));
         }
-        let selected = match context.sub_protocol {
-            Some(protocol) => {
-                // A subprotocol uses the HTTP token grammar and is case-sensitive.
-                if header::HeaderName::from_bytes(protocol.as_bytes()).is_err() || !self.requested_protocols().any(|offered| offered == protocol) {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid or unoffered WebSocket subprotocol"));
-                }
-                Some(HeaderValue::from_str(protocol).map_err(io::Error::other)?)
-            }
-            None => None,
-        };
+        let protocol = self.select_protocol(context.sub_protocol)?;
+        let HttpContext { web_socket_handshake, response, .. } = &mut *self.0;
         let Some(WebSocketHandshake {
             options: Some(options),
-            upgrade,
-            accept_key,
+            pending,
             accepted,
             active_socket,
-        }) = self.0.web_socket_handshake.as_mut()
+        }) = web_socket_handshake.as_mut()
         else {
             return Err(io::Error::other("WebSocket upgrade unavailable"));
         };
-        let interval = context.keep_alive_interval.unwrap_or(options.keep_alive_interval);
-        let timeout = context.keep_alive_timeout.or(options.keep_alive_timeout).filter(|timeout| !timeout.is_zero());
-        let upgrade = upgrade.take().ok_or_else(|| io::Error::other("WebSocket upgrade already consumed"))?;
-        let response = &mut self.0.response;
+        let keep_alive = KeepAlive {
+            interval: context.keep_alive_interval.unwrap_or(options.keep_alive_interval),
+            timeout: context.keep_alive_timeout.or(options.keep_alive_timeout).filter(|timeout| !timeout.is_zero()),
+        };
+        let config = WebSocketConfig::default().max_message_size(options.max_message_size).max_frame_size(options.max_frame_size);
+        let PendingUpgrade { on_upgrade, accept_key } = pending.take().ok_or_else(|| io::Error::other("WebSocket upgrade already consumed"))?;
+        Self::commit_handshake(response, protocol, accept_key)?;
+        accepted.store(true, Ordering::Release);
+        let transport = on_upgrade.await.map_err(io::Error::other)?;
+        let (socket, abort_handle) = WebSocket::new(transport, keep_alive, config, options.close_timeout).await;
+        *active_socket = Some(abort_handle);
+        Ok(socket)
+    }
+
+    /// Validates the subprotocol chosen by the application against the client's offers.
+    fn select_protocol(&self, selected: Option<&str>) -> io::Result<Option<HeaderValue>> {
+        let Some(protocol) = selected else { return Ok(None) };
+        // A subprotocol uses the HTTP token grammar and is case-sensitive.
+        if header::HeaderName::from_bytes(protocol.as_bytes()).is_err() || !self.requested_protocols().any(|offered| offered == protocol) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid or unoffered WebSocket subprotocol"));
+        }
+        HeaderValue::from_str(protocol).map(Some).map_err(io::Error::other)
+    }
+
+    /// Writes the handshake response: 101 with an accept key on HTTP/1.1, 200 on HTTP/2.
+    fn commit_handshake(response: &mut HttpResponse, protocol: Option<HeaderValue>, accept_key: Option<HeaderValue>) -> io::Result<()> {
         response.headers.remove(header::SEC_WEBSOCKET_EXTENSIONS);
         response.headers.remove(header::SEC_WEBSOCKET_PROTOCOL);
-        if let Some(protocol) = selected {
+        if let Some(protocol) = protocol {
             response.headers.insert(header::SEC_WEBSOCKET_PROTOCOL, protocol);
         }
-        if let Some(key) = accept_key.take() {
+        if let Some(key) = accept_key {
             response.status_code = StatusCode::SWITCHING_PROTOCOLS;
             response.headers.insert(header::CONNECTION, HeaderValue::from_static("Upgrade"));
             response.headers.insert(header::UPGRADE, HeaderValue::from_static("websocket"));
@@ -155,11 +175,6 @@ impl WebSocketManager<'_> {
             response.headers.remove(header::UPGRADE);
             response.headers.remove(header::SEC_WEBSOCKET_ACCEPT);
         }
-        response.commit_upgrade()?;
-        accepted.store(true, Ordering::Release);
-        let transport = upgrade.await.map_err(io::Error::other)?;
-        let (socket, abort_handle) = WebSocket::new(transport, interval, timeout).await;
-        *active_socket = Some(abort_handle);
-        Ok(socket)
+        response.commit_upgrade()
     }
 }

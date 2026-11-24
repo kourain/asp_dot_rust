@@ -43,12 +43,17 @@ impl WebSocketMiddleware {
 
 impl Application {
     pub fn use_web_sockets(&mut self) -> &mut Self {
-        self.use_web_sockets_with_options(WebSocketOptions::default())
+        self.use_web_sockets_with_options(|_| {})
     }
 
-    pub fn use_web_sockets_with_options(&mut self, options: WebSocketOptions) -> &mut Self {
+    pub fn use_web_sockets_with_options<F>(&mut self, options: F) -> &mut Self
+    where
+        F: Fn(&mut WebSocketOptions),
+    {
         self.web_sockets_enabled = true;
-        let options = Arc::new(options);
+        let mut ws_option = Default::default();
+        options(&mut ws_option);
+        let options = Arc::new(ws_option);
         self.add_middleware_factory(move |next| WebSocketMiddleware { next, options: options.clone() })
     }
 }

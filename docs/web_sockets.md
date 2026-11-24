@@ -51,17 +51,21 @@ Connect to `ws://127.0.0.1:8080/ws` and send a text or binary message. The handl
 ## Options
 
 ```rust
-use asp_dot_rust::configuration::WebSocketOptions;
 use std::time::Duration;
 
-app.use_web_sockets_with_options(WebSocketOptions {
-    allowed_origins: vec!["https://chat.example.com".into()],
-    keep_alive_interval: Duration::from_secs(30),
-    keep_alive_timeout: Some(Duration::from_secs(10)),
+app.use_web_sockets_with_options(|options| {
+    options.allowed_origins = vec!["https://chat.example.com".into()];
+    options.keep_alive_interval = Duration::from_secs(30);
+    options.keep_alive_timeout = Some(Duration::from_secs(10));
+    options.close_timeout = Duration::from_secs(3);
+    options.max_message_size = Some(1 << 20);
+    options.max_frame_size = Some(1 << 20);
 });
 ```
 
-- **Origins.** The default empty list and the wildcard `"*"` allow all origins. When a list is configured, an unlisted Origin on a valid handshake receives HTTP 403. Clients may omit Origin. Apply authentication and authorization before accepting the socket.
-- **Keep-alive.** The default interval is two minutes. With the default timeout of `None`, the server sends unsolicited Pong frames. A positive timeout switches to Ping and requires a matching Pong within the deadline. A zero interval disables heartbeats. Request timeouts apply until the handshake commits.
+- **Origins.** The default list contains `"*"` and allows all origins. To restrict origins, replace the list as shown above. A valid handshake with an unlisted Origin receives HTTP 403. An empty list allows all origins, and clients may omit Origin. Apply authentication and authorization before accepting the socket.
+- **Keep-alive.** By default, the server sends a Ping every two minutes and waits one second for a matching Pong. Setting `keep_alive_timeout` to `None` or zero selects unsolicited Pong frames. A zero interval disables heartbeats. Request timeouts apply until the handshake commits.
 - **Subprotocols.** Read the client's offers with `ws.requested_protocols()`. Pass the selected token in `WebSocketAcceptContext { sub_protocol: Some("chat"), ..Default::default() }` to `accept_web_socket_with_context_async`. An invalid or unoffered selection returns an error before the response starts. The same context can override the keep-alive interval and timeout per connection.
+- **Size limits.** `max_message_size` (default 64 MiB) and `max_frame_size` (default 16 MiB) limit incoming data, `None` removes the limit. A larger message ends the connection and `receive_async` returns an error.
+- **Closing.** `close_timeout` limits how long `close_async` waits for the closing handshake. It defaults to one second. If the deadline expires, the server drops the connection and returns `Ok(())`.
 - **Compression.** WebSocket frames are uncompressed. The HTTP response compression middleware skips the committed handshake.

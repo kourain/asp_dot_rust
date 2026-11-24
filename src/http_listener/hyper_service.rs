@@ -104,8 +104,6 @@ pub(crate) async fn hyper_service(
     let io = TokioIo::new(stream);
     if web_sockets_enabled {
         builder.http2().enable_connect_protocol();
-        builder.serve_connection_with_upgrades(io, hyper_service).await.map_err(std::io::Error::other)
-    } else {
-        builder.serve_connection(io, hyper_service).await.map_err(std::io::Error::other)
     }
+    builder.serve_connection_with_upgrades(io, hyper_service).await.map_err(std::io::Error::other)
 }

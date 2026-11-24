@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Added WebSocket middleware and `HttpContext::web_sockets()` for HTTP/1.1 Upgrade and HTTP/2 extended CONNECT, with origin restrictions, subprotocol selection and configurable keep-alive. [WebSocket guide](docs/web_sockets.md)
+### Unreleased New
+
+- Added WebSocket middleware and `HttpContext::web_sockets()` for HTTP/1.1 Upgrade and HTTP/2 extended CONNECT, with origin restrictions, subprotocol selection and configurable keep-alive and size limits (`max_message_size`, `max_frame_size`). `WebSocket::close_async` drops the connection when `WebSocketOptions::close_timeout` expires (one second by default). [WebSocket guide](docs/web_sockets.md)
 
 ## 0.2.11
 

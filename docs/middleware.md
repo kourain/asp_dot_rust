@@ -67,7 +67,7 @@ Register middleware on the `Application` returned by `build()`. The first one re
 | Method on `Application` | Behavior | Configuration at pipeline startup |
 | --- | --- | --- |
 | `use_compression()` | Compresses eligible buffered responses after the inner middleware returns. | Optional `CompressionConfiguration`. [Compression](./compression.md) |
-| `use_web_sockets()` | Lets downstream middleware and controllers accept HTTP/1.1 and HTTP/2 WebSockets. | Defaults or explicit options via `use_web_sockets_with_options(options)`. [WebSocket controller example](./web_sockets.md) |
+| `use_web_sockets()` | Lets downstream middleware and controllers accept HTTP/1.1 and HTTP/2 WebSockets. | Customize defaults with `use_web_sockets_with_options(\|options\| { ... })`. [WebSocket controller example](./web_sockets.md) |
 | `use_cors()` | Applies the origin policy and answers allowed preflight requests. | Register `CorsConfiguration`. An empty entry uses its default. |
 | `use_rate_limit()` | Counts requests per client socket IP and returns 429 when the limit is exceeded. | Requires a populated `RateLimitConfiguration`. |
 | `use_request_timeout()` | Limits the time spent in the inner pipeline. On timeout it returns 408 or aborts a response that has already started. | Requires a populated `RequestTimeoutConfiguration`. |
