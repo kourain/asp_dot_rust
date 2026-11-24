@@ -54,7 +54,15 @@ struct RouteRegistration {
     match_route: Vec<proc_macro2::TokenStream>,
 }
 impl RouteRegistration {
-    fn push_route_registration(&mut self, method_name_lit: &LitStr, http_method: Vec<LitStr>, path_lit: &LitStr, attributes: &[proc_macro2::TokenStream], span: proc_macro2::Span) {
+    fn push_route_registration(
+        &mut self,
+        method_name_lit: &LitStr,
+        http_method: Vec<LitStr>,
+        path_lit: &LitStr,
+        attributes: &[proc_macro2::TokenStream],
+        other_attrs: &[&Attribute],
+        span: proc_macro2::Span,
+    ) {
         let main_crate_path = asp_dot_rust_crate_path();
         let action_route = quote! {
             #main_crate_path::controller::ActionRoute::new(
@@ -66,6 +74,7 @@ impl RouteRegistration {
         let self_ty = &self.self_ty;
         let root_route = &self.root_route;
         self.registrations.push(quote_spanned! {span=>
+            #(#other_attrs)*
             {
                 let action_route = #action_route;
                 routing_registry.add_controller_route::<#self_ty>(
@@ -76,7 +85,15 @@ impl RouteRegistration {
         });
     }
 
-    fn push_match_route(&mut self, method_name_lit: &LitStr, method_name: &syn::Ident, is_async: bool, bind_lets: proc_macro2::TokenStream, bind_args: &[proc_macro2::TokenStream]) {
+    fn push_match_route(
+        &mut self,
+        method_name_lit: &LitStr,
+        method_name: &syn::Ident,
+        is_async: bool,
+        bind_lets: proc_macro2::TokenStream,
+        bind_args: &[proc_macro2::TokenStream],
+        cfg_attrs: &[&Attribute],
+    ) {
         let main_crate_path = asp_dot_rust_crate_path();
         let invoke = if is_async {
             quote! { self.#method_name(#(#bind_args),*).await }
@@ -85,6 +102,7 @@ impl RouteRegistration {
         };
 
         self.match_route.push(quote! {
+            #(#cfg_attrs)*
             #method_name_lit => {
                 #bind_lets
                 ::core::result::Result::Ok(::std::boxed::Box::<dyn #main_crate_path::controller::ActionResult + '_>::from(#invoke))
@@ -120,7 +138,8 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
         let method_name = &impl_method.sig.ident;
         let method_name_lit = LitStr::new(&method_name.to_string(), method_name.span());
         let is_async = impl_method.sig.asyncness.is_some();
-
+        let cfg_attrs: Vec<_> = impl_method.attrs.iter().filter(|attr| attr.path().is_ident("cfg")).collect();
+        // TODO: change to all attrs
         let method_entries = match parse_attr_entries(&impl_method.attrs, &format!("`{}`", method_name)) {
             Ok(entries) => entries,
             Err(error) => return error,
@@ -159,12 +178,12 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                 }
 
                 let path_lit = some_or_error!(lit_str_from_expr(path_expr), attr, format!("Route path in #[route] must be a string literal on `{}`", method_name));
-                route_registration.push_route_registration(&method_name_lit, method_lit, &path_lit, &attribute_calls, attr.span());
+                route_registration.push_route_registration(&method_name_lit, method_lit, &path_lit, &attribute_calls, &cfg_attrs, attr.span());
             } else {
                 let path_lit: LitStr = ok_or_error!(attr.parse_args(), attr, format!("Invalid #[{}(...)] on `{}`", route_ident, method_name));
                 let http_method_string = route_ident.to_uppercase();
                 let http_method = LitStr::new(&http_method_string, attr.span());
-                route_registration.push_route_registration(&method_name_lit, vec![http_method], &path_lit, &attribute_calls, attr.span());
+                route_registration.push_route_registration(&method_name_lit, vec![http_method], &path_lit, &attribute_calls, &cfg_attrs, attr.span());
             };
         }
         if is_route {
@@ -176,7 +195,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                 Err(e) => return e,
             };
             let (bind_lets, bind_args) = generate_bind_code(&params);
-            route_registration.push_match_route(&method_name_lit, method_name, is_async, bind_lets, &bind_args);
+            route_registration.push_match_route(&method_name_lit, method_name, is_async, bind_lets, &bind_args, &cfg_attrs);
         }
     }
 
