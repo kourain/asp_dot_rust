@@ -2,7 +2,7 @@ use crate::{
     Application,
     configuration::CorsConfiguration,
     dependency_injection::{CfgOption, CfgRequire, Serv},
-    http_context::{HttpContext, HttpHeaderExt},
+    http_context::{HttpContext, HttpHeaderExt, append_vary},
     macros::middleware,
     middleware::MiddlewareNext,
 };
@@ -24,6 +24,7 @@ impl CorsMiddleware {
     }
     pub async fn invoke_async(&self, http_context: &mut HttpContext) {
         {
+            append_vary(&mut http_context.response.headers, "Origin");
             let request_origin = http_context.request.headers.origin();
 
             let Some(origin) = request_origin else {
@@ -59,12 +60,7 @@ impl CorsMiddleware {
             if self.configuration.allow_credentials {
                 http_context.response.headers.insert(header::ACCESS_CONTROL_ALLOW_CREDENTIALS, "true".parse().unwrap());
             }
-            // vary header to indicate response varies based on Origin
-            http_context.response.headers.insert(header::VARY, "Origin".parse().unwrap());
-
-            // Preflight OPTIONS
-            let is_options = { http_context.request.method == http::Method::OPTIONS };
-            if is_options {
+            if http_context.request.method == http::Method::OPTIONS && http_context.request.headers.contains_key(header::ACCESS_CONTROL_REQUEST_METHOD) {
                 http_context.response.headers.insert_str("Access-Control-Max-Age", &self.configuration.max_age.to_string());
                 http_context.response.status_code = http::StatusCode::NO_CONTENT;
                 return;

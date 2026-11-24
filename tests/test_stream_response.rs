@@ -156,6 +156,7 @@ impl StreamController {
 
     #[get("/complete/compressible")]
     pub async fn complete_compressible(&mut self) -> impl ActionResult {
+        self.http_context.response.headers.insert(http::header::ETAG, http::HeaderValue::from_static("\"original\""));
         results::ok("a".repeat(10_000))
     }
 
@@ -921,9 +922,12 @@ async fn compression_still_compresses_a_complete_response() {
     let (head, body) = Conn::connect(port).await.get("/complete/compressible", &[("Accept-Encoding", "gzip")]).await;
     assert_eq!(head.status, 200);
     assert_eq!(head.header("content-encoding"), Some("gzip"));
+    assert!(head.header("etag").is_none());
     assert_eq!(head.header("content-length"), Some(body.len().to_string().as_str()));
     assert!(body.len() < 10_000);
     assert_eq!(gunzip(&body).await, "a".repeat(10_000).as_bytes());
+    let (identity_head, _) = Conn::connect(port).await.get("/complete/compressible", &[]).await;
+    assert_eq!(identity_head.header("etag"), Some("\"original\""));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

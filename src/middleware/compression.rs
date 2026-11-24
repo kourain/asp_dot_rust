@@ -2,7 +2,7 @@ use crate::{
     Application,
     configuration::{CompressionConfiguration, CompressionLevel},
     dependency_injection::{CfgOption, CfgRequire, Serv},
-    http_context::{HttpContext, HttpHeaderExt, HttpResponse},
+    http_context::{HttpContext, HttpHeaderExt, HttpResponse, append_vary},
     logging::LOGGER,
     macros::middleware,
     middleware::MiddlewareNext,
@@ -183,14 +183,7 @@ impl CompressionMiddleware {
             return;
         }
         // the response depends on Accept-Encoding even when this request is not compressed
-        let has_vary = response
-            .headers
-            .get_all(header::VARY)
-            .iter()
-            .any(|value| value.to_str().is_ok_and(|v| v.to_ascii_lowercase().contains("accept-encoding")));
-        if !has_vary {
-            response.headers.append_str("Vary", "Accept-Encoding");
-        }
+        append_vary(&mut response.headers, "Accept-Encoding");
         let Some(encoding) = select_encoding(request_headers, &self.configuration) else {
             return;
         };
@@ -206,6 +199,9 @@ impl CompressionMiddleware {
             return;
         }
         response.body = compressed;
+        if response.headers.get(header::ETAG).is_some_and(|tag| !tag.as_bytes().starts_with(b"W/")) {
+            response.headers.remove(header::ETAG);
+        }
         response.headers.remove(header::ACCEPT_RANGES);
         response.headers.set_content_length(response.body.len());
         response.headers.insert_str("Content-Encoding", encoding.as_str());

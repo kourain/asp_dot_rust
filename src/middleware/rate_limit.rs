@@ -1,56 +1,89 @@
 use crate::{Application, configuration::RateLimitConfiguration, dependency_injection::CfgRequire, http_context::HttpContext, macros::middleware, middleware::MiddlewareNext};
 use dashmap::DashMap;
+use std::{
+    collections::VecDeque,
+    net::IpAddr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tokio::task::JoinHandle;
+
+#[derive(Default)]
+struct ClientWindow {
+    requests: VecDeque<Instant>,
+    blocked_until: Option<Instant>,
+}
+
+impl ClientWindow {
+    fn is_active(&self, now: Instant, window: Duration) -> bool {
+        self.blocked_until.is_some_and(|until| now < until) || self.requests.back().is_some_and(|last| now.duration_since(*last) <= window)
+    }
+
+    fn admit(&mut self, now: Instant, window: Duration, max_requests: usize, block_duration: Duration) -> bool {
+        if self.blocked_until.is_some_and(|until| now < until) {
+            return false;
+        }
+        self.blocked_until = None;
+        while self.requests.front().is_some_and(|oldest| now.duration_since(*oldest) > window) {
+            self.requests.pop_front();
+        }
+        if self.requests.len() >= max_requests {
+            self.requests.clear();
+            self.blocked_until = Some(now + block_duration);
+            return false;
+        }
+        self.requests.push_back(now);
+        true
+    }
+}
 
 pub struct RateLimitMiddleware {
     next: MiddlewareNext,
-    ip_request_counts: DashMap<std::net::IpAddr, Vec<std::time::Instant>>,
-    ip_blocked_until: DashMap<std::net::IpAddr, std::time::Instant>,
+    clients: Arc<DashMap<IpAddr, ClientWindow>>,
+    cleanup: JoinHandle<()>,
     max_requests: usize,
-    limit_seconds: u32,
-    block_duration_seconds: u32,
+    window: Duration,
+    block_duration: Duration,
 }
 #[middleware]
 impl RateLimitMiddleware {
     pub fn new(next: MiddlewareNext, config: CfgRequire<RateLimitConfiguration>) -> Self {
-        RateLimitMiddleware {
+        let window = Duration::from_secs(config.limit_seconds.into());
+        let clients = Arc::new(DashMap::<IpAddr, ClientWindow>::new());
+        let cleanup_clients = clients.clone();
+        let cleanup = tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                let now = Instant::now();
+                cleanup_clients.retain(|_, client| client.is_active(now, window));
+            }
+        });
+        Self {
             next,
-            ip_request_counts: DashMap::new(),
-            ip_blocked_until: DashMap::new(),
+            clients,
+            cleanup,
             max_requests: config.max_requests,
-            limit_seconds: config.limit_seconds,
-            block_duration_seconds: config.block_duration_seconds,
+            window,
+            block_duration: Duration::from_secs(config.block_duration_seconds.into()),
         }
     }
     pub async fn invoke_async(&self, context: &mut HttpContext) {
-        {
-            let client_ip = context.request.client_socket_addr.ip();
-            let now = std::time::Instant::now();
-
-            // Reject while still blocked.
-            if let Some(blocked_until) = self.ip_blocked_until.get(&client_ip) {
-                if now < *blocked_until {
-                    context.response.status_code = http::StatusCode::TOO_MANY_REQUESTS;
-                    context.response.body = http::StatusCode::TOO_MANY_REQUESTS.canonical_reason().unwrap_or("Too Many Requests").as_bytes().to_vec();
-                    return;
-                }
-                drop(blocked_until);
-                self.ip_blocked_until.remove(&client_ip);
-            }
-
-            let window = std::time::Duration::from_secs(self.limit_seconds.into());
-            let mut history = self.ip_request_counts.entry(client_ip).or_insert_with(Vec::new);
-            // Drop timestamps outside the sliding window.
-            history.retain(|t| now.duration_since(*t) <= window);
-            history.push(now);
-
-            if history.len() > self.max_requests {
-                self.ip_blocked_until.insert(client_ip, now + std::time::Duration::from_secs(self.block_duration_seconds.into()));
-                history.clear();
-                context.response.status_code = http::StatusCode::TOO_MANY_REQUESTS;
-                context.response.body = http::StatusCode::TOO_MANY_REQUESTS.canonical_reason().unwrap_or("Too Many Requests").as_bytes().to_vec();
-            }
+        let admitted = {
+            let mut client = self.clients.entry(context.request.client_socket_addr.ip()).or_default();
+            client.admit(Instant::now(), self.window, self.max_requests, self.block_duration)
+        };
+        if !admitted {
+            context.response.status_code = http::StatusCode::TOO_MANY_REQUESTS;
+            context.response.body = b"Too Many Requests".to_vec();
+            return;
         }
         self.next.next_async(context).await;
+    }
+}
+
+impl Drop for RateLimitMiddleware {
+    fn drop(&mut self) {
+        self.cleanup.abort();
     }
 }
 

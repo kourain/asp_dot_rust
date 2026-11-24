@@ -2,11 +2,11 @@ use std::io;
 
 use http::{
     HeaderMap, HeaderValue, StatusCode,
-    header::{ACCEPT, CONTENT_TYPE, LOCATION, VARY},
+    header::{ACCEPT, CONTENT_TYPE, LOCATION},
 };
 use serde::Serialize;
 
-use crate::http_context::HttpResponse;
+use crate::http_context::{HttpResponse, append_vary};
 
 #[derive(Clone, Copy)]
 pub(super) enum Format {
@@ -106,16 +106,7 @@ pub(super) fn write<T: Serialize>(body: &T, headers: &HeaderMap, response: &mut 
     if response.has_started() {
         return Err(io::Error::other("content negotiation requires uncommitted response headers"));
     }
-    let varies = response
-        .headers
-        .get_all(VARY)
-        .iter()
-        .filter_map(|v| v.to_str().ok())
-        .flat_map(|v| v.split(','))
-        .any(|v| v.trim() == "*" || v.trim().eq_ignore_ascii_case("accept"));
-    if !varies {
-        response.headers.append(VARY, HeaderValue::from_static("Accept"));
-    }
+    append_vary(&mut response.headers, "Accept");
     let Some(format) = select(headers) else {
         response.status_code = StatusCode::NOT_ACCEPTABLE;
         response.headers.remove(CONTENT_TYPE);

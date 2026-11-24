@@ -5,6 +5,19 @@ use http::{
     header::{AUTHORIZATION, AsHeaderName, CONTENT_LENGTH, CONTENT_TYPE, IntoHeaderName, ORIGIN},
 };
 
+pub(crate) fn append_vary(headers: &mut HeaderMap, field: &'static str) {
+    let present = headers
+        .get_all(http::header::VARY)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .map(str::trim)
+        .any(|v| v == "*" || v.eq_ignore_ascii_case(field));
+    if !present {
+        headers.append(http::header::VARY, HeaderValue::from_static(field));
+    }
+}
+
 /// extension for HeaderMap<HeaderValue>
 pub trait HttpHeaderExt {
     /// get the Authorization header value, if present

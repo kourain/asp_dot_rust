@@ -46,8 +46,8 @@ The middleware captures its settings when the pipeline is built. Missing TOML fi
 - It also skips responses with `Content-Encoding` or `Content-Range`, or whose first `Cache-Control` value contains `no-transform` (case-insensitive substring match).
 - Excluded content types use case-insensitive prefix matching for `image/` (except `image/svg+xml`), `audio/`, `video/`, `text/event-stream` and `application/grpc`.
 - On a compressed response: `Content-Encoding` is set, `Content-Length` is replaced,
-  `Accept-Ranges` is removed.
-- Eligible responses get `Vary: Accept-Encoding` before an encoding is chosen, unless an existing `Vary` value already contains `accept-encoding` (case-insensitive substring match).
+  `Accept-Ranges` and strong ETags are removed. Weak ETags are preserved.
+- Eligible responses get `Vary: Accept-Encoding` before an encoding is chosen, unless an existing `Vary` field already lists `Accept-Encoding` or `*`.
 - If the compressed body is not smaller, the original body is sent.
 - `deflate` uses the zlib format, as required by HTTP.
 

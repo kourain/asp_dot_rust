@@ -1,3 +1,5 @@
+use http::StatusCode;
+
 use crate::{Application, configuration::StaticFileConfiguration, dependency_injection::CfgOption, http_context::HttpHeaderExt, macros::middleware, middleware::MiddlewareNext};
 
 pub struct StaticFileMiddleware {
@@ -48,6 +50,7 @@ impl StaticFileMiddleware {
             Ok(file_content) => {
                 http_context.response.headers.set_content_length(file_content.len());
                 http_context.response.body = file_content;
+                http_context.response.status_code = StatusCode::OK;
                 if let Some(extension) = canonical.extension().and_then(|e| e.to_str()) {
                     let content_type = match extension {
                         "html" => "text/html",
