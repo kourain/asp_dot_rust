@@ -7,6 +7,8 @@ mod rate_limit_config;
 mod request_timeout_config;
 mod startup_app_config;
 mod static_file_config;
+mod web_socket_options;
+pub use web_socket_options::WebSocketOptions;
 
 pub use compression_config::{CompressionConfiguration, CompressionLevel};
 pub use cors_config::CorsConfiguration;

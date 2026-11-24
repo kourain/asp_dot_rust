@@ -17,12 +17,14 @@ pub struct HttpContext {
     /// Per-request bag for middleware and handlers (e.g. authenticated user under `"user"`).
     pub context_data: HashMap<String, Box<dyn Any + Send + Sync>>,
     pub(crate) is_shareable: Arc<AtomicBool>,
+    pub(crate) web_socket_handshake: Option<super::WebSocketHandshake>,
 }
 
 impl HttpContext {
-    pub(crate) fn new(request: HttpRequest, response: HttpResponse, service_provider: ServiceProviderScope) -> Self {
+    pub(crate) fn new(request: HttpRequest, response: HttpResponse, service_provider: ServiceProviderScope, web_socket_handshake: Option<super::WebSocketHandshake>) -> Self {
         Self {
             request,
+            web_socket_handshake,
             response,
             service_provider: ReadOnly::new(service_provider),
             context_data: HashMap::new(),
@@ -33,6 +35,9 @@ impl HttpContext {
     /// Breaks the response stream when the response has started,
     /// Does nothing when the response has not started, set the status and body instead.
     pub fn abort(&mut self) {
+        if let Some(handshake) = &mut self.web_socket_handshake {
+            handshake.abort_socket();
+        }
         self.response.abort();
     }
 

@@ -19,6 +19,7 @@ pub struct Application {
     pub(crate) _middlewares: ApplicationMiddlewaresBuilder,
     pub(crate) _hosted_services: ApplicationHostedService,
     pub(crate) routing_builder: RoutingServiceBuilder,
+    pub(crate) web_sockets_enabled: bool,
 }
 impl Application {
     pub fn new(name: &str) -> ApplicationBuilder {
@@ -44,6 +45,7 @@ impl Application {
             _middlewares: middleware_builder,
             _hosted_services: hosted_services,
             routing_builder,
+            web_sockets_enabled,
         } = self;
 
         if ip.is_empty() {
@@ -62,7 +64,7 @@ impl Application {
 
         let middleware_pipeline = middleware_builder.build_pipeline(&service_provider).await;
         Self::run_bacground_service(hosted_services, &service_provider).await;
-        if let Err(e) = hyper_server(ip, http_port, service_provider, middleware_pipeline).await {
+        if let Err(e) = hyper_server(ip, http_port, service_provider, middleware_pipeline, web_sockets_enabled).await {
             panic!("Error occurred while running the application: {}", e);
         }
     }

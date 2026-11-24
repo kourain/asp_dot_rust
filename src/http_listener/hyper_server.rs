@@ -10,7 +10,13 @@ use std::{
 };
 use tokio::net::TcpListener;
 
-pub(crate) async fn hyper_server(ips: HashSet<IpAddr>, http_ports: HashSet<u16>, app_service_provider: ServiceProviderScope, middleware_pipeline: MiddlewareNext) -> std::io::Result<()> {
+pub(crate) async fn hyper_server(
+    ips: HashSet<IpAddr>,
+    http_ports: HashSet<u16>,
+    app_service_provider: ServiceProviderScope,
+    middleware_pipeline: MiddlewareNext,
+    web_sockets_enabled: bool,
+) -> std::io::Result<()> {
     let listeners = {
         // Every ip is served on every port. The order is fixed (IPv4 first), so the result never depends on HashSet order.
         let mut ips: Vec<IpAddr> = ips.into_iter().collect();
@@ -62,7 +68,8 @@ pub(crate) async fn hyper_server(ips: HashSet<IpAddr>, http_ports: HashSet<u16>,
                         let routing_service = routing_service.clone();
                         let hypercfg = hypercfg.capture().unwrap_or_default();
                         tokio::spawn(async move {
-                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, app_service_provider, middleware_pipeline, routing_service, hypercfg).await {
+                            if let Err(e) = crate::http_listener::hyper_service::hyper_service(stream, app_service_provider, middleware_pipeline, routing_service, hypercfg, web_sockets_enabled).await
+                            {
                                 LOGGER::error(format!("Error occurred: {}", e));
                             }
                         });

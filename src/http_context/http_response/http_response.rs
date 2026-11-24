@@ -156,6 +156,17 @@ impl HttpResponse {
         self.commit(None)
     }
 
+    /// Commits a protocol switch. All further bytes belong to the upgraded transport.
+    pub(crate) fn commit_upgrade(&mut self) -> io::Result<()> {
+        self.body.clear();
+        self.headers.remove(http::header::CONTENT_LENGTH);
+        self.headers.remove(http::header::TRANSFER_ENCODING);
+        self.commit(None)?;
+        self.body_tx = None;
+        self.written_phase = WritenPhase::END;
+        Ok(())
+    }
+
     /// Writes `data` to the stream. The first call sends the status and headers (no Content-Length is added, so the body is chunked unless you set it).
     /// Waits when the client is slow, returns an error when the client is gone, so a loop can stop.
     pub async fn write_async(&mut self, data: impl AsRef<[u8]>) -> io::Result<()> {

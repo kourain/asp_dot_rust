@@ -54,12 +54,13 @@ pub(crate) async fn hyper_service(
     middleware_pipeline: MiddlewareNext,
     routing_service: Serv<RoutingService>,
     hypercfg: CfgRequire<HyperConfig>,
+    web_sockets_enabled: bool,
 ) -> std::io::Result<()> {
     let client_socket_addr = stream.peer_addr().unwrap();
     let local_listen_socket_addr = stream.local_addr().unwrap();
     let connection_id: Arc<Ulid> = Arc::new(Ulid::generate());
     let limits = hypercfg.clone();
-    let hyper_service = service_fn(move |req| {
+    let hyper_service = service_fn(move |mut req| {
         let service_provider = service_provider.clone();
         let middleware_pipeline = middleware_pipeline.clone();
         let limits = limits.clone();
@@ -73,12 +74,17 @@ pub(crate) async fn hyper_service(
                 // the request body is not read, an HTTP/1.x connection can not be reused
                 return Ok::<_, Infallible>(HttpResponse::status_only(status, req.version() <= http::Version::HTTP_11));
             }
+            let handshake = if web_sockets_enabled {
+                crate::http_context::WebSocketHandshake::from_request(&mut req)
+            } else {
+                None
+            };
             let custom_req = HttpRequest::from_http(req, routing_info, max_body_size, client_socket_addr, local_listen_socket_addr, connection_id);
 
             // The response sends its head through `head_rx` as soon as the first byte is written or the response is complete
             let (custom_resp, head_rx) = HttpResponse::new_streaming();
 
-            let http_context = HttpContext::new(custom_req, custom_resp, service_provider.create_scope());
+            let http_context = HttpContext::new(custom_req, custom_resp, service_provider.create_scope(), handshake);
             Ok::<_, Infallible>(HandleError::run(middleware_pipeline, http_context, head_rx).await)
         }
     });
@@ -96,5 +102,10 @@ pub(crate) async fn hyper_service(
         .keep_alive_timeout(Duration::from_secs(hypercfg.http2_keep_alive_timeout))
         .max_header_list_size(u32::try_from(hypercfg.max_request_headers_size).unwrap_or(u32::MAX));
     let io = TokioIo::new(stream);
-    builder.serve_connection(io, hyper_service).await.map_err(std::io::Error::other)
+    if web_sockets_enabled {
+        builder.http2().enable_connect_protocol();
+        builder.serve_connection_with_upgrades(io, hyper_service).await.map_err(std::io::Error::other)
+    } else {
+        builder.serve_connection(io, hyper_service).await.map_err(std::io::Error::other)
+    }
 }

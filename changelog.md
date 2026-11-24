@@ -1,5 +1,9 @@
 # Change log
 
+## Unreleased
+
+- Added WebSocket middleware and `HttpContext::web_sockets()` for HTTP/1.1 Upgrade and HTTP/2 extended CONNECT, with origin restrictions, subprotocol selection and configurable keep-alive. [WebSocket guide](docs/web_sockets.md)
+
 ## 0.2.11
 
 ### 0.2.11 New

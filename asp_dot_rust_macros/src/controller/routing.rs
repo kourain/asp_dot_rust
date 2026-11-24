@@ -18,7 +18,7 @@ fn is_route_attr(attr: &Attribute) -> bool {
 
 fn is_http_method(method: impl AsRef<str>) -> bool {
     let method = method.as_ref();
-    HTTP_METHODS.iter().any(|m| m.eq_ignore_ascii_case(method))
+    method.eq_ignore_ascii_case("connect") || HTTP_METHODS.iter().any(|m| m.eq_ignore_ascii_case(method))
 }
 
 fn lit_str_from_expr(expr: &Expr) -> Option<LitStr> {

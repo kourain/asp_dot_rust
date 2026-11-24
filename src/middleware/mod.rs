@@ -8,6 +8,7 @@ pub(crate) mod rate_limit;
 pub(crate) mod request_timeout;
 pub(crate) mod static_file;
 pub(crate) mod swagger;
+mod web_sockets;
 
 use crate::dependency_injection::DependencyInjectableMiddleware;
 use crate::http_context::HttpContext;

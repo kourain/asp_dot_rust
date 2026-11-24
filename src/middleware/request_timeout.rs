@@ -15,15 +15,24 @@ impl RequestTimeoutMiddleware {
     async fn invoke_async(&self, http_context: &mut HttpContext) {
         LOGGER::debug("RequestTimeoutMiddleware: Checking request timeout");
         let timeout = std::time::Duration::from_secs(self.request_timeout_config.timeout_seconds);
-        if tokio::time::timeout(timeout, self.next.next_async(http_context)).await.is_err() {
-            LOGGER::warn("Request timed out");
-            if http_context.response.has_started() {
-                // the status is already sent, the only way to tell the client is to break the stream
-                http_context.abort();
-            } else {
-                http_context.response.status_code = http::StatusCode::REQUEST_TIMEOUT;
-                http_context.response.body = http::StatusCode::REQUEST_TIMEOUT.canonical_reason().unwrap_or("Request Timeout").as_bytes().to_vec();
+        let accepted = http_context.web_socket_handshake.as_ref().map(|handshake| handshake.accepted.clone());
+        {
+            let mut pipeline = self.next.next_async(http_context);
+            if tokio::time::timeout(timeout, &mut pipeline).await.is_ok() {
+                return;
             }
+            if accepted.is_some_and(|flag| flag.load(std::sync::atomic::Ordering::Acquire)) {
+                pipeline.await;
+                return;
+            }
+        }
+        LOGGER::warn("Request timed out");
+        if http_context.response.has_started() {
+            // the status is already sent, the only way to tell the client is to break the stream
+            http_context.abort();
+        } else {
+            http_context.response.status_code = http::StatusCode::REQUEST_TIMEOUT;
+            http_context.response.body = http::StatusCode::REQUEST_TIMEOUT.canonical_reason().unwrap_or("Request Timeout").as_bytes().to_vec();
         }
     }
 }

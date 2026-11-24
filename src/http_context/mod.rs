@@ -2,6 +2,9 @@ mod http_context;
 mod http_header;
 mod http_request;
 mod http_response;
+mod web_sockets;
+pub(crate) use web_sockets::WebSocketHandshake;
+pub use web_sockets::{WebSocket, WebSocketAcceptContext, WebSocketCloseFrame, WebSocketManager, WebSocketMessage};
 
 use crate::utils::ShareMutPtr;
 pub use http_context::{HttpContext, USER_CONTEXT_KEY};

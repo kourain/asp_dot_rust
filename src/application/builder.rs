@@ -95,6 +95,7 @@ impl ApplicationBuilder {
             https_port: self.https_port,
             service_provider: service,
             _middlewares: ApplicationMiddlewaresBuilder::new(),
+            web_sockets_enabled: false,
             _hosted_services: self.hosted_services,
             routing_builder: self.routing_builder,
             runner_id: uuid::Uuid::now_v7(),
