@@ -90,7 +90,7 @@ pub fn parse_action_params(inputs: &syn::punctuated::Punctuated<FnArg, syn::toke
 }
 
 /// Generate let-bindings and argument list for the action invoke.
-/// On bind failure sets status/body and returns from the match arm.
+/// Fallible binders return their error to the routing middleware.
 pub fn generate_bind_code(params: &[ActionParam]) -> (TokenStream2, Vec<TokenStream2>) {
     let main = asp_dot_rust_crate_path();
     let mut lets = Vec::new();
@@ -101,50 +101,29 @@ pub fn generate_bind_code(params: &[ActionParam]) -> (TokenStream2, Vec<TokenStr
         let name_lit = name.to_string();
         let inner = &param.inner;
         let wrapper = match param.kind {
-            BinderKind::FromRoute => quote! { #main::controller::FromRoute<#inner> },
-            BinderKind::FromQuery => quote! { #main::controller::FromQuery<#inner> },
-            BinderKind::FromOptionQuery => quote! { #main::controller::FromOptionQuery<#inner> },
-            BinderKind::FromBody => quote! { #main::controller::FromBody<#inner> },
-            BinderKind::FromForm => quote! { #main::controller::FromForm<#inner> },
+            BinderKind::FromRoute => quote! { #main::controller::FromRoute::<#inner> },
+            BinderKind::FromQuery => quote! { #main::controller::FromQuery::<#inner> },
+            BinderKind::FromOptionQuery => quote! { #main::controller::FromOptionQuery::<#inner> },
+            BinderKind::FromBody => quote! { #main::controller::FromBody::<#inner> },
+            BinderKind::FromForm => quote! { #main::controller::FromForm::<#inner> },
         };
 
         let bind_expr = match param.kind {
-            BinderKind::FromRoute => {
-                quote! { #wrapper::bind(#name_lit, &self.http_context) }
-            }
-            BinderKind::FromQuery => {
-                quote! { #wrapper::bind(#name_lit, &self.http_context) }
+            BinderKind::FromRoute | BinderKind::FromQuery => {
+                quote! { #wrapper::bind(#name_lit, &self.http_context)? }
             }
             BinderKind::FromOptionQuery => {
-                quote! { Ok::<_, #main::controller::BindError>(#wrapper::bind(#name_lit, &self.http_context)) }
+                quote! { #wrapper::bind(#name_lit, &self.http_context) }
             }
-            BinderKind::FromBody if param.is_string => {
-                quote! { #wrapper::bind(&mut self.http_context).await }
+            BinderKind::FromBody | BinderKind::FromForm if param.is_string => {
+                quote! { #wrapper::bind(&mut self.http_context).await? }
             }
-            BinderKind::FromBody => {
-                quote! { #wrapper::bind_serde(&mut self.http_context).await }
-            }
-            BinderKind::FromForm if param.is_string => {
-                quote! { #wrapper::bind(&mut self.http_context).await }
-            }
-            BinderKind::FromForm => {
-                quote! { #wrapper::bind_serde(&mut self.http_context).await }
+            BinderKind::FromBody | BinderKind::FromForm => {
+                quote! { #wrapper::bind_serde(&mut self.http_context).await? }
             }
         };
 
-        lets.push(quote! {
-            let #name = match #bind_expr {
-                Ok(value) => value,
-                Err(err) => {
-                    self.http_context.response.status_code = err.status_code();
-                    self.http_context.response.body = err.to_string().into_bytes();
-                    self.http_context.response.headers.set_content_type("text/plain");
-                    let body_len = self.http_context.response.body.len();
-                    self.http_context.response.headers.set_content_length(body_len);
-                    return;
-                }
-            };
-        });
+        lets.push(quote! { let #name = #bind_expr; });
         args.push(quote! { #name });
     }
 

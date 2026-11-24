@@ -1,12 +1,6 @@
 # Logging
 
-ASP.RS ships a non-blocking, channel-based logger. Calling `LOGGER::info(...)`
-(or any other level) never blocks the caller: the message is pushed onto a
-`tokio::sync::broadcast` channel and a background task formats and writes it
-to stdout/stderr. The same channel also carries configuration commands
-(`with_format`, `with_level`, ...), so every `LOGGER::with_*` call is
-asynchronous too — it is applied by the background task, not immediately in
-the calling thread.
+`LOGGER` publishes log entries and formatting commands to a Tokio broadcast channel. With the console sink enabled and running, a background task formats entries and writes to stdout or stderr. Calls to `with_level`, `with_format`, `with_time_format` and `with_color_output` enqueue commands for that task.
 
 ## Core concepts
 
@@ -14,26 +8,23 @@ the calling thread.
 | ------- | ---- | ------- |
 | Facade | `LOGGER` (unit struct, all `fn`s are `pub fn` on the type itself) | The API you call from anywhere in the app: `LOGGER::info(...)`, `LOGGER::with_level(...)`, etc. No instance to construct or inject. |
 | Formatter/writer | `Logger` | Holds the current level, format string, timestamp format and color setting, and actually writes a `LogInfo` to stdout/stderr. One instance lives inside the background task; you normally never construct one yourself. |
-| Severity | `LogLevel` | `Verbose < Trace < Debug < Info < Warn < Error < None`, in that order. A message is written only if its level is `>=` the configured level. |
-| Transport | `LogCommand` over a `broadcast::channel` | Internal enum carrying both log entries (`LogCommand::Log`) and configuration changes (`SetLogFormat`, `SetLogLevel`, `SetTimeFormat`, `SetUseColorOutput`, `SetEnable`, `SetDefaultLogger`). You don't construct these directly — the `LOGGER::with_*`/`enable`/`disable` methods do. |
+| Severity | `LogLevel` | The console writer compares each entry with its configured minimum. Custom receivers can implement their own filtering. |
+| Transport | `LogCommand` over a `broadcast::channel` | Receivers see log entries, formatting commands and `SetEnable` notifications. The public console-sink toggles update an atomic flag directly. |
 
 ## Quick start
 
 ```rust
 use asp_dot_rust::logging::{LOGGER, LogLevel};
 
-LOGGER::info("Starting up".to_string());
-LOGGER::warn("Cache miss, falling back to DB".to_string());
-LOGGER::error(format!("Failed to connect: {}", err));
-
-// Only show Warn and above from here on:
-LOGGER::with_level(LogLevel::Warn);
+#[tokio::main]
+async fn main() {
+    LOGGER::info("Starting up");
+    LOGGER::with_level(LogLevel::Warn);
+    LOGGER::warn("Cache miss, falling back to DB");
+}
 ```
 
-Logging works out of the box — you do not need to call `LOGGER::enable()`
-for the default console logger to print messages. `enable()`/`disable()`
-(see below) are only needed if you want to explicitly pause/resume all
-logging at runtime.
+The console sink is enabled by default. Make the first logger call inside a Tokio runtime. `ApplicationBuilder::new()` also logs. If the first call starts the console sink outside a runtime, initialization prints a warning and leaves the running flag set. Later calls to `enable_default_logger()` then skip startup. Custom broadcast receivers can still receive entries.
 
 ## Log levels
 
@@ -41,11 +32,11 @@ logging at runtime.
 | ----- | ------- | ----- |
 | `Verbose` | 0 | Lowest severity. |
 | `Trace` | 1 | |
-| `Debug` | 2 | Always suppressed in release builds (`cfg(not(debug_assertions))`), regardless of the configured level. |
+| `Debug` | 2 | The console writer suppresses this level in builds without debug assertions. Custom receivers still receive it. |
 | `Info` | 3 | **Default configured level.** |
 | `Warn` | 4 | |
 | `Error` | 5 | Written to stderr instead of stdout. |
-| `None` | 6 | Not used as a message level — pass it to `with_level(LogLevel::None)` to silence every message (nothing is ever `>= None`). |
+| `None` | 6 | As a console threshold it filters out `Verbose` through `Error`. An explicit `LOGGER::log(LogLevel::None, ...)` still meets that threshold. |
 
 ## Configuring output
 
@@ -62,11 +53,7 @@ LOGGER::with_color_output(false); // e.g. when writing to a file/non-TTY
   `{message}`. Anything else in the string (including `{requestid}` /
   `{connectionid}`, which existed in an earlier version) is treated as
   literal text and printed as-is.
-- Because every `with_*` call goes through the same channel as log
-  messages, a call immediately followed by a log line is not guaranteed to
-  apply to that exact line under concurrent load from multiple
-  tasks/threads — treat configuration as "effective shortly after the
-  call", set it once near startup rather than toggling it per-request.
+- The console task processes commands in channel order. Concurrent producers may interleave entries and configuration changes. A receiver that falls behind can miss commands.
 
 ## Enabling / disabling
 
@@ -81,20 +68,31 @@ repeatedly; logging resumes correctly after a prior `disable()`.
 
 ## Built-in request logging
 
-Every HTTP request already produces one access-log line automatically,
-after the middleware pipeline finishes:
+Requests that finish the middleware pipeline produce an Info access log with the remote address, method, HTTP version, response status, URI and elapsed time. A framework header-size or declared body-length rejection (431 or 413) logs a warning and returns before reaching this pipeline.
 
 ```txt
-[INF] 2026-10-04 12:00:00 127.0.0.1:51514 GET HTTP/1.1 /users/42 200 OK in 1.230 ms
+[INF] 2026-10-04 12:00:00 127.0.0.1:51514 GET HTTP/1.1 200 OK /users/42 in 1.230 ms
 ```
 
-If a handler or middleware panics, the panic is caught and logged
-separately as an error, including the request's identifiers, before a
-500 response is returned:
+With `panic = "unwind"`, the server catches a handler or middleware panic
+and logs an error with the request identifiers, source location, and backtrace.
+It sends HTTP 500 if the headers are still pending or aborts the stream if
+the headers were already sent.
 
 ```txt
-[ERR] 2026-10-04 12:00:00 Request <connection_id>:<request_id>, Unhandled panic: ...
+[ERR] 2026-10-04 12:00:00 Request <connection_id>:<request_id>, Unhandled panic at <file>:<line>:<column> (thread <name>): ...
+Backtrace:
+...
 ```
+
+The server captures the backtrace at the panic site without requiring
+`RUST_BACKTRACE`. A panic outside a request goes to the previous panic hook.
+The request log omits the panic hook and standard
+future polling frames. It keeps source locations for the remaining frames
+and cuts off the backtrace at `HandleError::run` when that frame is available.
+
+With `panic = "abort"`, Rust runs the process's existing panic hook before
+terminating the process. The server leaves that hook in place.
 
 `HttpContext::request.request_id` (`Ulid`, one per request) and
 `.connection_id` (`Ulid`, shared by every request on the same keep-alive
@@ -110,13 +108,19 @@ alongside) the built-in console sink:
 
 ```rust
 use asp_dot_rust::logging::{LOGGER, LogCommand};
+use tokio::sync::broadcast::error::RecvError;
 
 LOGGER::disable_default_logger(); // stop the built-in console sink, keep sending log commands
 let mut rx = LOGGER::spawn_log_receiver();
 
 tokio::spawn(async move {
-    while let Ok(LogCommand::Log(entry)) = rx.recv().await {
-        // write `entry` (LogInfo { timestamp, level, message }) wherever you want
+    loop {
+        match rx.recv().await {
+            Ok(LogCommand::Log(entry)) => eprintln!("{}", entry.message),
+            Ok(_) => continue,
+            Err(RecvError::Lagged(count)) => eprintln!("Skipped {count} log commands"),
+            Err(RecvError::Closed) => break,
+        }
     }
 });
 ```
@@ -127,13 +131,10 @@ tokio::spawn(async move {
 
 - No structured logging — every entry is a single formatted `String`;
   there is no key/value or JSON output mode.
-- No per-module or per-target log level — `with_level` is one global
-  threshold for the whole process.
+- The console level applies process-wide. A custom receiver receives entries at all levels while publishing is enabled.
 - The built-in access-log line does not include `request_id`/`connection_id`
   (see above) — only the panic line does.
-- `disable_default_logger()` does not take effect instantly: the
-  background task only notices the change when it next receives a log
-  command, so one more message may still be printed right after calling it.
+- `disable_default_logger()` updates the console flag immediately. The console task checks it after waking to receive a command. A write already in progress can finish.
 - No file rotation or file output built in — plug in your own sink (see
   above) if you need that.
 
@@ -143,7 +144,7 @@ tokio::spawn(async move {
 | ------ | ----------- |
 | `LOGGER::trace/debug/info/warn/error/verbose(message)` | Log a message at the given level (non-blocking). |
 | `LOGGER::log(level, message)` | Same, with an explicit `LogLevel`. |
-| `LOGGER::with_level(level)` | Set the minimum level that gets written. |
+| `LOGGER::with_level(level)` | Set the minimum level for the console sink. |
 | `LOGGER::with_format(format)` | Set the output format string (`{level}`, `{timestamp}`, `{message}`). |
 | `LOGGER::with_time_format(format)` | Set the `chrono` strftime format used for `{timestamp}`. |
 | `LOGGER::with_color_output(bool)` | Enable/disable ANSI-colored level tags. |

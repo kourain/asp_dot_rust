@@ -1,13 +1,22 @@
 use std::collections::HashMap;
 
+use crate::controller::BindError;
 use crate::services::routing::RouteAttributeMap;
 
-#[async_trait::async_trait]
-pub trait Routing: 'static + Sized
-where
-    Self: Sized,
-{
-    async fn routing(&mut self, method_name: &'static str);
+#[deprecated(note = "Routing will be removed, use Controller instead")]
+pub use crate::controller::Controller as Routing;
+
+/// A failure to dispatch an action or bind its arguments.
+#[derive(Debug)]
+pub enum RoutingError {
+    ActionNotFound,
+    Bind(BindError),
+}
+
+impl From<BindError> for RoutingError {
+    fn from(error: BindError) -> Self {
+        Self::Bind(error)
+    }
 }
 
 #[derive(Debug)]

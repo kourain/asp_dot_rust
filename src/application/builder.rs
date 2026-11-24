@@ -4,9 +4,10 @@ use crate::{
     Application,
     hosted_service::{ApplicationHostedService, ConfigurationWatcherBackgroundService},
     logging::LOGGER,
-    middleware::app_middlewares::ApplicationMiddlewares,
+    middleware::app_middlewares::ApplicationMiddlewaresBuilder,
     services::{
         configuration::ConfigurationService,
+        routing::{RoutingService, RoutingServiceBuilder},
         service_provider::{ServiceType, service_provider_scope::ServiceProviderScope},
     },
 };
@@ -19,6 +20,7 @@ pub struct ApplicationBuilder {
     pub configuration: ConfigurationService,
     pub service: ServiceProviderScope,
     pub(crate) hosted_services: ApplicationHostedService,
+    pub(crate) routing_builder: RoutingServiceBuilder,
 }
 
 impl ApplicationBuilder {
@@ -31,6 +33,7 @@ impl ApplicationBuilder {
             configuration: ConfigurationService::new(),
             service: ServiceProviderScope::new(),
             hosted_services: Vec::new(),
+            routing_builder: Default::default(),
         };
         LOGGER::info(format!("Initializing application builder: {}", name));
         app
@@ -66,7 +69,7 @@ impl ApplicationBuilder {
         self.http_port.insert(port);
         self
     }
-    
+
     #[track_caller]
     pub fn with_https_port(&mut self, port: u16) -> &mut Self {
         if self.http_port.contains(&port) {
@@ -79,21 +82,21 @@ impl ApplicationBuilder {
 
     pub fn build(mut self) -> Application {
         self.load_data_from_args();
-        // every TOML file is watched by default, so the configuration follows its changes
         if !self.configuration.watched_files().is_empty() {
             self.add_hosted_service::<ConfigurationWatcherBackgroundService>();
         }
         let mut service = self.service;
         service.add_instance::<ConfigurationService>(Arc::new(self.configuration), ServiceType::Singleton);
-        service.check_dependency_cycles();
+        service.add_singleton::<RoutingService>();
         Application {
             name: self.name,
             ip: self.ip,
             http_port: self.http_port,
             https_port: self.https_port,
             service_provider: service,
-            _middlewares: ApplicationMiddlewares::new(),
+            _middlewares: ApplicationMiddlewaresBuilder::new(),
             _hosted_services: self.hosted_services,
+            routing_builder: self.routing_builder,
             runner_id: uuid::Uuid::now_v7(),
         }
     }

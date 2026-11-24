@@ -116,7 +116,6 @@ pub(crate) fn merged_attribute_calls(impl_entries: &[AttrEntry], method_entries:
             let key_name = entry.key.unraw().to_string();
             let key = LitStr::new(&key_name, entry.key.span());
             let value = &entry.value;
-            // the value is stored as its own type, read it back with exactly that type
             quote! { .with_attribute(#key, #value) }
         })
         .collect()

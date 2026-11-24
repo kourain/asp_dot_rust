@@ -1,21 +1,21 @@
-use asp_dot_rust::controller::{ActionRoute, Routing};
+use asp_dot_rust::controller::{ActionResult, ActionRoute, Controller, RoutingError};
 use asp_dot_rust::dependency_injection::DependencyInjectableController;
-use asp_dot_rust::http_context::HttpContext;
+use asp_dot_rust::http_context::HttpContextRef;
 use asp_dot_rust::services::routing::{RoutingResult, RoutingService, RoutingServiceBuilder};
 use std::collections::HashSet;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 
 struct TestController;
 #[async_trait::async_trait]
 impl DependencyInjectableController for TestController {
-    async fn inject(_http_context: &mut HttpContext, _is_valid: Arc<AtomicBool>) -> Self {
+    async fn inject(_http_context: HttpContextRef) -> Self {
         TestController
     }
 }
 #[async_trait::async_trait]
-impl Routing for TestController {
-    async fn routing(&mut self, _method_name: &'static str) {}
+impl Controller for TestController {
+    async fn routing(&mut self, _method_name: &'static str) -> Result<Box<dyn ActionResult + '_>, RoutingError> {
+        Err(RoutingError::ActionNotFound)
+    }
 }
 
 /// `/home` accepts GET and POST, `/home/{id}` accepts GET only.
@@ -29,7 +29,8 @@ fn build_test_service() -> RoutingService {
             ActionRoute::new("by_id", vec!["get"], "{id}"),
         ],
     );
-    builder.build()
+    let (service, _) = builder.build();
+    service
 }
 
 #[test]

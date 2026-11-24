@@ -1,7 +1,4 @@
-use crate::services::{
-    openapi::RegisteredOperation,
-    routing::{Route, RoutingResult, routing_result::ResolvedRoute},
-};
+use crate::services::routing::{Route, RoutingResult, routing_result::ResolvedRoute};
 use asp_dot_rust_macros::DependencyInjectableService;
 use matchit::Router;
 use std::{
@@ -12,12 +9,8 @@ use std::{
 
 #[derive(Clone, Default, Debug, DependencyInjectableService)]
 pub struct RoutingService {
-    /// key: "route", value: HashMap<http_method, resolved controller action info>
     #[di(default)]
     pub(crate) _router: Router<HashMap<http::Method, Arc<Route>>>,
-    /// Flat list of registered operations for OpenAPI generation.
-    #[di(default)]
-    pub(crate) _operations: Vec<RegisteredOperation>,
 }
 
 impl RoutingService {
@@ -59,15 +52,6 @@ impl RoutingService {
     }
     pub fn get_allowed_methods(&self, path: &str) -> HashSet<http::Method> {
         let matched = self._router.at(path);
-        if let Ok(matched) = matched {
-            matched.value.keys().cloned().collect()
-        } else {
-            HashSet::new()
-        }
-    }
-
-    /// Returns all registered operations for OpenAPI document generation.
-    pub fn registered_operations(&self) -> Vec<RegisteredOperation> {
-        self._operations.clone()
+        if let Ok(matched) = matched { matched.value.keys().cloned().collect() } else { HashSet::new() }
     }
 }

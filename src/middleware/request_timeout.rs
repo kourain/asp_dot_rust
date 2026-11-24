@@ -24,8 +24,6 @@ impl RequestTimeoutMiddleware {
                 http_context.response.status_code = http::StatusCode::REQUEST_TIMEOUT;
                 http_context.response.body = http::StatusCode::REQUEST_TIMEOUT.canonical_reason().unwrap_or("Request Timeout").as_bytes().to_vec();
             }
-        } else {
-            // Request completed within the timeout
         }
     }
 }

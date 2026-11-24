@@ -2,7 +2,7 @@
 use asp_dot_rust::{
     ApplicationBuilder, api_controller,
     configuration::JwtAuthConfiguration,
-    controller::{ActionResult, get},
+    controller::{ActionResult, get, results},
     http_context::{HttpContextRef, USER_CONTEXT_KEY},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -27,10 +27,11 @@ impl AuthController {
 
     #[get("/whoami")]
     pub async fn whoami(&mut self) -> impl ActionResult {
-        match self.http_context.get_item::<AuthUser>(USER_CONTEXT_KEY) {
+        let body = match self.http_context.get_item::<AuthUser>(USER_CONTEXT_KEY) {
             Some(user) => format!("{}:{}", user.scheme, user.name),
             None => "none".to_string(),
-        }
+        };
+        results::ok(body)
     }
 }
 

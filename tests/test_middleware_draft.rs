@@ -1,7 +1,7 @@
 //! Behavior of the middleware chain in the style of ASP.NET: order, stop and wrappers.
 use asp_dot_rust::{
     ApplicationBuilder, api_controller,
-    controller::{ActionResult, get},
+    controller::{ActionResult, get, results},
     http_context::{HttpContext, HttpContextRef},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -70,12 +70,12 @@ impl HookController {
     #[get("/ok")]
     pub async fn ok(&mut self) -> impl ActionResult {
         event("handler");
-        "ok"
+        results::ok("ok")
     }
     #[get("/blocked")]
     pub async fn blocked(&mut self) -> impl ActionResult {
         event("handler");
-        "blocked"
+        results::ok("blocked")
     }
 }
 

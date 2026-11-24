@@ -4,12 +4,12 @@ A response is written to the connection in one of two ways.
 
 ## Complete response
 
-Return a value from the controller (`&str`, `String`, `Vec<u8>`, ...) or set `response.body`. Middlewares can still change the status, headers and body (for example compression). When the pipeline ends, the head and the whole body are written to the stream in 64KB chunks, with `Content-Length` set.
+Return an action result such as `results::ok(body)` to send a buffered controller response. The router clears `response.body` before the result writes its body. Middleware can set the status and body itself when it handles a request, or modify the buffered response after `next_async` returns. At completion the framework sends `Content-Length` and writes the buffer in chunks of up to 64 KiB. For 1xx, 204 and 304 it removes `Content-Length` and skips the body.
 
 ```rust
 #[get("/")]
 pub async fn index(&mut self) -> impl ActionResult {
-    "<html><body>Hello world</body></html>"
+    results::ok("<html><body>Hello world</body></html>")
 }
 ```
 
@@ -20,13 +20,14 @@ Call `write_async` on `http_context.response`. It takes anything that is `AsRef<
 ```rust
 #[get("/stream")]
 pub async fn stream(&mut self) -> impl ActionResult {
+    use asp_dot_rust::http_context::HttpHeaderExt;
     self.http_context.response.headers.insert_str("Content-Type", "text/plain");
     for part in ["one\n", "two\n"] {
         if self.http_context.response.write_async(part).await.is_err() {
             break; // the client is gone
         }
     }
-    ""
+    results::ok("")
 }
 ```
 
@@ -46,8 +47,9 @@ pub async fn stream(&mut self) -> impl ActionResult {
 - A status that is still the default (204) is sent as 200 when you stream.
 - No `Content-Length` is added when streaming, the body is chunked (HTTP/1.1) unless you set the header yourself.
 - `write_async` waits when the client is slow and returns an error when the client has disconnected.
-- Bytes still in `response.body` when the pipeline ends are written after the streamed bytes. The returned `""` adds nothing.
+- To append text after streamed bytes, return `results::ok("tail")`. The router clears the action’s buffer, writes the result, and flushes the remaining bytes at pipeline completion. `results::ok("")` appends nothing. If the action calls `complete_async()` first, the router skips the returned result.
 - `complete_async` writes the head and `response.body` and ends the stream now, instead of when the pipeline ends.
 - `CompressionMiddleware` skips a response that is already streamed.
-- A panic or a request timeout after the first write breaks the stream, so the client does not see a body that looks complete. Before the first write they give 500 and 408.
+- When `use_request_timeout()` is enabled, a timeout returns HTTP 408 before the headers are sent and breaks the stream afterward.
+- With `panic = "unwind"`, a panic returns HTTP 500 before the headers are sent and breaks the stream afterward. With `panic = "abort"`, a panic terminates the process.
 - `http_context.abort()` breaks the stream by hand. It does nothing before the first write.

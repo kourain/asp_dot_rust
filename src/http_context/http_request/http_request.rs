@@ -1,4 +1,4 @@
-use crate::services::routing::ResolvedRoute;
+use crate::{services::routing::ResolvedRoute, utils::ReadOnly};
 use http::{HeaderMap, Uri};
 use hyper::body::Incoming;
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use super::request_body::RequestBody;
 
 pub struct HttpRequest {
     pub connection_id: Arc<Ulid>,
-    pub request_id: Ulid,
+    pub request_id: ReadOnly<Ulid>,
     pub http_version: http::Version,
     pub keep_alive: bool,
     pub method: http::Method,
@@ -17,8 +17,6 @@ pub struct HttpRequest {
     /// Request body: live stream or in-memory buffer after `enable_buffering`.
     /// Reading more than `max_body_size` bytes from the stream fails with `LengthLimitError`.
     pub body: RequestBody,
-    /// Body size limit applied to this request (route `max_body_size` or the global default).
-    pub max_body_size: usize,
     pub client_socket_addr: std::net::SocketAddr,
     pub local_socket_addr: std::net::SocketAddr,
     pub routing_info: ResolvedRoute,
@@ -37,12 +35,11 @@ impl HttpRequest {
         let (part, body) = http.into_parts();
         Self {
             connection_id,
-            request_id: Ulid::generate(),
+            request_id: ReadOnly::new(Ulid::generate()),
             method: part.method,
             uri: part.uri,
             http_version: part.version,
             body: RequestBody::from_incoming(body, max_body_size),
-            max_body_size,
             headers: part.headers,
             keep_alive: true,
             client_socket_addr,
@@ -55,10 +52,7 @@ impl HttpRequest {
     ///
     /// After this succeeds, [`seek_body`](Self::seek_body)`(0)` resets the read position.
     pub async fn enable_buffering(&mut self) -> Result<(), String> {
-        self.body
-            .enable_buffering()
-            .await
-            .map_err(|e| e.to_string())
+        self.body.enable_buffering().await.map_err(|e| e.to_string())
     }
 
     /// Set the body read position (only after buffering). Use `0` to read again from the start.

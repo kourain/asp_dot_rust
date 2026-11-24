@@ -55,7 +55,7 @@ impl AppQueueService {
                             panic!("Queue: cast failed {} {}", std::any::type_name::<S>(), std::any::type_name::<V>());
                         }
                     },
-                    None => break, // queue empty
+                None => break,
                 }
             }
         }
