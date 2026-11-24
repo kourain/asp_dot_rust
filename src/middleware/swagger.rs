@@ -32,20 +32,21 @@ impl SwaggerMiddleware {
     }
 
     pub async fn invoke_async(&self, http_context: &mut HttpContext) {
-        let path = http_context.request.path();
-        let prefix = self.route_prefix.as_str();
-        let json_path = format!("{}/v1/swagger.json", prefix);
+        {
+            let path = http_context.request.path();
+            let prefix = self.route_prefix.as_str();
+            let json_path = format!("{}/v1/swagger.json", prefix);
 
-        if path == json_path || path == format!("{}/v1/swagger.json/", prefix.trim_end_matches('/')) {
-            self.serve_json(http_context).await;
-            return;
+            if path == json_path || path == format!("{}/v1/swagger.json/", prefix.trim_end_matches('/')) {
+                self.serve_json(http_context).await;
+                return;
+            }
+
+            if path == prefix || path == format!("{}/", prefix) || path == format!("{}/index.html", prefix) {
+                self.serve_ui(http_context).await;
+                return;
+            }
         }
-
-        if path == prefix || path == format!("{}/", prefix) || path == format!("{}/index.html", prefix) {
-            self.serve_ui(http_context).await;
-            return;
-        }
-
         self.next.next_async(http_context).await;
     }
 

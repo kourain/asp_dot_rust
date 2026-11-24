@@ -1,11 +1,4 @@
-use crate::{
-    Application,
-    configuration::StaticFileConfiguration,
-    dependency_injection::CfgOption,
-    http_context::HttpHeaderExt,
-    macros::middleware,
-    middleware::MiddlewareNext,
-};
+use crate::{Application, configuration::StaticFileConfiguration, dependency_injection::CfgOption, http_context::HttpHeaderExt, macros::middleware, middleware::MiddlewareNext};
 
 pub struct StaticFileMiddleware {
     next: MiddlewareNext,
@@ -53,6 +46,7 @@ impl StaticFileMiddleware {
 
         match tokio::fs::read(&canonical).await {
             Ok(file_content) => {
+                http_context.response.headers.set_content_length(file_content.len());
                 http_context.response.body = file_content;
                 if let Some(extension) = canonical.extension().and_then(|e| e.to_str()) {
                     let content_type = match extension {
@@ -73,7 +67,7 @@ impl StaticFileMiddleware {
                         "woff2" => "font/woff2",
                         _ => "application/octet-stream",
                     };
-                    http_context.response.headers.insert_str("Content-Type", content_type);
+                    http_context.response.headers.set_content_type(content_type);
                 }
             }
             Err(_) => {
