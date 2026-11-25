@@ -1,4 +1,4 @@
-use crate::{ApplicationBuilder, configuration::StartupArgsConfiguration, dependency_injection::CfgRequire};
+use crate::{ApplicationBuilder, logging::LOGGER, configuration::StartupArgsConfiguration, dependency_injection::CfgRequire};
 
 impl ApplicationBuilder {
     /// Parse `std::env::args()` (skipping the binary name) and apply them to
@@ -27,7 +27,13 @@ impl ApplicationBuilder {
     }
     fn set_https_port(&mut self, cli: &CfgRequire<StartupArgsConfiguration>) {
         if let Some(port) = cli.get_parsed::<u16>("https-port") {
-            self.with_https_port(port);
+            match (cli.get("tls-cert"), cli.get("tls-key")) {
+                (Some(cert), Some(key)) => {
+                    self.with_https_port(port, cert, key);
+                }
+                (None, _) => LOGGER::warn("--https-port was specified without a corresponding --tls-cert"),
+                (_, None) => LOGGER::warn("--https-port was specified without a corresponding --tls-key"),
+            }
         }
     }
 }

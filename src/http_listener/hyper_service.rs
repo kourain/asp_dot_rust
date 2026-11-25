@@ -12,8 +12,8 @@ use crate::{
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioIo, TokioTimer};
 use hyper_util::server::conn::auto as auto_conn;
-use std::{convert::Infallible, sync::Arc, time::Duration};
-use tokio::net::TcpStream;
+use std::{convert::Infallible, net::SocketAddr, sync::Arc, time::Duration};
+use tokio::io::{AsyncRead, AsyncWrite};
 use ulid::Ulid;
 
 use super::handle_error::HandleError;
@@ -48,15 +48,28 @@ fn exceeds_limits<B>(req: &http::Request<B>, limits: &HyperConfig, max_body_size
     None
 }
 
-pub(crate) async fn hyper_service(
-    stream: TcpStream,
+/// Serve a single accepted connection over HTTP/1 or HTTP/2 (negotiated
+/// automatically). `io` can be a plain `TcpStream` (HTTP) or a TLS-wrapped
+/// stream such as `tokio_rustls::server::TlsStream<TcpStream>` (HTTPS) —
+/// both implement `AsyncRead + AsyncWrite`, so this function is shared by
+/// the HTTP and HTTPS listeners instead of being duplicated.
+///
+/// The peer/local socket addresses are taken as parameters (rather than
+/// queried from `io` itself) because a TLS stream no longer exposes
+/// `peer_addr`/`local_addr` directly; callers grab these from the raw
+/// `TcpStream` before wrapping it (e.g. before the TLS handshake).
+pub(crate) async fn hyper_service<S>(
+    io: S,
+    client_socket_addr: SocketAddr,
+    local_listen_socket_addr: SocketAddr,
     service_provider: Arc<ServiceProviderScope>,
     middleware_pipeline: MiddlewareNext,
     routing_service: Serv<RoutingService>,
     hypercfg: CfgRequire<HyperConfig>,
-) -> std::io::Result<()> {
-    let client_socket_addr = stream.peer_addr().unwrap();
-    let local_listen_socket_addr = stream.local_addr().unwrap();
+) -> std::io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     let connection_id: Arc<Ulid> = Arc::new(Ulid::generate());
     let limits = hypercfg.clone();
     let hyper_service = service_fn(move |req| {
@@ -95,6 +108,7 @@ pub(crate) async fn hyper_service(
         .keep_alive_interval(Duration::from_secs(hypercfg.http2_keep_alive_interval))
         .keep_alive_timeout(Duration::from_secs(hypercfg.http2_keep_alive_timeout))
         .max_header_list_size(u32::try_from(hypercfg.max_request_headers_size).unwrap_or(u32::MAX));
-    let io = TokioIo::new(stream);
+    // wrap the async stream so hyper-util can use hyper RT traits
+    let io = TokioIo::new(io);
     builder.serve_connection(io, hyper_service).await.map_err(std::io::Error::other)
 }

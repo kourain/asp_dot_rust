@@ -10,7 +10,7 @@ pub use inject_types::{CfgOption, CfgReload, CfgRequire, Serv};
 
 #[async_trait::async_trait]
 pub trait DependencyInjectableService: Send + Sync + 'static {
-    async fn inject(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope) -> Self
+    async fn inject(service_scope: &crate::services::service_provider::ServiceProviderScope) -> Self
     where
         Self: Sized;
     fn forgot_register_message() -> String
@@ -31,7 +31,7 @@ pub trait DependencyInjectableController: Send + Sync + 'static {
 /// Creates a middleware from the services and the next middleware.
 #[async_trait::async_trait]
 pub trait DependencyInjectableMiddleware {
-    async fn inject(service_scope: &crate::services::service_provider::service_provider_scope::ServiceProviderScope, next: crate::middleware::MiddlewareNext) -> Self
+    async fn inject(service_scope: &crate::services::service_provider::ServiceProviderScope, next: crate::middleware::MiddlewareNext) -> Self
     where
         Self: Sized;
 }

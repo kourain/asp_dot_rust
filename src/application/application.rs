@@ -3,10 +3,10 @@ use std::{collections::HashSet, net::IpAddr, sync::Arc};
 use crate::{
     ApplicationBuilder,
     hosted_service::ApplicationHostedService,
-    http_listener::hyper_server,
+    http_listener::{hyper_server, hyper_server_tls},
     logging::LOGGER,
     middleware::app_middlewares::ApplicationMiddlewaresBuilder,
-    services::{configuration::ConfigurationService, routing::RoutingServiceBuilder, service_provider::service_provider_scope::ServiceProviderScope},
+    services::{configuration::ConfigurationService, routing::RoutingServiceBuilder, service_provider::ServiceProviderScope},
 };
 
 pub struct Application {
@@ -15,6 +15,7 @@ pub struct Application {
     pub(crate) ip: HashSet<IpAddr>,
     pub(crate) http_port: HashSet<u16>,
     pub(crate) https_port: HashSet<u16>,
+    pub(crate) tls_config: Option<Arc<rustls::ServerConfig>>,
     pub service_provider: ServiceProviderScope,
     pub(crate) _middlewares: ApplicationMiddlewaresBuilder,
     pub(crate) _hosted_services: ApplicationHostedService,
@@ -40,6 +41,7 @@ impl Application {
             mut ip,
             mut http_port,
             https_port,
+            tls_config,
             mut service_provider,
             _middlewares: middleware_builder,
             _hosted_services: hosted_services,
@@ -62,7 +64,15 @@ impl Application {
 
         let middleware_pipeline = middleware_builder.build_pipeline(&service_provider).await;
         Self::run_bacground_service(hosted_services, &service_provider).await;
-        if let Err(e) = hyper_server(ip, http_port, service_provider, middleware_pipeline).await {
+        let service_provider = Arc::new(service_provider);
+        let http = hyper_server(&ip, http_port, service_provider.clone(), middleware_pipeline.clone());
+        let result = if https_port.is_empty() {
+            http.await
+        } else {
+            let tls_config = tls_config.expect("HTTPS ports require a loaded TLS certificate");
+            tokio::try_join!(http, hyper_server_tls(&ip, https_port, service_provider, middleware_pipeline, tls_config)).map(|_| ())
+        };
+        if let Err(e) = result {
             panic!("Error occurred while running the application: {}", e);
         }
     }

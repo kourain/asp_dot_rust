@@ -5,7 +5,7 @@ use crate::{
     http_context::{HttpContext, USER_CONTEXT_KEY, HttpHeaderExt},
     macros::middleware,
     middleware::{Middleware, MiddlewareNext},
-    services::service_provider::service_provider_scope::ServiceProviderScope,
+    services::service_provider::ServiceProviderScope,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};

@@ -26,13 +26,9 @@ Parsing is a single left-to-right pass over the token list:
 
 Additional parsing rules, verified against `tests/command_line_configuration.rs`:
 
-- **Last occurrence wins.** `--http-port 8080 --http-port 9090` resolves to
-  `"9090"`.
-- **A boolean flag does not consume the next flag.**
-  `--verbose --http-port 8080` yields `verbose = "true"` *and*
-  `http-port = "8080"`, not `verbose = "--http-port"`.
-- **Positional tokens (no `--` prefix) are dropped entirely** and do not
-  count toward `len()`.
+- **Last occurrence wins.** `--http-port 8080 --http-port 9090` resolves to `"9090"`.
+- **A boolean flag does not consume the next flag.** `--verbose --http-port 8080` yields `verbose = "true"` *and* `http-port = "8080"`, not `verbose = "--http-port"`.
+- **Positional tokens (no `--` prefix) are dropped entirely** and do not count toward `len()`.
 - A bare `--` with nothing after it (empty key) is ignored.
 
 ## Framework-recognized flags
@@ -43,11 +39,13 @@ During `build()` the builder reads these keys from the registered configuration.
 | ---- | ----------- | -------- |
 | `--ip <addr>` | `with_ip` | Parses a `std::net::IpAddr`. An invalid address panics during `build()`. |
 | `--http-port <port>` | `with_http_port` | Adds the port if the value parses as `u16`. |
-| `--https-port <port>` | `with_https_port` | Records the port and logs a warning. The server currently opens HTTP listeners only. Using the same port for HTTP and HTTPS panics. |
+| `--https-port <port>` | `with_https_port` | Enables HTTPS when both TLS file paths are provided. |
+| `--tls-cert <path>` | `with_https_port` | Path to the PEM certificate chain, with the leaf certificate first. |
+| `--tls-key <path>` | `with_https_port` | Path to the PEM private key. |
 
-Any other flag (e.g. `--verbose`, `--env=dev`, `--worker-threads 4`) is
-parsed and stored, but **not** interpreted by the framework — reading it is
-entirely up to your own code.
+If `--https-port` is given without either `--tls-cert` or `--tls-key`, HTTPS is **not** enabled — a warning is logged and only the HTTP listener starts. A malformed or unreadable certificate/key panics at build time instead of being silently ignored. See `docs/hyper_server.md#https--tls` for full details, including the single-certificate limitation and how to configure HTTPS directly on `ApplicationBuilder` without the command line.
+
+Any other flag (e.g. `--verbose`, `--env=dev`, `--worker-threads 4`) is parsed and stored, but **not** interpreted by the framework — reading it is entirely up to your own code.
 
 ## Reading flags in an injectable service
 
