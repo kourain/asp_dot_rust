@@ -16,6 +16,7 @@ pub mod prelude {
     pub use crate::controller::{
         ActionResult, BindError, FromBody, FromForm, FromOptionQuery, FromQuery, FromRoute, controller_inject, controller_route, delete, get, head, options, patch, post, put, query, results,
         results::RouteResult,
+        Validate, ValidationError,
     };
     #[allow(deprecated)]
     pub use crate::dependency_injection::Cfg;

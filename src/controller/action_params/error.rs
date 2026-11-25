@@ -1,5 +1,6 @@
 use http::StatusCode;
 use std::fmt;
+use crate::controller::ValidationError;
 
 /// Error returned when binding a request parameter fails.
 #[derive(Debug)]
@@ -20,6 +21,8 @@ pub enum BindError {
     InvalidUtf8,
     /// Deserialization failed (JSON, XML, or form).
     Deserialize(String),
+    /// A bound DTO failed its validator.
+    Validation(ValidationError),
 }
 
 impl BindError {
@@ -32,7 +35,8 @@ impl BindError {
             | Self::ParseQueryParam { .. }
             | Self::UnsupportedMediaType(_)
             | Self::InvalidUtf8
-            | Self::Deserialize(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            | Self::Deserialize(_)
+            | Self::Validation(_) => StatusCode::UNPROCESSABLE_ENTITY,
             Self::BodyRead(_) => StatusCode::BAD_REQUEST,
         }
     }
@@ -53,6 +57,7 @@ impl fmt::Display for BindError {
             Self::UnsupportedMediaType(ct) => write!(f, "unsupported Content-Type: {ct}"),
             Self::InvalidUtf8 => write!(f, "request body is not valid UTF-8"),
             Self::Deserialize(msg) => write!(f, "failed to deserialize body: {msg}"),
+            Self::Validation(error) => error.fmt(f),
         }
     }
 }

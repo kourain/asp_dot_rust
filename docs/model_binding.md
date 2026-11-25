@@ -27,6 +27,10 @@ For `FromBody<T>`, the serde path accepts `application/json`, `text/json`, `appl
 
 `FromForm<T>` accepts `application/x-www-form-urlencoded` and also attempts binding when the header is missing or the media type is empty. Both binders ignore media type parameters and compare media types case-insensitively.
 
+## DTO validation
+
+Implement `Validate` on a DTO to run its rules in every controller action that accepts it through `FromBody<T>` or `FromForm<T>`. The router calls `validate()` after deserialization and before invoking the action. A DTO with only `Deserialize` proceeds directly to the action. Calling `bind_serde` directly performs deserialization alone.
+
 ## Example
 
 ```rust
@@ -38,6 +42,15 @@ use serde::Deserialize;
 struct CreateUser {
     name: String,
     age: u32,
+}
+
+impl Validate for CreateUser {
+    fn validate(&self) -> Result<(), ValidationError> {
+        if self.name.chars().count() > 80 {
+            return Err(ValidationError::new("name", "maximum length is 80"));
+        }
+        Ok(())
+    }
 }
 
 asp_dot_rust::api_controller!(UsersController {});

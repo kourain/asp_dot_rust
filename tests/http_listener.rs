@@ -1,6 +1,6 @@
 use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,
-    controller::{ActionResult, FromBody, get, post, query, results, route},
+    controller::{ActionResult, FromBody, FromForm, Validate, ValidationError, get, post, query, results, route},
     http_context::{HttpContextRef, HttpHeaderExt},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -16,6 +16,20 @@ api_controller!(pub ListenerController {});
 #[derive(serde::Deserialize)]
 struct SearchFilter {
     term: String,
+}
+
+#[derive(serde::Deserialize)]
+struct LimitedSearch {
+    term: String,
+}
+
+impl Validate for LimitedSearch {
+    fn validate(&self) -> Result<(), ValidationError> {
+        if self.term.chars().count() > 3 {
+            return Err(ValidationError::new("term", "maximum length is 3"));
+        }
+        Ok(())
+    }
 }
 
 #[controller_route]
@@ -35,6 +49,18 @@ impl ListenerController {
     #[query("/search")]
     #[route(["QuErY"], "/search-alias")]
     async fn search(&self, filter: FromBody<SearchFilter>) -> impl ActionResult {
+        results::ok(filter.into_inner().term)
+    }
+    #[post("/search-form")]
+    fn search_form(&self, filter: FromForm<SearchFilter>) -> impl ActionResult {
+        results::ok(filter.into_inner().term)
+    }
+    #[post("/limited-form")]
+    fn limited_form(&self, filter: FromForm<LimitedSearch>) -> impl ActionResult {
+        results::ok(filter.into_inner().term)
+    }
+    #[post("/limited-body")]
+    async fn limited_body(&self, filter: FromBody<LimitedSearch>) -> impl ActionResult {
         results::ok(filter.into_inner().term)
     }
     #[get("/utf8-header")]
@@ -315,6 +341,29 @@ async fn query_routes_bind_body_and_are_discoverable() {
     assert_ne!(search["operationId"], alias["operationId"]);
     assert!(document["paths"]["/listener"]["get"].is_object());
     assert!(document["paths"]["/search"].get("additionalOperations").is_none());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn controller_validates_only_dtos_that_implement_validate() {
+    let port = 18712;
+    start(port, |_| {}, |_| {}).await;
+    let form = "application/x-www-form-urlencoded";
+    let json = "application/json";
+    let error = "term: maximum length is 3";
+    for (method, path, media, body, status, expected) in [
+        ("POST", "/search-form", form, "term=hello", 200, "hello"),
+        ("QUERY", "/search", json, r#"{"term":"hello"}"#, 200, "hello"),
+        ("POST", "/limited-form", form, "term=abc", 200, "abc"),
+        ("POST", "/limited-form", form, "term=abcd", 422, error),
+        ("POST", "/limited-body", json, r#"{"term":"abc"}"#, 200, "abc"),
+        ("POST", "/limited-body", json, r#"{"term":"abcd"}"#, 422, error),
+        ("POST", "/limited-body", "application/xml", "<root><term>abcd</term></root>", 422, error),
+    ] {
+        let headers = format!("Content-Type: {media}\r\nContent-Length: {}\r\n", body.len());
+        let response = raw_request_with_body(port, method, path, &headers, body).await;
+        assert_eq!(status_of(&response), status, "{path}: {response}");
+        assert_eq!(body_of(&response), expected, "{path}");
+    }
 }
 
 /// `HTTP/1.1 200 OK ...` -> 200 (0 when the response is not an HTTP response)

@@ -119,7 +119,15 @@ pub fn generate_bind_code(params: &[ActionParam]) -> (TokenStream2, Vec<TokenStr
                 quote! { #wrapper::bind(&mut self.http_context).await? }
             }
             BinderKind::FromBody | BinderKind::FromForm => {
-                quote! { #wrapper::bind_serde(&mut self.http_context).await? }
+                quote! {{
+                    #[allow(unused_imports)]
+                    use #main::controller::validation::SkipValidation as _;
+                    let bound = #wrapper::bind_serde(&mut self.http_context).await?;
+                    #main::controller::validation::ValidationCheck(&bound.0)
+                        .check()
+                        .map_err(#main::controller::BindError::Validation)?;
+                    bound
+                }}
             }
         };
 
