@@ -2,6 +2,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{FnArg, Pat, PatType, Type};
 
+use super::query_validation::QueryValidation;
 use crate::utils::compiler_error::create_compiler_error;
 use crate::utils::extract_type::extract_wrapper_inner;
 use crate::utils::find_crate::asp_dot_rust_crate_path;
@@ -21,6 +22,7 @@ pub struct ActionParam {
     pub inner: Type,
     /// True when inner type is exactly `String` (path of one segment `String`).
     pub is_string: bool,
+    validation: Option<QueryValidation>,
 }
 
 fn is_string_type(ty: &Type) -> bool {
@@ -49,14 +51,14 @@ fn binder_kind(ty: &Type) -> Option<(BinderKind, Type)> {
 
 /// Parse action method parameters after `&self` / `&mut self`.
 /// Returns compiler error TokenStream on invalid params, or the list of binders.
-pub fn parse_action_params(inputs: &syn::punctuated::Punctuated<FnArg, syn::token::Comma>, method_name: &syn::Ident) -> Result<Vec<ActionParam>, proc_macro::TokenStream> {
+pub fn parse_action_params(inputs: &mut syn::punctuated::Punctuated<FnArg, syn::token::Comma>, method_name: &syn::Ident) -> Result<Vec<ActionParam>, proc_macro::TokenStream> {
     let mut params = Vec::new();
     let mut body_or_form_count = 0usize;
 
     for arg in inputs {
         match arg {
             FnArg::Receiver(_) => continue,
-            FnArg::Typed(PatType { pat, ty, .. }) => {
+            FnArg::Typed(PatType { pat, ty, attrs, .. }) => {
                 let name = match pat.as_ref() {
                     Pat::Ident(pat_ident) => pat_ident.ident.clone(),
                     other => {
@@ -81,7 +83,18 @@ pub fn parse_action_params(inputs: &syn::punctuated::Punctuated<FnArg, syn::toke
                     }
                 }
                 let is_string = is_string_type(&inner);
-                params.push(ActionParam { name, kind, inner, is_string });
+                let mut validation = None;
+                for attr in attrs.iter().filter(|attr| attr.path().is_ident("validate")) {
+                    if !matches!(kind, BinderKind::FromQuery | BinderKind::FromOptionQuery) {
+                        return Err(create_compiler_error(attr, "#[validate(...)] requires FromQuery or FromOptionQuery"));
+                    }
+                    if validation.is_some() {
+                        return Err(create_compiler_error(attr, "duplicate #[validate(...)] on this query parameter"));
+                    }
+                    validation = Some(QueryValidation::parse(attr).map_err(|e| proc_macro::TokenStream::from(e.into_compile_error()))?);
+                }
+                attrs.retain(|attr| !attr.path().is_ident("validate"));
+                params.push(ActionParam { name, kind, inner, is_string, validation });
             }
         }
     }
@@ -112,6 +125,9 @@ pub fn generate_bind_code(params: &[ActionParam]) -> (TokenStream2, Vec<TokenStr
             BinderKind::FromRoute | BinderKind::FromQuery => {
                 quote! { #wrapper::bind(#name_lit, &self.http_context)? }
             }
+            BinderKind::FromOptionQuery if param.validation.is_some() => {
+                quote! { #wrapper::bind_if_present(#name_lit, &self.http_context)? }
+            }
             BinderKind::FromOptionQuery => {
                 quote! { #wrapper::bind(#name_lit, &self.http_context) }
             }
@@ -132,6 +148,15 @@ pub fn generate_bind_code(params: &[ActionParam]) -> (TokenStream2, Vec<TokenStr
         };
 
         lets.push(quote! { let #name = #bind_expr; });
+        if let Some(rule) = &param.validation {
+            let value = syn::Ident::new("__asp_query_value", proc_macro2::Span::mixed_site());
+            let check = rule.check(&value, &name_lit, inner);
+            lets.push(if param.kind == BinderKind::FromOptionQuery {
+                quote! { if let ::core::option::Option::Some(#value) = &#name.0 { #check } }
+            } else {
+                quote! { { let #value = &#name.0; #check } }
+            });
+        }
         args.push(quote! { #name });
     }
 

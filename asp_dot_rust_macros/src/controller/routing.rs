@@ -114,12 +114,10 @@ impl RouteRegistration {
 pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStream {
     let main_crate_path = asp_dot_rust_crate_path();
     let root_route = parse_macro_input!(args as Option<LitStr>).unwrap_or_else(|| LitStr::new("", proc_macro2::Span::call_site()));
-    let original_input = item.clone();
-    let input_impl = parse_macro_input!(item as ItemImpl);
+    let mut input_impl = parse_macro_input!(item as ItemImpl);
     let self_ty = input_impl.self_ty.as_ref();
     let controller_bootstrap_name = syn::Ident::new(&format!("__asp_register_{}", quote! {#self_ty}), input_impl.span());
     let controller_bootstrap_fn_name = syn::Ident::new(&format!("__asp_register_{}_routes", quote! {#self_ty}), input_impl.span());
-    let impl_has_attr = input_impl.attrs.iter().any(is_attr_attr);
     let impl_entries = match parse_attr_entries(&input_impl.attrs, "the controller impl") {
         Ok(entries) => entries,
         Err(error) => return error,
@@ -130,7 +128,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
         root_route: root_route,
         self_ty: self_ty.clone(),
     };
-    for impl_item in &input_impl.items {
+    for impl_item in &mut input_impl.items {
         let ImplItem::Fn(impl_method) = impl_item else {
             continue;
         };
@@ -190,7 +188,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
             if &method_name.to_string() == "new" {
                 return create_compiler_error(method_name, "fn `new` is DependencyInjectFn, cann't use as a route");
             }
-            let params = match parse_action_params(&impl_method.sig.inputs, method_name) {
+            let params = match parse_action_params(&mut impl_method.sig.inputs, method_name) {
                 Ok(p) => p,
                 Err(e) => return e,
             };
@@ -200,18 +198,12 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
     }
 
     // the #[attr] of the impl are consumed here, left in the output they would expand on the impl and fail
-    let input_impl_tokens = if impl_has_attr {
-        let mut cleaned_impl = input_impl.clone();
-        cleaned_impl.attrs.retain(|attr| !is_attr_attr(attr));
-        quote! { #cleaned_impl }
-    } else {
-        proc_macro2::TokenStream::from(original_input)
-    };
+    input_impl.attrs.retain(|attr| !is_attr_attr(attr));
 
     let match_routes = route_registration.match_route;
     let action_route_registrations = route_registration.registrations;
     let expanded = quote! {
-        #input_impl_tokens
+        #input_impl
         #[async_trait::async_trait]
         impl #main_crate_path::controller::Controller for #self_ty {
             async fn routing(&mut self, method_name: &'static str) -> ::core::result::Result<

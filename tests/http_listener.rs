@@ -1,6 +1,6 @@
 use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,
-    controller::{ActionResult, FromBody, FromForm, Validate, ValidationError, get, post, query, results, route},
+    controller::{ActionResult, FromBody, FromForm, FromOptionQuery, FromQuery, Validate, ValidationError, get, post, query, results, route},
     http_context::{HttpContextRef, HttpHeaderExt},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -12,6 +12,19 @@ use tokio::net::TcpStream;
 use asp_dot_rust::configuration::{CorsConfiguration, HyperConfig, RequestTimeoutConfiguration};
 
 api_controller!(pub ListenerController {});
+
+// A rule defined outside the framework follows the same dispatch path as length and range.
+trait PrefixRule {
+    /// Require the decoded query string to start with the specified prefix.
+    /// For example, `#[validate(prefix("ok"))]` accepts `okay` and rejects `no`.
+    fn prefix(value: &str, field: &str, prefix: &str) -> Result<(), ValidationError>;
+}
+
+impl PrefixRule for FromQuery<String> {
+    fn prefix(value: &str, field: &str, prefix: &str) -> Result<(), ValidationError> {
+        if value.starts_with(prefix) { Ok(()) } else { Err(ValidationError::new(field, "invalid prefix")) }
+    }
+}
 
 #[derive(serde::Deserialize)]
 struct SearchFilter {
@@ -62,6 +75,34 @@ impl ListenerController {
     #[post("/limited-body")]
     async fn limited_body(&self, filter: FromBody<LimitedSearch>) -> impl ActionResult {
         results::ok(filter.into_inner().term)
+    }
+    #[get("/bounded-query")]
+    fn bounded_query(
+        &self,
+        #[validate(length(1, 80))] term: FromQuery<String>,
+        #[validate(range(min = 1, max = 100))] limit: FromQuery<u8>,
+        #[validate(range(min = -10, max = 10))] offset: FromQuery<i8>,
+        #[validate(range(min = 0.0, max = 1.0))] score: FromQuery<f64>,
+    ) -> impl ActionResult {
+        results::ok(format!("{} {} {} {}", *term, *limit, *offset, *score))
+    }
+    #[get("/optional-query")]
+    fn optional_query(
+        &self,
+        #[validate(length(1))] term: FromOptionQuery<String>,
+        #[validate(range(max = 0.5))] score: FromOptionQuery<f32>,
+        #[validate(range(min = 340282366920938463463374607431768211454))] count: FromOptionQuery<u128>,
+        legacy: FromOptionQuery<u8>,
+    ) -> impl ActionResult {
+        results::ok(format!("{:?} {:?} {:?} {:?}", *term, *score, *count, *legacy))
+    }
+    #[get("/query-rule-method")]
+    fn query_rule_method(
+        &self,
+        #[validate(length(2))] code: FromQuery<String>,
+        #[validate(prefix("ok"))] tag: FromOptionQuery<String>,
+    ) -> impl ActionResult {
+        results::ok(format!("{} {:?}", *code, *tag))
     }
     #[get("/utf8-header")]
     pub async fn utf8_header(&mut self) -> impl ActionResult {
@@ -363,6 +404,53 @@ async fn controller_validates_only_dtos_that_implement_validate() {
         let response = raw_request_with_body(port, method, path, &headers, body).await;
         assert_eq!(status_of(&response), status, "{path}: {response}");
         assert_eq!(body_of(&response), expected, "{path}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn query_rules_check_typed_values_and_skip_absent_optional_fields() {
+    let port = 18713;
+    start(port, |_| {}, |_| {}).await;
+    for (length, status) in [(80, 200), (81, 422)] {
+        let term = "%E1%BA%BF".repeat(length);
+        let path = format!("/bounded-query?term={term}&limit=1&offset=0&score=0");
+        let response = raw_request(port, "GET", &path, "").await;
+        assert_eq!(status_of(&response), status, "{response}");
+    }
+    for (query, expected) in [
+        ("/bounded-query?term=x&limit=1&offset=-10&score=0.0", "x 1 -10 0"),
+        ("/bounded-query?term=y&limit=100&offset=10&score=1.0", "y 100 10 1"),
+        ("/optional-query", "None None None None"),
+        ("/query-rule-method?code=%E1%BA%BFx", "ếx None"),
+        ("/query-rule-method?code=ab&tag=okay", "ab Some(\"okay\")"),
+        ("/optional-query?legacy=bad", "None None None None"),
+        ("/optional-query?term=%E1%BA%BF&score=0.5", "Some(\"ế\") Some(0.5) None None"),
+        ("/optional-query?count=340282366920938463463374607431768211454", "None None Some(340282366920938463463374607431768211454) None"),
+    ] {
+        let response = raw_request(port, "GET", query, "").await;
+        assert_eq!(status_of(&response), 200, "{query}: {response}");
+        assert_eq!(body_of(&response), expected, "{query}");
+    }
+    for (query, field) in [
+        ("/bounded-query?term=&limit=1&offset=0&score=0", "term"),
+        ("/bounded-query?term=x&offset=0&score=0", "limit"),
+        ("/bounded-query?term=x&limit=101&offset=0&score=0", "limit"),
+        ("/bounded-query?term=x&limit=1&offset=-11&score=0", "offset"),
+        ("/bounded-query?term=x&limit=1&offset=0&score=1.1", "score"),
+        ("/optional-query?term=", "term"),
+        ("/optional-query?term=ab", "term"),
+        ("/query-rule-method?code=x", "code"),
+        ("/query-rule-method?code=xyz", "code"),
+        ("/query-rule-method?code=xy&tag=no", "tag"),
+        ("/optional-query?term=%FF", "term"),
+        ("/optional-query?score=bad", "score"),
+        ("/optional-query?score=NaN", "score"),
+        ("/optional-query?score=-inf", "score"),
+        ("/optional-query?count=340282366920938463463374607431768211453", "count"),
+    ] {
+        let response = raw_request(port, "GET", query, "").await;
+        assert_eq!(status_of(&response), 422, "{query}: {response}");
+        assert!(body_of(&response).contains(field), "{query}: {response}");
     }
 }
 

@@ -8,13 +8,36 @@ Action methods may take binder parameters. The `#[controller_route]` macro resol
 | --- | --- | --- |
 | `FromRoute<T>` | `path_params` | HTTP 404 |
 | `FromQuery<T>` | `query_params` | HTTP 422 |
-| `FromOptionQuery<T>` | `query_params` | `None` (no error) |
+| `FromOptionQuery<T>` | `query_params` | Missing gives `None`. A parse failure gives `None` by default or HTTP 422 with `#[validate(...)]`. |
 | `FromBody<T>` | request body | HTTP 422 for invalid data, 400 for read failures. See the `QUERY` exceptions below. |
 | `FromForm<T>` | form body | Same as `FromBody<T>`. |
 
 Supported scalar `T` for route/query: `String`, integers, floats, `bool`, `char` (`FromParamValue`).
 
 A route may have at most one of `FromBody` or `FromForm`.
+
+## Query validation
+
+Place a rule on a query parameter in the action signature. Both `FromQuery<T>` and `FromOptionQuery<T>` support the same rules.
+
+```rust
+#[get("/search")]
+fn search(
+    &self,
+    #[validate(length(1, 80))] term: FromQuery<String>,
+    #[validate(range(min = 1, max = 100))] limit: FromQuery<u8>,
+    #[validate(range(min = -10, max = 10))] offset: FromOptionQuery<i8>,
+    #[validate(range(min = 0.0, max = 1.0))] score: FromOptionQuery<f64>,
+) -> impl ActionResult {
+    results::ok(format!("{} {} {:?} {:?}", *term, *limit, *offset, *score))
+}
+```
+
+`length(6)` requires exactly six Unicode scalar values in the decoded string. `length(1, 80)` accepts lengths from 1 through 80. Named bounds such as `length(max = 80)` and `length(min = 1, max = 80)` also work. `range` compares values in the parameter's numeric type and requires a finite floating-point value.
+
+The controller macro calls `FromQuery::<T>::rule(value, field, arguments)` for each annotated parameter. To add a rule, define an associated function on the binder or implement a local extension trait for `FromQuery<T>` and bring it into the controller's scope. The function borrows the parsed value, receives the field name, and returns `Result<(), ValidationError>`. A single positional argument is passed directly, multiple positional arguments as a tuple, and named bounds as `controller::validation::QueryBounds`.
+
+An absent optional field skips validation. A supplied field, including an empty value, must parse and satisfy its rule. Failures return HTTP 422 with the parameter name before the action runs.
 
 ## FromBody / FromForm
 
