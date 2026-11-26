@@ -5,7 +5,7 @@ pub(crate) mod routing;
 pub mod validation;
 
 pub use crate::macros::{attr, controller_inject, controller_route, delete, get, head, max_body_size, options, patch, post, put, query, route};
-pub use action_params::{BindError, FromBody, FromForm, FromOptionQuery, FromParamValue, FromQuery, FromRoute};
+pub use action_params::{BindError, Body, Form, FromBody, FromForm, FromOptionQuery, FromParamValue, FromQuery, FromRoute};
 pub use action_result::{ActionResult, results};
 pub use routing::*;
 pub use validation::{Validate, ValidationError};

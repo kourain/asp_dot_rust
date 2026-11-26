@@ -3,55 +3,40 @@ use serde::de::DeserializeOwned;
 use crate::http_context::HttpContext;
 
 use super::{
-    body_reader::{content_type_media, read_body_bytes},
+    body_fields::{json_field, read_body_for_binding, xml_field},
+    body_reader::content_type_media,
     error::BindError,
 };
 
-/// Binds a value from the request body.
+/// Binds **one field** of the request body.
 ///
-/// Supported `Content-Type` values:
-/// - `application/json`, `text/json` → JSON (`serde_json`)
-/// - `application/xml`, `text/xml` → XML (`quick-xml`)
+/// The field name is the action argument name, like `FromQuery<T>`. Use [`Body`](super::Body)
+/// to bind the whole body into a DTO (or to read it as raw text).
 ///
-/// When `Content-Type` is missing, JSON is assumed.
-/// Mismatch or deserialize failure → HTTP 422.
+/// Supported `Content-Type` values (JSON is assumed when it is missing):
+/// - `application/json`, `text/json`: a member of the top-level JSON object.
+/// - `application/xml`, `text/xml`: a child element of the root element.
 ///
-/// `FromBody<String>` reads the body as raw UTF-8 text (no serde).
-/// Other types use serde; primitives are not useful as the sole body type.
+/// `T` is any serde `Deserialize` type. A missing field is HTTP 422, unless `T` is an `Option`
+/// (then it is `None`). A wrong type, a body that is not an object or a Content-Type mismatch is HTTP 422 too.
+///
+/// # Warning
+///
+/// - **A repeated key keeps only its last value.**
+/// - Every field binder reads and parses the whole body again. For many fields prefer `Body<Dto>`.
 pub struct FromBody<T>(pub T);
 
-impl FromBody<String> {
-    /// Read the request body as a UTF-8 string (no serde).
-    pub async fn bind(http_context: &mut HttpContext) -> Result<Self, BindError> {
-        let media = content_type_media(&http_context.request)
-            .unwrap_or_else(|| "text/plain".to_string());
-        match media.as_str() {
-            "application/json" | "text/json" | "application/xml" | "text/xml" | "text/plain" => {}
-            other => return Err(BindError::UnsupportedMediaType(other.to_string())),
-        }
-        let bytes = read_body_bytes(&mut http_context.request).await?;
-        let text = String::from_utf8(bytes).map_err(|_| BindError::InvalidUtf8)?;
-        Ok(FromBody(text))
-    }
-}
-
 impl<T: DeserializeOwned> FromBody<T> {
-    /// Read and deserialize the request body into `T` with serde (JSON / XML).
-    pub async fn bind_serde(http_context: &mut HttpContext) -> Result<Self, BindError> {
-        let media = content_type_media(&http_context.request)
-            .unwrap_or_else(|| "application/json".to_string());
-        let bytes = read_body_bytes(&mut http_context.request).await?;
-
+    /// Bind body field `name`.
+    pub async fn bind(name: &str, http_context: &mut HttpContext) -> Result<Self, BindError> {
+        let media = content_type_media(&http_context.request).unwrap_or_else(|| "application/json".to_string());
+        let bytes = read_body_for_binding(&mut http_context.request).await?;
         let value = match media.as_str() {
-            "application/json" | "text/json" => {
-                serde_json::from_slice(&bytes).map_err(|e| BindError::Deserialize(e.to_string()))?
-            }
-            "application/xml" | "text/xml" => quick_xml::de::from_reader(bytes.as_slice())
-                .map_err(|e| BindError::Deserialize(e.to_string()))?,
+            "application/json" | "text/json" => json_field(&bytes, name)?,
+            "application/xml" | "text/xml" => xml_field(&bytes, name)?,
             other => return Err(BindError::UnsupportedMediaType(other.to_string())),
         };
-
-        Ok(FromBody(value))
+        Ok(Self(value))
     }
 }
 

@@ -12,8 +12,14 @@ pub enum BinderKind {
     FromRoute,
     FromQuery,
     FromOptionQuery,
+    /// One field of the JSON / XML body.
     FromBody,
+    /// One field of the form body.
     FromForm,
+    /// The whole body.
+    Body,
+    /// The whole form body.
+    Form,
 }
 
 pub struct ActionParam {
@@ -41,6 +47,8 @@ fn binder_kind(ty: &Type) -> Option<(BinderKind, Type)> {
         ("FromOptionQuery", BinderKind::FromOptionQuery),
         ("FromBody", BinderKind::FromBody),
         ("FromForm", BinderKind::FromForm),
+        ("Body", BinderKind::Body),
+        ("Form", BinderKind::Form),
     ] {
         if let Some(inner) = extract_wrapper_inner(ty, name) {
             return Some((kind, inner));
@@ -53,7 +61,8 @@ fn binder_kind(ty: &Type) -> Option<(BinderKind, Type)> {
 /// Returns compiler error TokenStream on invalid params, or the list of binders.
 pub fn parse_action_params(inputs: &mut syn::punctuated::Punctuated<FnArg, syn::token::Comma>, method_name: &syn::Ident) -> Result<Vec<ActionParam>, proc_macro::TokenStream> {
     let mut params = Vec::new();
-    let mut body_or_form_count = 0usize;
+    let mut has_form_binder = false;
+    let mut has_body_binder = false;
 
     for arg in inputs {
         match arg {
@@ -70,17 +79,23 @@ pub fn parse_action_params(inputs: &mut syn::punctuated::Punctuated<FnArg, syn::
                     return Err(create_compiler_error(
                         ty,
                         format!(
-                            "action parameter `{}` on `{}` must be FromRoute<T>, FromQuery<T>, FromOptionQuery<T>, FromBody<T> or FromForm<T>",
+                            "action parameter `{}` on `{}` must be FromRoute<T>, FromQuery<T>, FromOptionQuery<T>, FromBody<T>, FromForm<T>, Body<T> or Form<T>",
                             name, method_name
                         ),
                     ));
                 };
 
-                if matches!(kind, BinderKind::FromBody | BinderKind::FromForm) {
-                    body_or_form_count += 1;
-                    if body_or_form_count > 1 {
-                        return Err(create_compiler_error(ty, format!("action `{}` may have at most one FromBody or FromForm parameter", method_name)));
-                    }
+                // A request has one body, so its binders must read the same kind of body.
+                match kind {
+                    BinderKind::FromForm | BinderKind::Form => has_form_binder = true,
+                    BinderKind::FromBody | BinderKind::Body => has_body_binder = true,
+                    _ => {}
+                }
+                if has_form_binder && has_body_binder {
+                    return Err(create_compiler_error(
+                        ty,
+                        format!("action `{}` cannot mix form binders (FromForm, Form) with body binders (FromBody, Body)", method_name),
+                    ));
                 }
                 let is_string = is_string_type(&inner);
                 let mut validation = None;
@@ -119,16 +134,21 @@ pub fn generate_bind_code(params: &[ActionParam]) -> (TokenStream2, Vec<TokenStr
             BinderKind::FromOptionQuery => quote! { #main::controller::FromOptionQuery::<#inner> },
             BinderKind::FromBody => quote! { #main::controller::FromBody::<#inner> },
             BinderKind::FromForm => quote! { #main::controller::FromForm::<#inner> },
+            BinderKind::Body => quote! { #main::controller::Body::<#inner> },
+            BinderKind::Form => quote! { #main::controller::Form::<#inner> },
         };
 
         let bind_expr = match param.kind {
             BinderKind::FromRoute | BinderKind::FromQuery | BinderKind::FromOptionQuery => {
                 quote! { #wrapper::bind(#name_lit, &self.http_context)? }
             }
-            BinderKind::FromBody | BinderKind::FromForm if param.is_string => {
+            BinderKind::FromBody | BinderKind::FromForm => {
+                quote! { #wrapper::bind(#name_lit, &mut self.http_context).await? }
+            }
+            BinderKind::Body | BinderKind::Form if param.is_string => {
                 quote! { #wrapper::bind(&mut self.http_context).await? }
             }
-            BinderKind::FromBody | BinderKind::FromForm => {
+            BinderKind::Body | BinderKind::Form => {
                 quote! {{
                     #[allow(unused_imports)]
                     use #main::controller::validation::SkipValidation as _;

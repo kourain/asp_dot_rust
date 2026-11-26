@@ -9,8 +9,12 @@ Action methods may take binder parameters. The `#[controller_route]` macro resol
 | `FromRoute<T>` | `path_params` | HTTP 404 |
 | `FromQuery<T>` | `query_params` | HTTP 422 |
 | `FromOptionQuery<T>` | `query_params` | Missing gives `None`. A supplied value that does not parse is HTTP 422, with or without `#[validate(...)]`. |
-| `FromBody<T>` | request body | HTTP 422 for invalid data, 400 for read failures. See the `QUERY` exceptions below. |
-| `FromForm<T>` | form body | Same as `FromBody<T>`. |
+| `FromBody<T>` | one field of the JSON / XML body | HTTP 422 for a missing or invalid field, 400 for read failures. See the `QUERY` exceptions below. |
+| `FromForm<T>` | one field of the form body | Same as `FromBody<T>`. |
+| `Body<T>` | the whole body | HTTP 422 for invalid data, 400 for read failures. |
+| `Form<T>` | the whole form body | Same as `Body<T>`. |
+
+`FromRoute`, `FromQuery`, `FromOptionQuery`, `FromForm` and `FromBody` bind **one value** and the argument name is its key. `Body` and `Form` bind the **whole** body into a DTO (or raw text).
 
 Supported `T` for route/query: every type that implements `std::str::FromStr` (`FromParamValue` is implemented for all of them): `String`, integers, floats, `bool`, `char`, `uuid::Uuid`, `ulid::Ulid`, `std::net::IpAddr` and your own types. A type that cannot implement `FromStr` can implement `FromParamValue` directly (but not both).
 
@@ -22,7 +26,7 @@ Supported `T` for route/query: every type that implements `std::str::FromStr` (`
 
 > **Warning: a repeated query key keeps only its last value.** `?id=1&id=2` binds `2` and drops `1` without an error, for `FromQuery<T>` and `FromOptionQuery<T>` alike. To collect all the values or to reject a repeated key, read `http_context.request.uri.query()` in the action.
 
-A route may have at most one of `FromBody` or `FromForm`.
+An action may have any number of body binders, but they must read the same kind of body: form binders (`FromForm`, `Form`) cannot be mixed with body binders (`FromBody`, `Body`), the macro reports that at compile time.
 
 ## Query validation
 
@@ -47,20 +51,46 @@ The controller macro calls `FromQuery::<T>::rule(value, field, arguments)` for e
 
 An absent optional field skips validation. A supplied field, including an empty value, must parse and satisfy its rule. Failures return HTTP 422 with the parameter name before the action runs.
 
-## FromBody / FromForm
+## Body and form
+
+### One field: `FromBody<T>` / `FromForm<T>`
+
+```rust
+#[post("/users")]
+fn create(&mut self, name: FromBody<String>, age: FromBody<u32>, nick: FromBody<Option<String>>) -> impl ActionResult { /* ... */ }
+
+#[post("/login")]
+fn login(&mut self, user: FromForm<String>, remember: FromForm<bool>) -> impl ActionResult { /* ... */ }
+```
+
+| Binder | Reads | `T` |
+| --- | --- | --- |
+| `FromBody<T>` | member `name` of the top-level JSON object, or child element `name` of the XML root element | any serde `Deserialize` type |
+| `FromForm<T>` | field `name` of `application/x-www-form-urlencoded` | any `FromParamValue` (every `FromStr` type) |
+
+- `FromBody` accepts `application/json`, `text/json`, `application/xml` and `text/xml`, JSON is assumed when the header is missing. `FromForm` accepts `application/x-www-form-urlencoded` and also a missing or empty media type. Both ignore media type parameters and compare media types case-insensitively.
+- A missing field is HTTP 422. `FromBody<Option<U>>` is the exception, a missing field (or `null`) is `None`. A field of the wrong type, a body that is not an object, and a Content-Type mismatch are HTTP 422.
+- Form values are decoded like query values: `+` is a space, `%2B` is a plus, a key without `=` is an empty value (`bool` reads it as `true`) and a value that is not valid UTF-8 is HTTP 422.
+- `#[validate(...)]` is for query parameters only. To validate body fields use `Body<Dto>` / `Form<Dto>` with `Validate`.
+
+> **Warning: a repeated key keeps only its last value** (`a=1&a=2` binds `2`, so does `{"a":1,"a":2}`), without an error.
+
+Each field binder reads and parses the whole body again. For many fields prefer one DTO binder.
+
+### The whole body: `Body<T>` / `Form<T>`
 
 | `T` | Behaviour |
 | --- | --- |
 | `String` written as a single identifier | Reads raw UTF-8 text after checking the media type. |
-| Other type spelling or a deserializable model | `FromBody` uses JSON or XML. `FromForm` uses form-urlencoded deserialization. |
+| Other type spelling or a deserializable model | `Body` uses JSON or XML. `Form` uses form-urlencoded deserialization. |
 
-For `FromBody<T>`, the serde path accepts `application/json`, `text/json`, `application/xml` and `text/xml`. A missing header defaults to JSON. The raw `FromBody<String>` path additionally accepts `text/plain` and assumes plain text when the header is absent. The macro selects raw text by the spelling `String`. A type alias or `std::string::String` selects serde for either binder.
+For `Body<T>`, the serde path accepts `application/json`, `text/json`, `application/xml` and `text/xml`. A missing header defaults to JSON. The raw `Body<String>` path additionally accepts `text/plain` and assumes plain text when the header is absent. The macro selects raw text by the spelling `String`. A type alias or `std::string::String` selects serde for either binder.
 
-`FromForm<T>` accepts `application/x-www-form-urlencoded` and also attempts binding when the header is missing or the media type is empty. Both binders ignore media type parameters and compare media types case-insensitively.
+`Form<T>` accepts `application/x-www-form-urlencoded` and also attempts binding when the header is missing or the media type is empty.
 
 ## DTO validation
 
-Implement `Validate` on a DTO to run its rules in every controller action that accepts it through `FromBody<T>` or `FromForm<T>`. The router calls `validate()` after deserialization and before invoking the action. A DTO with only `Deserialize` proceeds directly to the action. Calling `bind_serde` directly performs deserialization alone.
+Implement `Validate` on a DTO to run its rules in every controller action that accepts it through `Body<T>` or `Form<T>`. The router calls `validate()` after deserialization and before invoking the action. A DTO with only `Deserialize` proceeds directly to the action. Calling `bind_serde` directly performs deserialization alone.
 
 ## Example
 
@@ -108,12 +138,12 @@ impl UsersController {
     }
 
     #[post("/")]
-    pub async fn create(&mut self, body: FromBody<CreateUser>) -> impl ActionResult {
+    pub async fn create(&mut self, body: Body<CreateUser>) -> impl ActionResult {
         results::ok(format!("created {}", body.name))
     }
 
     #[post("/raw")]
-    pub async fn raw(&mut self, body: FromBody<String>) -> impl ActionResult {
+    pub async fn raw(&mut self, body: Body<String>) -> impl ActionResult {
         results::ok(body.into_inner())
     }
 }
@@ -136,5 +166,5 @@ self.http_context.request.seek_body(0).unwrap();
 
 - `enable_buffering` loads the stream into memory (no-op if already buffered).
 - `seek_body(0)` resets the read position.
-- `FromBody` / `FromForm` call `read_body_bytes`, which buffers on first use; seek to `0` before binding again if the same request must be parsed twice.
+- The body binders (`FromBody`, `FromForm`, `Body`, `Form`) buffer the body on first use, read it from the start and rewind it to `0` afterwards. Several binders can read the same body and the action can still read it itself, no manual `seek_body(0)` is needed.
 - `request.body` is `RequestBody` (`Stream` or `Buffered`), not raw `Limited<Incoming>`.

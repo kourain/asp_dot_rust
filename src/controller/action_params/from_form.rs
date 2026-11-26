@@ -1,43 +1,38 @@
-use serde::de::DeserializeOwned;
-
 use crate::http_context::HttpContext;
 
 use super::{
-    body_reader::{content_type_media, read_body_bytes},
+    body_fields::{check_form_media, form_field, read_body_for_binding},
     error::BindError,
+    from_param_value::FromParamValue,
 };
 
-/// Binds a value from `application/x-www-form-urlencoded` form data.
+/// Binds **one field** of an `application/x-www-form-urlencoded` body.
 ///
-/// Content-Type mismatch → HTTP 422.
-/// `FromForm<String>` reads the body as raw UTF-8 text (no serde).
+/// The field name is the action argument name, like `FromQuery<T>`. Use [`Form`](super::Form)
+/// to bind the whole form into a DTO.
+///
+/// `T` is any type with [`FromParamValue`] (every `FromStr` type: `String`, numbers, `bool`,
+/// `uuid::Uuid`, ...). A missing or unparsable field, or a Content-Type mismatch, is HTTP 422.
+///
+/// # Warning
+///
+/// - **A repeated key keeps only its last value.** `a=1&a=2` binds `2`.
+/// - **A key without a value is an empty value** (`a` and `a=` are the same): `String` gets `""`,
+///   `bool` gets `true`, numbers fail.
+/// - Keys and values are decoded as form data: `+` is a space and `%2B` is a plus.
+/// - Every field binder reads and parses the whole body again. For many fields prefer `Form<Dto>`.
 pub struct FromForm<T>(pub T);
 
-impl FromForm<String> {
-    /// Read the form body as a UTF-8 string (no serde).
-    pub async fn bind(http_context: &mut HttpContext) -> Result<Self, BindError> {
-        let media = content_type_media(&http_context.request).unwrap_or_default();
-        if !media.is_empty() && media != "application/x-www-form-urlencoded" {
-            return Err(BindError::UnsupportedMediaType(media));
+impl<T: FromParamValue> FromForm<T> {
+    /// Bind form field `name`.
+    pub async fn bind(name: &str, http_context: &mut HttpContext) -> Result<Self, BindError> {
+        check_form_media(&http_context.request)?;
+        let bytes = read_body_for_binding(&mut http_context.request).await?;
+        let raw = form_field(&bytes, name)?;
+        match T::from_param_value(&raw) {
+            Ok(value) => Ok(Self(value)),
+            Err(()) => Err(BindError::ParseField { name: name.to_string(), value: raw }),
         }
-        let bytes = read_body_bytes(&mut http_context.request).await?;
-        let text = String::from_utf8(bytes).map_err(|_| BindError::InvalidUtf8)?;
-        Ok(FromForm(text))
-    }
-}
-
-impl<T: DeserializeOwned> FromForm<T> {
-    /// Deserialize form-urlencoded body into `T` with serde.
-    pub async fn bind_serde(http_context: &mut HttpContext) -> Result<Self, BindError> {
-        let media = content_type_media(&http_context.request).unwrap_or_default();
-        if !media.is_empty() && media != "application/x-www-form-urlencoded" {
-            return Err(BindError::UnsupportedMediaType(media));
-        }
-        let bytes = read_body_bytes(&mut http_context.request).await?;
-        let text = std::str::from_utf8(&bytes).map_err(|_| BindError::InvalidUtf8)?;
-        let value =
-            serde_urlencoded::from_str(text).map_err(|e| BindError::Deserialize(e.to_string()))?;
-        Ok(FromForm(value))
     }
 }
 

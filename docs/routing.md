@@ -72,7 +72,7 @@ impl HomeController {
 
 ## HTTP QUERY
 
-Use `#[query("/search")]` or `#[route(["QUERY"], "/search")]` to register the `http::Method::QUERY` method. QUERY is safe and idempotent and describes the operation in its request body. Clients must send `Content-Type`. Use `FromBody<T>` to bind a JSON or XML query, or read the body in the action for a custom query format. [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html#section-2)
+Use `#[query("/search")]` or `#[route(["QUERY"], "/search")]` to register the `http::Method::QUERY` method. QUERY is safe and idempotent and describes the operation in its request body. Clients must send `Content-Type`. Use `Body<T>` to bind a JSON or XML query (or `FromBody<T>` for one field of it), or read the body in the action for a custom query format. [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html#section-2)
 
 Generated OpenAPI 3.2 documents describe QUERY with the `query` field on the Path Item Object. [OpenAPI 3.2 Path Item Object](https://spec.openapis.org/oas/v3.2.1.html#path-item-object)
 

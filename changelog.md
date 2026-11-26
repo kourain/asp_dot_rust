@@ -8,6 +8,9 @@
 - Query flags: a key without a value (`?debug`, `?debug=`) is an empty value and `bool` reads it as `true`. `FromOptionQuery::<bool>::flag()` is `true` when the key is present (and not `false`), `false` when it is absent.
 - `ResolvedRoute::invalid_path_params` and `ResolvedRoute::invalid_query_params` keep the raw text of a value that is not valid UTF-8 after decoding.
 - Doc warnings on `FromQuery<T>` and `FromOptionQuery<T>`: a repeated query key keeps only its last value.
+- `FromForm<T>` and `FromBody<T>` bind **one field** of the form / JSON / XML body (the argument name is the field name, `T: FromParamValue` for a form field, `T: Deserialize` for a body field, `FromBody<Option<U>>` accepts a missing field). `Body<T>` and `Form<T>` bind the **whole** body, they are the old `FromBody<T>` and `FromForm<T>`.
+- An action can have several body binders. They rewind the body after reading, so they can share it and the action can still read it. Mixing form binders with body binders in one action is a compile error.
+- `BindError::MissingField` and `BindError::ParseField` (HTTP 422).
 
 ### 0.2.12 Fix
 
@@ -25,6 +28,10 @@
 | `FromParamValue` was implemented for `String`, `bool`, `char`, integers and floats only | implemented for every `T: FromStr + 'static` | a user type that implemented `FromParamValue` and also has `FromStr` no longer compiles, keep one of them |
 | `ResolvedRoute` had 3 fields | `ResolvedRoute` has `invalid_path_params` and `invalid_query_params` too | build it with `..Default::default()` |
 | `routing_info.path_params` held the raw (encoded) value | holds the decoded value | `%2F` decodes inside its segment |
+| `FromBody<T>` / `FromForm<T>` bound the whole body (`bind_serde`, `FromBody<String>` was the raw text) | they bind one field named like the argument | rename them to `Body<T>` / `Form<T>`. `FromBody<String>` still compiles but now reads a field, so a raw-text action fails with HTTP 422 until it is `Body<String>` |
+| at most one `FromBody` or `FromForm` per action | any number, but not form together with body binders | |
+| the body cursor was left at the end after binding | the cursor is rewound to the start | an action that read the rest of the body after binding got nothing, it now gets all of it |
+| `BindError` had no field variants | `BindError::MissingField` and `BindError::ParseField` | add the arms if you match `BindError` exhaustively |
 
 ## 0.2.11
 

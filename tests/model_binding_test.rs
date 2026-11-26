@@ -39,6 +39,16 @@ fn bind_error_status_codes() {
         BindError::UnsupportedMediaType("text/plain".into()).status_code(),
         http::StatusCode::UNPROCESSABLE_ENTITY
     );
+    assert_eq!(BindError::MissingField("name".into()).status_code(), http::StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        BindError::ParseField {
+            name: "age".into(),
+            value: "x".into()
+        }
+        .status_code(),
+        http::StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(BindError::MissingField("name".into()).to_string(), "missing field `name` in the request body");
     assert_eq!(
         BindError::BodyRead("limit".into()).status_code(),
         http::StatusCode::BAD_REQUEST

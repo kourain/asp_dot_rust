@@ -13,6 +13,10 @@ pub enum BindError {
     MissingQueryParam(String),
     /// Query parameter could not be parsed into the target type.
     ParseQueryParam { name: String, value: String },
+    /// A field bound by `FromForm<T>` or `FromBody<T>` is not in the form or body.
+    MissingField(String),
+    /// A form field could not be parsed into the target type.
+    ParseField { name: String, value: String },
     /// Request body could not be read (limit exceeded, I/O, or connection closed).
     BodyRead(String),
     /// `Content-Type` is missing or not supported for this binder.
@@ -33,6 +37,8 @@ impl BindError {
             Self::MissingRouteParam(_) | Self::ParseRouteParam { .. } => StatusCode::NOT_FOUND,
             Self::MissingQueryParam(_)
             | Self::ParseQueryParam { .. }
+            | Self::MissingField(_)
+            | Self::ParseField { .. }
             | Self::UnsupportedMediaType(_)
             | Self::InvalidUtf8
             | Self::Deserialize(_)
@@ -53,6 +59,8 @@ impl fmt::Display for BindError {
             Self::ParseQueryParam { name, value } => {
                 write!(f, "cannot parse query parameter `{name}` from `{value}`")
             }
+            Self::MissingField(name) => write!(f, "missing field `{name}` in the request body"),
+            Self::ParseField { name, value } => write!(f, "cannot parse form field `{name}` from `{value}`"),
             Self::BodyRead(msg) => write!(f, "failed to read request body: {msg}"),
             Self::UnsupportedMediaType(ct) => write!(f, "unsupported Content-Type: {ct}"),
             Self::InvalidUtf8 => write!(f, "request body is not valid UTF-8"),
