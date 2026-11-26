@@ -8,13 +8,23 @@ Action methods may take binder parameters. The `#[controller_route]` macro resol
 | --- | --- | --- |
 | `FromRoute<T>` | `path_params` | HTTP 404 |
 | `FromQuery<T>` | `query_params` | HTTP 422 |
-| `FromOptionQuery<T>` | `query_params` | Missing gives `None`. A supplied value that does not parse is HTTP 422, with or without `#[validate(...)]`. |
+| `FromOptionQuery<T>` | `query_params` | Alias of `FromQuery<Option<T>>`. Missing gives `None`. A supplied value that does not parse is HTTP 422, with or without `#[validate(...)]`. |
 | `FromBody<T>` | one field of the JSON / XML body | HTTP 422 for a missing or invalid field, 400 for read failures. See the `QUERY` exceptions below. |
+| `FromOptionBody<T>` | one field of the JSON / XML body | Alias of `FromBody<Option<T>>`. Missing or `null` gives `None`. |
 | `FromForm<T>` | one field of the form body | Same as `FromBody<T>`. |
+| `FromOptionForm<T>` | one field of the form body | Alias of `FromForm<Option<T>>`. Missing gives `None`. A supplied value that does not parse is HTTP 422. |
 | `Body<T>` | the whole body | HTTP 422 for invalid data, 400 for read failures. |
 | `Form<T>` | the whole form body | Same as `Body<T>`. |
 
-`FromRoute`, `FromQuery`, `FromOptionQuery`, `FromForm` and `FromBody` bind **one value** and the argument name is its key. `Body` and `Form` bind the **whole** body into a DTO (or raw text).
+`FromRoute`, `FromQuery`, `FromForm`, `FromBody` and their `FromOption...` aliases bind **one value** and the argument name is its key. `Body` and `Form` bind the **whole** body into a DTO (or raw text).
+
+### Optional values
+
+`FromOptionQuery<T>`, `FromOptionForm<T>` and `FromOptionBody<T>` are type aliases of `FromQuery<Option<T>>`, `FromForm<Option<T>>` and `FromBody<Option<T>>`, so the two spellings are the same type and the macro treats them the same. Because they are aliases, they cannot be used as a constructor or a pattern (write `FromQuery(Some(1))`).
+
+A route parameter is always present, so **`FromRoute<Option<T>>` is not allowed** and the macro reports it at compile time.
+
+An optional value that is there must still parse: `?limit=abc` is HTTP 422 for `FromOptionQuery<u32>`, it never becomes `None`. For `FromOptionBody<T>` a `null` is `None`.
 
 Supported `T` for route/query: every type that implements `std::str::FromStr` (`FromParamValue` is implemented for all of them): `String`, integers, floats, `bool`, `char`, `uuid::Uuid`, `ulid::Ulid`, `std::net::IpAddr` and your own types. A type that cannot implement `FromStr` can implement `FromParamValue` directly (but not both).
 
@@ -22,15 +32,15 @@ Supported `T` for route/query: every type that implements `std::str::FromStr` (`
 
 - **Path values** are percent-decoded after the route matched, so `/users/a%20b` binds `a b` and an encoded `%2F` stays inside its segment. A value that is not valid UTF-8 after decoding is HTTP 404 for `FromRoute`.
 - **Query keys and values** are decoded as form data: `+` is a space, `%2B` is a plus. A value that is not valid UTF-8 after decoding is HTTP 422 for both query binders. It is never replaced by a placeholder character or turned into `None`. A key that is not valid UTF-8 cannot match a parameter name and is ignored.
-- **A key without `=` has an empty value** (`?debug` and `?debug=` are the same). It can be used as a flag: `bool` reads an empty value as `true`, so `FromOptionQuery<bool>` is `Some(true)` for `?debug` and `None` when the key is absent, and `FromOptionQuery::<bool>::flag()` gives `true` / `false`. `String` accepts `""`, every other type rejects it with HTTP 422.
+- **A key without `=` has an empty value** (`?debug` and `?debug=` are the same). It can be used as a flag: `bool` reads an empty value as `true`, so `FromOptionQuery<bool>` is `Some(true)` for `?debug` and `None` when the key is absent, and `.flag()` gives `true` / `false` (`FromOptionQuery<bool>` and `FromOptionForm<bool>` have it). `String` accepts `""`, every other type rejects it with HTTP 422.
 
-> **Warning: a repeated query key keeps only its last value.** `?id=1&id=2` binds `2` and drops `1` without an error, for `FromQuery<T>` and `FromOptionQuery<T>` alike. To collect all the values or to reject a repeated key, read `http_context.request.uri.query()` in the action.
+> **Warning: a repeated query key keeps only its last value.** `?id=1&id=2` binds `2` and drops `1` without an error, for `FromQuery<T>`, `FromForm<T>` and their `FromOption...` aliases alike. To collect all the values or to reject a repeated key, read `http_context.request.uri.query()` in the action.
 
 An action may have any number of body binders, but they must read the same kind of body: form binders (`FromForm`, `Form`) cannot be mixed with body binders (`FromBody`, `Body`), the macro reports that at compile time.
 
 ## Query validation
 
-Place a rule on a query parameter in the action signature. Both `FromQuery<T>` and `FromOptionQuery<T>` support the same rules.
+Place a rule on a query parameter in the action signature. Both `FromQuery<T>` and `FromOptionQuery<T>` (that is `FromQuery<Option<T>>`) support the same rules. A rule is checked on the `T` inside the `Option`, and a missing optional parameter skips it.
 
 ```rust
 #[get("/search")]
@@ -69,7 +79,7 @@ fn login(&mut self, user: FromForm<String>, remember: FromForm<bool>) -> impl Ac
 | `FromForm<T>` | field `name` of `application/x-www-form-urlencoded` | any `FromParamValue` (every `FromStr` type) |
 
 - `FromBody` accepts `application/json`, `text/json`, `application/xml` and `text/xml`, JSON is assumed when the header is missing. `FromForm` accepts `application/x-www-form-urlencoded` and also a missing or empty media type. Both ignore media type parameters and compare media types case-insensitively.
-- A missing field is HTTP 422. `FromBody<Option<U>>` is the exception, a missing field (or `null`) is `None`. A field of the wrong type, a body that is not an object, and a Content-Type mismatch are HTTP 422.
+- A missing required field is HTTP 422. Both `FromForm<Option<U>>` and `FromBody<Option<U>>` bind a missing field as `None`. A JSON `null` also binds as `None` for an optional body field. A field of the wrong type, a body that is not an object, and a Content-Type mismatch are HTTP 422.
 - Form values are decoded like query values: `+` is a space, `%2B` is a plus, a key without `=` is an empty value (`bool` reads it as `true`) and a value that is not valid UTF-8 is HTTP 422.
 - `#[validate(...)]` is for query parameters only. To validate body fields use `Body<Dto>` / `Form<Dto>` with `Validate`.
 

@@ -3,7 +3,7 @@ mod body_fields;
 
 use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,
-    controller::{ActionResult, Body, Form, FromBody, FromForm, FromOptionQuery, FromQuery, FromRoute, Validate, ValidationError, get, post, query, results, route},
+    controller::{ActionResult, Body, Form, FromBody, FromForm, FromOptionBody, FromOptionForm, FromOptionQuery, FromQuery, FromRoute, Validate, ValidationError, get, post, query, results, route},
     http_context::{HttpContextRef, HttpHeaderExt},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -94,6 +94,18 @@ impl ListenerController {
     #[post("/body-flag")]
     fn body_flag(&self, flag: FromBody<bool>) -> impl ActionResult {
         results::ok(flag.to_string())
+    }
+    #[post("/option-fields")]
+    fn option_fields(&self, a: FromOptionForm<u32>, b: FromForm<Option<String>>, on: FromOptionForm<bool>) -> impl ActionResult {
+        results::ok(format!("{:?} {:?} {}", *a, *b, on.flag()))
+    }
+    #[post("/option-body")]
+    fn option_body(&self, a: FromOptionBody<u32>, b: FromBody<Option<String>>) -> impl ActionResult {
+        results::ok(format!("{:?} {:?}", *a, *b))
+    }
+    #[get("/direct-option-query")]
+    fn direct_option_query(&self, #[validate(length(2))] code: FromQuery<Option<String>>) -> impl ActionResult {
+        results::ok(format!("{:?}", *code))
     }
     #[post("/whole-and-field-form")]
     fn whole_and_field_form(&self, user: Form<SearchFilter>, extra: FromForm<String>) -> impl ActionResult {
@@ -529,6 +541,11 @@ async fn route_and_query_binders_accept_any_from_str_type() {
         assert_eq!(status_of(&response), status, "{path}: {response}");
         assert!(body_of(&response).contains(field), "{path}: {response}");
     }
+    // A missing required parameter and an unparsable one are told apart.
+    let missing = raw_request(port, "GET", &format!("/typed/{uuid}"), "").await;
+    assert!(body_of(&missing).contains("missing"), "{missing}");
+    let unparsable = raw_request(port, "GET", &format!("/typed/{uuid}?ulid=nope"), "").await;
+    assert!(body_of(&unparsable).contains("cannot parse"), "{unparsable}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -577,6 +594,26 @@ async fn optional_bool_query_works_as_a_flag() {
         let response = raw_request(port, "GET", path, "").await;
         assert_eq!(status_of(&response), 422, "{path}: {response}");
         assert!(body_of(&response).contains(field), "{path}: {response}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn query_rules_apply_to_a_directly_written_from_query_of_option() {
+    let port = 18721;
+    start(port, |_| {}, |_| {}).await;
+    for (path, status, expected) in [
+        ("/direct-option-query", 200, "None"),
+        ("/direct-option-query?code=ab", 200, "Some(\"ab\")"),
+        ("/direct-option-query?code=a", 422, "code"),
+        ("/direct-option-query?code=abc", 422, "code"),
+    ] {
+        let response = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&response), status, "{path}: {response}");
+        if status == 200 {
+            assert_eq!(body_of(&response), expected, "{path}");
+        } else {
+            assert!(body_of(&response).contains(expected), "{path}: {response}");
+        }
     }
 }
 

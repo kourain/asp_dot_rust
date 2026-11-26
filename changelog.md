@@ -11,6 +11,9 @@
 - `FromForm<T>` and `FromBody<T>` bind **one field** of the form / JSON / XML body (the argument name is the field name, `T: FromParamValue` for a form field, `T: Deserialize` for a body field, `FromBody<Option<U>>` accepts a missing field). `Body<T>` and `Form<T>` bind the **whole** body, they are the old `FromBody<T>` and `FromForm<T>`.
 - An action can have several body binders. They rewind the body after reading, so they can share it and the action can still read it. Mixing form binders with body binders in one action is a compile error.
 - `BindError::MissingField` and `BindError::ParseField` (HTTP 422).
+- `FromOptionQuery<T>` is a type alias of `FromQuery<Option<T>>`. The new aliases `FromOptionForm<T>` (`FromForm<Option<T>>`) and `FromOptionBody<T>` (`FromBody<Option<T>>`) work the same way. `FromQuery<Option<T>>` and the other spellings are accepted by `#[controller_route]` as well, and `#[validate(...)]` is checked on the `T` inside the `Option`.
+- `FromParamField` (with the markers `RequiredField` and `OptionalField` and the error `FieldError`) turns a query or form value into `T` or `Option<T>`, `FromQuery` and `FromForm` use it. `FromOptionForm<bool>::flag()` like the query flag.
+- `FromRoute<Option<T>>` is a compile error (a route parameter is always present).
 
 ### 0.2.12 Fix
 
@@ -24,7 +27,9 @@
 
 | Old | New | Note |
 | --- | --- | --- |
-| `FromOptionQuery::bind` returned `Self` and `?x=bad` gave `None` | `FromOptionQuery::bind` returns `Result<Self, BindError>` and `?x=bad` is HTTP 422 | `bind_if_present` is deprecated and calls `bind` |
+| `FromOptionQuery::bind` returned `Self` and `?x=bad` gave `None` | `FromOptionQuery::bind` returns `Result<Self, BindError>` and `?x=bad` is HTTP 422 | `bind_if_present` is removed, use `bind` |
+| `FromOptionQuery<T>` was a struct `FromOptionQuery<T>(pub Option<T>)` | it is the alias `FromQuery<Option<T>>` | the value is still `.0` and `*q`. `FromOptionQuery(x)` as a constructor or a pattern no longer compiles, write `FromQuery(x)` |
+| `FromQuery::bind` and `FromForm::bind` needed `T: FromParamValue` | they need `T: FromParamField<_>` | `T` and `Option<T>` are accepted. A type that implements `FromParamValue` itself still works |
 | `FromParamValue` was implemented for `String`, `bool`, `char`, integers and floats only | implemented for every `T: FromStr + 'static` | a user type that implemented `FromParamValue` and also has `FromStr` no longer compiles, keep one of them |
 | `ResolvedRoute` had 3 fields | `ResolvedRoute` has `invalid_path_params` and `invalid_query_params` too | build it with `..Default::default()` |
 | `routing_info.path_params` held the raw (encoded) value | holds the decoded value | `%2F` decodes inside its segment |

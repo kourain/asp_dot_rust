@@ -6,7 +6,7 @@ use crate::{
 use super::{
     body_reader::{check_form_media, read_body_for_binding},
     error::BindError,
-    from_param_value::FromParamValue,
+    from_param_value::{FieldError, FromParamField},
 };
 
 /// Binds **one field** of an `application/x-www-form-urlencoded` body.
@@ -14,8 +14,12 @@ use super::{
 /// The field name is the action argument name, like `FromQuery<T>`. Use [`Form`](super::Form)
 /// to bind the whole form into a DTO.
 ///
-/// `T` is any type with [`FromParamValue`] (every `FromStr` type: `String`, numbers, `bool`,
-/// `uuid::Uuid`, ...). A missing or unparsable field, or a Content-Type mismatch, is HTTP 422.
+/// - `FromForm<T>` is a **required** field: missing, unparsable or not valid UTF-8 is HTTP 422.
+/// - `FromForm<Option<T>>`, written [`FromOptionForm<T>`], is an **optional** field: missing is `None`.
+///   A value that is there must parse, it never turns into `None`.
+///
+/// `T` is any type with [`FromParamValue`](super::FromParamValue) (every `FromStr` type: `String`,
+/// numbers, `bool`, `uuid::Uuid`, ...). A Content-Type mismatch is HTTP 422.
 ///
 /// # Warning
 ///
@@ -26,18 +30,42 @@ use super::{
 /// - Each field binder searches the buffered form from the end. For many fields prefer `Form<Dto>`.
 pub struct FromForm<T>(pub T);
 
-impl<T: FromParamValue> FromForm<T> {
-    /// Bind form field `name`.
-    pub async fn bind(name: &str, http_context: &mut HttpContext) -> Result<Self, BindError> {
+/// An optional form field, an alias of `FromForm<Option<T>>`.
+///
+/// It is a type alias, so it cannot be used as a constructor or a pattern, write `FromForm(Some(1))` instead.
+pub type FromOptionForm<T> = FromForm<Option<T>>;
+
+impl<T> FromForm<T> {
+    /// Bind form field `name` into `T`, or into `Option<U>` for an optional field.
+    ///
+    /// `Marker` is inferred, it selects the required or the optional behaviour from `T`.
+    pub async fn bind<Marker>(name: &str, http_context: &mut HttpContext) -> Result<Self, BindError>
+    where
+        T: FromParamField<Marker>,
+    {
         check_form_media(&http_context.request)?;
         let bytes = read_body_for_binding(&mut http_context.request).await?;
         let text = std::str::from_utf8(bytes).map_err(|_| BindError::InvalidUtf8)?;
-        let (_, raw) = query_pairs(text).rfind(|(key, _)| key == name).ok_or_else(|| BindError::MissingField(name.to_owned()))?;
-        let value = decode_query_component(raw).ok_or_else(|| BindError::ParseField {
-            name: name.to_owned(),
-            value: raw.to_owned(),
-        })?;
-        T::from_param_value(&value).map(Self).map_err(|()| BindError::ParseField { name: name.to_owned(), value })
+        let value = match query_pairs(text).rfind(|(key, _)| key == name) {
+            Some((_, raw)) => Some(decode_query_component(raw).ok_or_else(|| BindError::ParseField {
+                name: name.to_owned(),
+                value: raw.to_owned(),
+            })?),
+            None => None,
+        };
+        match T::from_param_field(value.as_deref()) {
+            Ok(value) => Ok(Self(value)),
+            Err(FieldError::Missing) => Err(BindError::MissingField(name.to_owned())),
+            Err(FieldError::Invalid) => Err(BindError::ParseField { name: name.to_owned(), value: value.unwrap_or_default() }),
+        }
+    }
+}
+
+impl FromForm<Option<bool>> {
+    /// The form field as a flag: `true` when it is present (`flag`, `flag=`, `flag=true`),
+    /// `false` when it is absent or `flag=false`.
+    pub fn flag(&self) -> bool {
+        self.0 == Some(true)
     }
 }
 

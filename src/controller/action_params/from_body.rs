@@ -19,13 +19,19 @@ use super::{
 /// - `application/xml`, `text/xml`: a child element of the root element.
 ///
 /// `T` is any serde `Deserialize` type. A missing field is HTTP 422, unless `T` is an `Option`
-/// (then it is `None`). A wrong type, a body that is not an object or a Content-Type mismatch is HTTP 422 too.
+/// (then it is `None`, so is `null`), that is [`FromOptionBody<T>`]. A wrong type, a body that is not
+/// an object or a Content-Type mismatch is HTTP 422 too.
 ///
 /// # Warning
 ///
 /// - For a repeated scalar field, each occurrence must parse as `T`. The last value is returned.
 /// - Each field binder parses the buffered document again. For many fields prefer `Body<Dto>`.
 pub struct FromBody<T>(pub T);
+
+/// An optional body field, an alias of `FromBody<Option<T>>`: a missing field or `null` is `None`.
+///
+/// It is a type alias, so it cannot be used as a constructor or a pattern, write `FromBody(Some(1))` instead.
+pub type FromOptionBody<T> = FromBody<Option<T>>;
 
 impl<T: DeserializeOwned> FromBody<T> {
     /// Bind body field `name`.

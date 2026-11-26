@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.10
+
+- `#[controller_route]` binders: `FromBody<T>` and `FromForm<T>` bind one field named like the argument, `Body<T>` and `Form<T>` bind the whole body (the old `FromBody<T>` and `FromForm<T>`). An action can have several body binders, mixing form binders with body binders is a compile error. The generated code awaits the binders with `bind(..).await?`.
+- `FromOptionQuery<T>`, `FromOptionForm<T>` and `FromOptionBody<T>` are accepted as aliases of `FromQuery<Option<T>>`, `FromForm<Option<T>>` and `FromBody<Option<T>>`, and so are those spellings. `#[validate(...)]` is checked on the `T` inside the `Option` and skipped when the parameter is missing.
+- `FromRoute<Option<T>>` is a compile error.
+- Needs `asp_dot_rust` 0.2.12.
+
 ## 0.2.9
 
 - `#[inject]` now supports an `async fn new` constructor; the generated injection code awaits it.

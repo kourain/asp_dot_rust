@@ -102,3 +102,41 @@ async fn body_binders_rewind_so_whole_and_field_binders_can_share_a_body() {
     assert_eq!(status_of(&response), 200, "{response}");
     assert_eq!(body_of(&response), format!("t|{json}"));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn option_aliases_bind_missing_fields_as_none_and_still_reject_bad_values() {
+    let port = 18720;
+    start(port, |_| {}, |_| {}).await;
+    for (body, expected) in [
+        ("", "None None false"),
+        ("a=5&b=x&on", "Some(5) Some(\"x\") true"),
+        ("b=&on=false", "None Some(\"\") false"),
+        ("a=7&a=8", "Some(8) None false"),
+    ] {
+        let response = post_with(port, "/option-fields", FORM, body).await;
+        assert_eq!(status_of(&response), 200, "{body}: {response}");
+        assert_eq!(body_of(&response), expected, "{body}");
+    }
+    for (body, field) in [("a=x", "a"), ("a=", "a"), ("a=-1", "a"), ("on=maybe", "on"), ("b=%FF", "b")] {
+        let response = post_with(port, "/option-fields", FORM, body).await;
+        assert_eq!(status_of(&response), 422, "{body}: {response}");
+        assert!(body_of(&response).contains(field), "{body}: {response}");
+    }
+
+    let json = "application/json";
+    for (media, body, expected) in [
+        (json, "{}", "None None"),
+        (json, r#"{"a":3,"b":"z"}"#, r#"Some(3) Some("z")"#),
+        (json, r#"{"a":null,"b":null}"#, "None None"),
+        ("application/xml", "<r><a>3</a></r>", "Some(3) None"),
+    ] {
+        let response = post_with(port, "/option-body", media, body).await;
+        assert_eq!(status_of(&response), 200, "{body}: {response}");
+        assert_eq!(body_of(&response), expected, "{body}");
+    }
+    for (body, field) in [(r#"{"a":"x"}"#, "a"), (r#"{"b":1}"#, "b")] {
+        let response = post_with(port, "/option-body", json, body).await;
+        assert_eq!(status_of(&response), 422, "{body}: {response}");
+        assert!(body_of(&response).contains(field), "{body}: {response}");
+    }
+}
