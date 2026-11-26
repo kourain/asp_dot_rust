@@ -6,7 +6,7 @@
 
 - `FromRoute<T>`, `FromQuery<T>` and `FromOptionQuery<T>` accept every `T: FromStr` (`uuid::Uuid`, `ulid::Ulid`, `std::net::IpAddr`, your own types), `FromParamValue` is implemented for all of them. A type without `FromStr` can still implement `FromParamValue` itself.
 - Query flags: a key without a value (`?debug`, `?debug=`) is an empty value and `bool` reads it as `true`. `FromOptionQuery::<bool>::flag()` is `true` when the key is present (and not `false`), `false` when it is absent.
-- `ResolvedRoute::invalid_path_params` and `ResolvedRoute::invalid_query_params` keep the raw text of a value that is not valid UTF-8 after decoding.
+- Path and query parameters retain invalid UTF-8 as `Err(raw)`.
 - Doc warnings on `FromQuery<T>` and `FromOptionQuery<T>`: a repeated query key keeps only its last value.
 - `FromForm<T>` and `FromBody<T>` bind **one field** of the form / JSON / XML body (the argument name is the field name, `T: FromParamValue` for a form field, `T: Deserialize` for a body field, `FromBody<Option<U>>` accepts a missing field). `Body<T>` and `Form<T>` bind the **whole** body, they are the old `FromBody<T>` and `FromForm<T>`.
 - An action can have several body binders. They rewind the body after reading, so they can share it and the action can still read it. Mixing form binders with body binders in one action is a compile error.
@@ -31,7 +31,7 @@
 | `FromOptionQuery<T>` was a struct `FromOptionQuery<T>(pub Option<T>)` | it is the alias `FromQuery<Option<T>>` | the value is still `.0` and `*q`. `FromOptionQuery(x)` as a constructor or a pattern no longer compiles, write `FromQuery(x)` |
 | `FromQuery::bind` and `FromForm::bind` needed `T: FromParamValue` | they need `T: FromParamField<_>` | `T` and `Option<T>` are accepted. A type that implements `FromParamValue` itself still works |
 | `FromParamValue` was implemented for `String`, `bool`, `char`, integers and floats only | implemented for every `T: FromStr + 'static` | a user type that implemented `FromParamValue` and also has `FromStr` no longer compiles, keep one of them |
-| `ResolvedRoute` had 3 fields | `ResolvedRoute` has `invalid_path_params` and `invalid_query_params` too | build it with `..Default::default()` |
+| Path and query maps held strings | Both maps hold `Result<String, String>` | Use `as_deref()` to borrow the decoded value or inspect the original text on error |
 | `routing_info.path_params` held the raw (encoded) value | holds the decoded value | `%2F` decodes inside its segment |
 | `FromBody<T>` / `FromForm<T>` bound the whole body (`bind_serde`, `FromBody<String>` was the raw text) | they bind one field named like the argument | rename them to `Body<T>` / `Form<T>`. `FromBody<String>` still compiles but now reads a field, so a raw-text action fails with HTTP 422 until it is `Body<String>` |
 | at most one `FromBody` or `FromForm` per action | any number, but not form together with body binders | |

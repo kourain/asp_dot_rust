@@ -15,21 +15,10 @@ pub struct FromRoute<T>(pub T);
 impl<T: FromParamValue> FromRoute<T> {
     /// Bind path parameter `name` into `T`.
     pub fn bind(name: &str, http_context: &HttpContext) -> Result<Self, BindError> {
-        let routing_info = &http_context.request.routing_info;
-        if let Some(raw) = routing_info.invalid_path_params.get(name) {
-            return Err(BindError::ParseRouteParam {
-                name: name.to_string(),
-                value: raw.clone(),
-            });
-        }
-        let raw = routing_info
-            .path_params
-            .get(name)
-            .ok_or_else(|| BindError::MissingRouteParam(name.to_string()))?;
-        let value = T::from_param_value(raw).map_err(|_| BindError::ParseRouteParam {
-            name: name.to_string(),
-            value: raw.clone(),
-        })?;
-        Ok(FromRoute(value))
+        let value = http_context.request.routing_info.path_params.get(name)
+            .ok_or_else(|| BindError::MissingRouteParam(name.to_owned()))?;
+        let parse_error = |raw: &str| BindError::ParseRouteParam { name: name.to_owned(), value: raw.to_owned() };
+        let raw = value.as_deref().map_err(|raw| parse_error(raw))?;
+        T::from_param_value(raw).map(Self).map_err(|_| parse_error(raw))
     }
 }

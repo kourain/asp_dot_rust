@@ -15,8 +15,8 @@ pub struct RoutingService {
 
 impl RoutingService {
     pub fn resolve(&self, uri: &http::Uri, method: &http::Method) -> ResolvedRoute {
-        let (query_params, invalid_query_params) = uri.query().map(parse_query_string).unwrap_or_default();
-        let mut resolved = ResolvedRoute { query_params, invalid_query_params, ..Default::default() };
+        let query_params = uri.query().map(parse_query_string).unwrap_or_default();
+        let mut resolved = ResolvedRoute { query_params, ..Default::default() };
         let Ok(matched) = self._router.at(uri.path()) else {
             return resolved;
         };
@@ -28,10 +28,8 @@ impl RoutingService {
         resolved.router_info = RoutingResult::Found(route.clone());
         // Decode after matching so an encoded slash stays inside its path segment.
         for (name, raw) in matched.params.iter() {
-            match urlencoding::decode(raw) {
-                Ok(value) => resolved.path_params.insert(name.to_owned(), value.into_owned()),
-                Err(_) => resolved.invalid_path_params.insert(name.to_owned(), raw.to_owned()),
-            };
+            let value = urlencoding::decode(raw).map(|value| value.into_owned()).map_err(|_| raw.to_owned());
+            resolved.path_params.insert(name.to_owned(), value);
         }
         resolved
     }

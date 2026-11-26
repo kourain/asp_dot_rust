@@ -84,20 +84,15 @@ impl<T> FromQuery<T> {
     where
         T: FromParamField<Marker>,
     {
-        let routing_info = &http_context.request.routing_info;
-        if let Some(raw) = routing_info.invalid_query_params.get(name) {
-            return Err(BindError::ParseQueryParam {
-                name: name.to_string(),
-                value: raw.clone(),
-            });
-        }
-        let raw = routing_info.query_params.get(name);
-        match T::from_param_field(raw.map(String::as_str)) {
+        let raw = http_context.request.routing_info.query_params.get(name)
+            .map(Result::as_deref).transpose()
+            .map_err(|raw| BindError::ParseQueryParam { name: name.to_owned(), value: raw.to_owned() })?;
+        match T::from_param_field(raw) {
             Ok(value) => Ok(Self(value)),
             Err(FieldError::Missing) => Err(BindError::MissingQueryParam(name.to_string())),
             Err(FieldError::Invalid) => Err(BindError::ParseQueryParam {
                 name: name.to_string(),
-                value: raw.cloned().unwrap_or_default(),
+                value: raw.unwrap_or_default().to_owned(),
             }),
         }
     }

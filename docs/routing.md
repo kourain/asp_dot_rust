@@ -42,7 +42,7 @@ impl HomeController {
 
     #[get("/{id}")] // -> GET /home/{id}, a dynamic path parameter
     pub async fn show(&mut self) -> impl ActionResult {
-        let id = self.http_context.request.routing_info.path_params.get("id").cloned().unwrap_or_default();
+        let id = self.http_context.request.routing_info.path_params.get("id").and_then(|value| value.as_deref().ok()).unwrap_or_default();
         results::ok(format!("home #{id}"))
     }
 
@@ -64,10 +64,9 @@ impl HomeController {
   `#[controller_route("home")]` + `#[get("index")]` produce the same route.
 - Path parameters use `matchit`'s `{name}` syntax (e.g. `/{id}`,
   `/{category}/{id}`). They are resolved per-request and exposed as
-  `http_context.request.routing_info.path_params: HashMap<String, String>`.
+  `http_context.request.routing_info.path_params: HashMap<String, Result<String, String>>`.
   The values are percent-decoded after the route matched (an encoded `%2F` does not
-  split a segment). A value that is not valid UTF-8 after decoding is left out of
-  `path_params` and kept, still encoded, in `routing_info.invalid_path_params`.
+  split a segment). A value that is not valid UTF-8 after decoding is stored as `Err(raw)`.
 - An action may declare several route attributes, including different paths for the same HTTP method. Registering the same controller twice or repeating a path and method panics during registration.
 
 ## HTTP QUERY
@@ -134,7 +133,7 @@ at match time. Insertion into `matchit` fails in `add_controller_route`, so `add
 ## Query string
 
 `RoutingService::resolve` parses the request URI's query string into
-`http_context.request.routing_info.query_params: HashMap<String, String>`:
+`http_context.request.routing_info.query_params: HashMap<String, Result<String, String>>`:
 
 - Keys and values are decoded as form data: `%XX` is decoded and `+` is a space
   (`%2B` is a plus).
@@ -143,10 +142,8 @@ at match time. Insertion into `matchit` fails in `add_controller_route`, so `add
 - Duplicate keys: the last occurrence wins, whether it is valid or not, so
   `?id=1&id=2` gives `"2"`. The earlier values are discarded without an error.
 - Empty pairs (`a=1&&b=2`) and pairs with an empty key (`=v`) are skipped.
-- A value that is not valid UTF-8 after decoding is not placed in `query_params`
-  and not altered either: its raw text is kept in
-  `routing_info.invalid_query_params` (decoded key -> raw value) so the binders
-  can report it (HTTP 422). A key that is not valid UTF-8 cannot match any
+- Invalid UTF-8 values retain the encoded text as `Err(raw)` for binder errors (HTTP 422).
+  A key with invalid UTF-8 cannot match a
   parameter name and is dropped.
 
 ## Resolving a request: `Found` / `NotFound` / `MethodNotAllowed`
