@@ -1,5 +1,7 @@
 use std::{any::TypeId, str::FromStr};
 
+use super::marker::{OptionalField, RequiredField};
+
 /// Parse a single path/query/form string value into `T`.
 /// A type that cannot implement `FromStr` can implement this trait directly, as long as it does not
 /// also implement `FromStr`.
@@ -29,12 +31,6 @@ impl<T: FromStr + 'static> FromParamValue for T {
         value.parse().map_err(|_| ())
     }
 }
-
-/// Marker for [`FromParamField`]: the field must be present (`T`).
-pub struct RequiredField;
-
-/// Marker for [`FromParamField`]: the field may be absent (`Option<T>`).
-pub struct OptionalField;
 
 /// Why a query or form field could not be turned into the target type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -22,7 +22,7 @@ Action methods may take binder parameters. The `#[controller_route]` macro resol
 
 `FromOptionQuery<T>`, `FromOptionForm<T>` and `FromOptionBody<T>` are type aliases of `FromQuery<Option<T>>`, `FromForm<Option<T>>` and `FromBody<Option<T>>`, so the two spellings are the same type and the macro treats them the same. Because they are aliases, they cannot be used as a constructor or a pattern (write `FromQuery(Some(1))`).
 
-A route parameter is always present. `FromRoute<T>::bind` requires `T: FromParamValue`. Rust rejects `FromRoute<std::option::Option<T>>` because the standard `Option<T>` does not implement that trait.
+A route parameter is always present. `FromRoute<T>::bind` requires `T: FromParamValue`. Rust rejects `FromRoute<std::option::Option<T>>` because the standard `Option<T>` does not implement that trait. The error is reported on the parameter in the action signature and explains that a route parameter cannot be optional. A type of your own named `Option` that implements `FromStr` is a different type and is accepted.
 
 An optional value that is there must still parse: `?limit=abc` is HTTP 422 for `FromOptionQuery<u32>`, it never becomes `None`. For `FromOptionBody<T>` a `null` is `None`.
 

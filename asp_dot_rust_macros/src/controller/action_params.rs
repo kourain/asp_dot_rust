@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
-use syn::{FnArg, Pat, PatType, Type};
+use quote::{quote, quote_spanned};
+use syn::{FnArg, Pat, PatType, Type, spanned::Spanned};
 
 use super::query_validation::QueryValidation;
 use crate::utils::compiler_error::create_compiler_error;
@@ -111,15 +111,17 @@ pub fn generate_bind_code(params: &[ActionParam]) -> (TokenStream2, Vec<TokenStr
         let name = &param.name;
         let name_lit = name.to_string();
         let wrapper = &param.wrapper;
+        // Put the generated binder call on the parameter type, so a rejected type is reported there and not on `#[controller_route]`.
+        let span = wrapper.span();
         let bind_expr = match param.kind {
             BinderKind::FromRoute | BinderKind::FromQuery => {
-                quote! { <#wrapper>::bind(#name_lit, &self.http_context)? }
+                quote_spanned! { span=> <#wrapper>::bind(#name_lit, &self.http_context)? }
             }
             BinderKind::FromBody | BinderKind::FromForm => {
-                quote! { <#wrapper>::bind(#name_lit, &mut self.http_context).await? }
+                quote_spanned! { span=> <#wrapper>::bind(#name_lit, &mut self.http_context).await? }
             }
             BinderKind::Body | BinderKind::Form => {
-                quote! {{
+                quote_spanned! { span=> {
                     #[allow(unused_imports)]
                     use #main::controller::{action_params::BindSerdeBody as _, validation::SkipValidation as _};
                     let bound = <#wrapper>::bind(&mut self.http_context).await?;

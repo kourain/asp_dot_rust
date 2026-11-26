@@ -6,7 +6,8 @@ use crate::http_context::HttpContext;
 
 use super::{
     error::BindError,
-    from_param_value::{FieldError, FromParamField, OptionalField, RequiredField},
+    from_param_value::{FieldError, FromParamField},
+    marker::{OptionalField, RequiredField},
 };
 
 /// Binds one value from the query string. The parameter name is the action argument name.
