@@ -1,1 +1,0 @@
-mod toml_configuration_tests;
