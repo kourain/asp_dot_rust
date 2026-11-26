@@ -433,6 +433,15 @@ async fn query_routes_bind_body_and_are_discoverable() {
 
     let swagger = raw_request(port, "GET", "/swagger/v1/swagger.json", "").await;
     assert_eq!(status_of(&swagger), 200, "{swagger}");
+    let slash = raw_request(port, "GET", "/swagger/v1/swagger.json/", "").await;
+    assert_eq!(status_of(&slash), 200);
+    assert_eq!(body_of(&slash), body_of(&swagger));
+    for path in ["/swagger", "/swagger/", "/swagger/index.html"] {
+        let ui = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&ui), 200, "{path}");
+        assert_eq!(header_of(&ui, "content-type").as_deref(), Some("text/html; charset=utf-8"));
+        assert!(body_of(&ui).contains(r#"url: "/swagger/v1/swagger.json""#));
+    }
     let document: serde_json::Value = serde_json::from_str(body_of(&swagger)).unwrap();
     assert_eq!(document["openapi"], "3.2.1");
     let search = &document["paths"]["/search"]["query"];

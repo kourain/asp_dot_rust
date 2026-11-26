@@ -61,7 +61,7 @@ impl RouteRegistration {
         path_lit: &LitStr,
         attributes: &[proc_macro2::TokenStream],
         other_attrs: &[&Attribute],
-        span: proc_macro2::Span,
+        route_attr: &Attribute,
     ) {
         let main_crate_path = asp_dot_rust_crate_path();
         let action_route = quote! {
@@ -73,7 +73,7 @@ impl RouteRegistration {
         };
         let self_ty = &self.self_ty;
         let root_route = &self.root_route;
-        self.registrations.push(quote_spanned! {span=>
+        self.registrations.push(quote_spanned! {route_attr.span()=>
             #(#other_attrs)*
             {
                 let action_route = #action_route;
@@ -176,12 +176,12 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                 }
 
                 let path_lit = some_or_error!(lit_str_from_expr(path_expr), attr, format!("Route path in #[route] must be a string literal on `{}`", method_name));
-                route_registration.push_route_registration(&method_name_lit, method_lit, &path_lit, &attribute_calls, &cfg_attrs, attr.span());
+                route_registration.push_route_registration(&method_name_lit, method_lit, &path_lit, &attribute_calls, &cfg_attrs, attr);
             } else {
                 let path_lit: LitStr = ok_or_error!(attr.parse_args(), attr, format!("Invalid #[{}(...)] on `{}`", route_ident, method_name));
                 let http_method_string = route_ident.to_uppercase();
                 let http_method = LitStr::new(&http_method_string, attr.span());
-                route_registration.push_route_registration(&method_name_lit, vec![http_method], &path_lit, &attribute_calls, &cfg_attrs, attr.span());
+                route_registration.push_route_registration(&method_name_lit, vec![http_method], &path_lit, &attribute_calls, &cfg_attrs, attr);
             };
         }
         if is_route {

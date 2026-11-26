@@ -60,18 +60,12 @@ pub trait FromParamField<Marker>: Sized {
 
 impl<T: FromParamValue> FromParamField<RequiredField> for T {
     fn from_param_field(raw: Option<&str>) -> Result<Self, FieldError> {
-        match raw {
-            Some(raw) => T::from_param_value(raw).map_err(|()| FieldError::Invalid),
-            None => Err(FieldError::Missing),
-        }
+        T::from_param_value(raw.ok_or(FieldError::Missing)?).map_err(|()| FieldError::Invalid)
     }
 }
 
 impl<T: FromParamValue> FromParamField<OptionalField> for Option<T> {
     fn from_param_field(raw: Option<&str>) -> Result<Self, FieldError> {
-        match raw {
-            Some(raw) => T::from_param_value(raw).map(Some).map_err(|()| FieldError::Invalid),
-            None => Ok(None),
-        }
+        raw.map(T::from_param_value).transpose().map_err(|()| FieldError::Invalid)
     }
 }

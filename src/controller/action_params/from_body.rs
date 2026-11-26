@@ -9,23 +9,12 @@ use super::{
     error::BindError,
 };
 
-/// Binds **one field** of the request body.
+/// Binds the top-level JSON member or XML child element named after the action argument.
+/// A missing Content-Type defaults to JSON. Invalid data or an unsupported media type returns HTTP 422.
+/// [`FromOptionBody<T>`] accepts a missing field or JSON `null`.
 ///
-/// The field name is the action argument name, like `FromQuery<T>`. Use [`Body`](super::Body)
-/// to bind the whole body into a DTO (or to read it as raw text).
-///
-/// Supported `Content-Type` values (JSON is assumed when it is missing):
-/// - `application/json`, `text/json`: a member of the top-level JSON object.
-/// - `application/xml`, `text/xml`: a child element of the root element.
-///
-/// `T` is any serde `Deserialize` type. A missing field is HTTP 422, unless `T` is an `Option`
-/// (then it is `None`, so is `null`), that is [`FromOptionBody<T>`]. A wrong type, a body that is not
-/// an object or a Content-Type mismatch is HTTP 422 too.
-///
-/// # Warning
-///
-/// - For a repeated scalar field, each occurrence must parse as `T`. The last value is returned.
-/// - Each field binder parses the buffered document again. For many fields prefer `Body<Dto>`.
+/// Each occurrence of a repeated field must parse as `T`. The last value wins.
+/// Each field binder parses the document again. Use [`Body<Dto>`](super::Body) to bind several fields in one pass.
 pub struct FromBody<T>(pub T);
 
 /// An optional body field, an alias of `FromBody<Option<T>>`: a missing field or `null` is `None`.
@@ -83,24 +72,5 @@ impl<'de, T: de::Deserialize<'de>> Visitor<'de> for NamedField<'_, T> {
             }
         }
         Ok(())
-    }
-}
-
-impl<T> FromBody<T> {
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-impl<T> std::ops::Deref for FromBody<T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for FromBody<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
     }
 }

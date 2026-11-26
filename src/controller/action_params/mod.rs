@@ -25,3 +25,29 @@ pub use marker::{OptionalField, RequiredField};
 pub trait BindSerdeBody: Sized {
     fn bind(ctx: &mut crate::http_context::HttpContext) -> impl std::future::Future<Output = Result<Self, BindError>> + Send;
 }
+
+macro_rules! impl_param_access {
+    ($($wrapper:ident),+ $(,)?) => {$(
+        impl<T> $wrapper<T> {
+            pub fn into_inner(self) -> T {
+                self.0
+            }
+        }
+
+        impl<T> std::ops::Deref for $wrapper<T> {
+            type Target = T;
+
+            fn deref(&self) -> &T {
+                &self.0
+            }
+        }
+
+        impl<T> std::ops::DerefMut for $wrapper<T> {
+            fn deref_mut(&mut self) -> &mut T {
+                &mut self.0
+            }
+        }
+    )+};
+}
+
+impl_param_access!(Body, Form, FromBody, FromForm, FromQuery, FromRoute);

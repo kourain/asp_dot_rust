@@ -10,12 +10,12 @@ pub(super) async fn read_body_for_binding(request: &mut HttpRequest) -> Result<&
 }
 
 /// A form binder accepts `application/x-www-form-urlencoded`, a missing or blank media type is accepted too.
-pub(crate) fn check_form_media(request: &HttpRequest) -> Result<(), BindError> {
+pub(super) async fn read_form_text(request: &mut HttpRequest) -> Result<&str, BindError> {
     let media = content_type_media(request).unwrap_or_default();
     if !media.is_empty() && media != "application/x-www-form-urlencoded" {
         return Err(BindError::UnsupportedMediaType(media));
     }
-    Ok(())
+    std::str::from_utf8(read_body_for_binding(request).await?).map_err(|_| BindError::InvalidUtf8)
 }
 
 /// Return the media type part of Content-Type (without parameters), lowercased.

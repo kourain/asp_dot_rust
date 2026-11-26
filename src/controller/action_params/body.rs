@@ -7,20 +7,9 @@ use super::{
     error::BindError,
 };
 
-/// Binds the **whole** request body into `T`.
-///
-/// Use [`FromBody`](super::FromBody) to bind a single field instead.
-/// The body is read from its start and rewound afterwards, so other binders can read it too.
-///
-/// Supported `Content-Type` values:
-/// - `application/json`, `text/json` → JSON (`serde_json`)
-/// - `application/xml`, `text/xml` → XML (`quick-xml`)
-///
-/// When `Content-Type` is missing, JSON is assumed.
-/// Mismatch or deserialize failure → HTTP 422.
-///
-/// `Body<String>` reads the body as raw UTF-8 text (no serde).
-/// Other types use serde; primitives are not useful as the sole body type.
+/// Deserializes the whole JSON or XML body into `T`. A missing Content-Type defaults to JSON.
+/// `Body<String>` reads raw UTF-8 and also accepts `text/plain`. Invalid data or an unsupported media type returns HTTP 422.
+/// The body stays available to the action and other binders. Use [`FromBody`](super::FromBody) for one field.
 pub struct Body<T>(pub T);
 
 impl Body<String> {
@@ -61,24 +50,5 @@ impl<T: DeserializeOwned> Body<T> {
 impl<T: DeserializeOwned> super::BindSerdeBody for Body<T> {
     fn bind(ctx: &mut HttpContext) -> impl std::future::Future<Output = Result<Self, BindError>> + Send {
         Self::bind_serde(ctx)
-    }
-}
-
-impl<T> Body<T> {
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-impl<T> std::ops::Deref for Body<T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for Body<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
     }
 }

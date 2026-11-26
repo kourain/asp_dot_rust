@@ -32,21 +32,4 @@ impl<T: FromParamValue> FromRoute<T> {
         })?;
         Ok(FromRoute(value))
     }
-
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-impl<T> std::ops::Deref for FromRoute<T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for FromRoute<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
 }

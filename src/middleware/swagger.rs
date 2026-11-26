@@ -1,7 +1,7 @@
 use crate::{
     Application,
     dependency_injection::Serv,
-    http_context::HttpContext,
+    http_context::{HttpContext, HttpHeaderExt},
     macros::middleware,
     middleware::MiddlewareNext,
     services::openapi::{OpenApiDocument, OpenApiService},
@@ -14,52 +14,28 @@ use crate::{
 pub struct SwaggerMiddleware {
     next: MiddlewareNext,
     open_api_service: Serv<OpenApiService>,
-    title: String,
-    version: String,
-    route_prefix: String,
 }
 
 #[middleware]
 impl SwaggerMiddleware {
     pub fn new(next: MiddlewareNext, open_api_service: Serv<OpenApiService>) -> Self {
-        Self {
-            next,
-            open_api_service,
-            title: "API".to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            route_prefix: "/swagger".to_string(),
-        }
+        Self { next, open_api_service }
     }
 
     pub async fn invoke_async(&self, http_context: &mut HttpContext) {
-        {
-            let path = http_context.request.path();
-            let prefix = self.route_prefix.as_str();
-            let json_path = format!("{}/v1/swagger.json", prefix);
-
-            if path == json_path || path == format!("{}/v1/swagger.json/", prefix.trim_end_matches('/')) {
-                self.serve_json(http_context).await;
-                return;
-            }
-
-            if path == prefix || path == format!("{}/", prefix) || path == format!("{}/index.html", prefix) {
-                self.serve_ui(http_context).await;
-                return;
-            }
+        match http_context.request.path() {
+            "/swagger/v1/swagger.json" | "/swagger/v1/swagger.json/" => self.serve_json(http_context),
+            "/swagger" | "/swagger/" | "/swagger/index.html" => Self::serve_ui(http_context),
+            _ => self.next.next_async(http_context).await,
         }
-        self.next.next_async(http_context).await;
     }
 
-    async fn serve_json(&self, http_context: &mut HttpContext) {
-        let operations = self.open_api_service.registered_operations();
-        let doc = OpenApiDocument::from_operations(&self.title, &self.version, &operations);
+    fn serve_json(&self, http_context: &mut HttpContext) {
+        let doc = OpenApiDocument::from_operations("API", env!("CARGO_PKG_VERSION"), &self.open_api_service._operations);
         match doc.to_json() {
             Ok(json) => {
                 http_context.response.status_code = http::StatusCode::OK;
-                http_context
-                    .response
-                    .headers
-                    .insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("application/json; charset=utf-8"));
+                http_context.response.headers.set_content_type("application/json; charset=utf-8");
                 http_context.response.body = json.into_bytes();
             }
             Err(_) => {
@@ -69,44 +45,33 @@ impl SwaggerMiddleware {
         }
     }
 
-    async fn serve_ui(&self, http_context: &mut HttpContext) {
-        let json_url = format!("{}/v1/swagger.json", self.route_prefix);
-        let html = self.swagger_ui_html(&json_url);
+    fn serve_ui(http_context: &mut HttpContext) {
         http_context.response.status_code = http::StatusCode::OK;
-        http_context
-            .response
-            .headers
-            .insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("text/html; charset=utf-8"));
-        http_context.response.body = html.into_bytes();
-    }
-    fn swagger_ui_html(&self, swagger_json_url: &str) -> String {
-        format!(
-            r##"<!DOCTYPE html>
+        http_context.response.headers.set_content_type("text/html; charset=utf-8");
+        http_context.response.body = br##"<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>{title}</title>
+  <title>API</title>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.34.1/swagger-ui.css">
-  <style>body {{ margin: 0; background: #fafafa; }}</style>
+  <style>body { margin: 0; background: #fafafa; }</style>
 </head>
 <body>
   <div id="swagger-ui"></div>
   <script src="https://unpkg.com/swagger-ui-dist@5.34.1/swagger-ui-bundle.js"></script>
   <script>
-    window.onload = function () {{
-      window.ui = SwaggerUIBundle({{
-        url: "{swagger_json_url}",
+    window.onload = function () {
+      window.ui = SwaggerUIBundle({
+        url: "/swagger/v1/swagger.json",
         dom_id: "#swagger-ui",
         presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
         layout: "BaseLayout"
-      }});
-    }};
+      });
+    };
   </script>
 </body>
 </html>
-"##,
-            title = self.title
-        )
+"##.to_vec();
     }
 }
 
@@ -116,7 +81,7 @@ impl Application {
     /// UI: `/swagger`
     /// JSON: `/swagger/v1/swagger.json`
     ///
-    /// Attention: you must call `builder.add_swagger_gen()` first else pannic
+    /// Register the OpenAPI service with `builder.add_swagger_gen()` before building the application.
     pub fn use_swagger(&mut self) -> &mut Self {
         self.add_middleware::<SwaggerMiddleware>();
         self

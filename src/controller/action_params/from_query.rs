@@ -101,10 +101,6 @@ impl<T> FromQuery<T> {
             }),
         }
     }
-
-    pub fn into_inner(self) -> T {
-        self.0
-    }
 }
 
 impl FromQuery<Option<bool>> {
@@ -112,18 +108,5 @@ impl FromQuery<Option<bool>> {
     /// `false` when it is absent or `?verbose=false`.
     pub fn flag(&self) -> bool {
         self.0 == Some(true)
-    }
-}
-
-impl<T> std::ops::Deref for FromQuery<T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<T> std::ops::DerefMut for FromQuery<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
     }
 }
