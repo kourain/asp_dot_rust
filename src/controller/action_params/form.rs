@@ -3,7 +3,7 @@ use serde::de::DeserializeOwned;
 use crate::http_context::HttpContext;
 
 use super::{
-    body_fields::{check_form_media, read_body_for_binding},
+    body_reader::{check_form_media, read_body_for_binding},
     error::BindError,
 };
 
@@ -21,7 +21,7 @@ impl Form<String> {
     pub async fn bind(http_context: &mut HttpContext) -> Result<Self, BindError> {
         check_form_media(&http_context.request)?;
         let bytes = read_body_for_binding(&mut http_context.request).await?;
-        let text = String::from_utf8(bytes).map_err(|_| BindError::InvalidUtf8)?;
+        let text = std::str::from_utf8(bytes).map_err(|_| BindError::InvalidUtf8)?.to_owned();
         Ok(Form(text))
     }
 }
@@ -31,7 +31,7 @@ impl<T: DeserializeOwned> Form<T> {
     pub async fn bind_serde(http_context: &mut HttpContext) -> Result<Self, BindError> {
         check_form_media(&http_context.request)?;
         let bytes = read_body_for_binding(&mut http_context.request).await?;
-        let text = std::str::from_utf8(&bytes).map_err(|_| BindError::InvalidUtf8)?;
+        let text = std::str::from_utf8(bytes).map_err(|_| BindError::InvalidUtf8)?;
         let value =
             serde_urlencoded::from_str(text).map_err(|e| BindError::Deserialize(e.to_string()))?;
         Ok(Form(value))

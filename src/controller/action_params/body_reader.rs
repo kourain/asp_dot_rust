@@ -1,18 +1,21 @@
-use crate::http_context::HttpRequest;
-use crate::http_context::HttpHeaderExt;
+use crate::http_context::{HttpHeaderExt, HttpRequest};
 
 use super::error::BindError;
 
-/// Read the request body from the current position to the end.
-///
-/// The body is buffered in memory (ASP.NET-style). After a successful read the position is at
-/// the end; call `request.seek_body(0)` to read the same bytes again.
-pub async fn read_body_bytes(request: &mut HttpRequest) -> Result<Vec<u8>, BindError> {
-    request
-        .body
-        .read_to_end()
-        .await
-        .map_err(|e| BindError::BodyRead(e.to_string()))
+/// Buffer once and leave the request cursor at the start for the next binder or the action.
+pub(super) async fn read_body_for_binding(request: &mut HttpRequest) -> Result<&[u8], BindError> {
+    request.enable_buffering().await.map_err(BindError::BodyRead)?;
+    request.seek_body(0).map_err(BindError::BodyRead)?;
+    Ok(request.buffered_body().expect("enable_buffering leaves the body buffered"))
+}
+
+/// A form binder accepts `application/x-www-form-urlencoded`, a missing or blank media type is accepted too.
+pub(crate) fn check_form_media(request: &HttpRequest) -> Result<(), BindError> {
+    let media = content_type_media(request).unwrap_or_default();
+    if !media.is_empty() && media != "application/x-www-form-urlencoded" {
+        return Err(BindError::UnsupportedMediaType(media));
+    }
+    Ok(())
 }
 
 /// Return the media type part of Content-Type (without parameters), lowercased.

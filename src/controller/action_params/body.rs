@@ -3,8 +3,7 @@ use serde::de::DeserializeOwned;
 use crate::http_context::HttpContext;
 
 use super::{
-    body_fields::read_body_for_binding,
-    body_reader::content_type_media,
+    body_reader::{content_type_media, read_body_for_binding},
     error::BindError,
 };
 
@@ -34,7 +33,7 @@ impl Body<String> {
             other => return Err(BindError::UnsupportedMediaType(other.to_string())),
         }
         let bytes = read_body_for_binding(&mut http_context.request).await?;
-        let text = String::from_utf8(bytes).map_err(|_| BindError::InvalidUtf8)?;
+        let text = std::str::from_utf8(bytes).map_err(|_| BindError::InvalidUtf8)?.to_owned();
         Ok(Body(text))
     }
 }
@@ -48,9 +47,9 @@ impl<T: DeserializeOwned> Body<T> {
 
         let value = match media.as_str() {
             "application/json" | "text/json" => {
-                serde_json::from_slice(&bytes).map_err(|e| BindError::Deserialize(e.to_string()))?
+                serde_json::from_slice(bytes).map_err(|e| BindError::Deserialize(e.to_string()))?
             }
-            "application/xml" | "text/xml" => quick_xml::de::from_reader(bytes.as_slice())
+            "application/xml" | "text/xml" => quick_xml::de::from_reader(bytes)
                 .map_err(|e| BindError::Deserialize(e.to_string()))?,
             other => return Err(BindError::UnsupportedMediaType(other.to_string())),
         };

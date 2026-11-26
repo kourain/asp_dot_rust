@@ -1,10 +1,11 @@
-use serde::de::DeserializeOwned;
+use std::fmt;
+
+use serde::de::{self, DeserializeOwned, Deserializer, IgnoredAny, MapAccess, Visitor};
 
 use crate::http_context::HttpContext;
 
 use super::{
-    body_fields::{json_field, read_body_for_binding, xml_field},
-    body_reader::content_type_media,
+    body_reader::{content_type_media, read_body_for_binding},
     error::BindError,
 };
 
@@ -22,8 +23,8 @@ use super::{
 ///
 /// # Warning
 ///
-/// - **A repeated key keeps only its last value.**
-/// - Every field binder reads and parses the whole body again. For many fields prefer `Body<Dto>`.
+/// - For a repeated scalar field, each occurrence must parse as `T`. The last value is returned.
+/// - Each field binder parses the buffered document again. For many fields prefer `Body<Dto>`.
 pub struct FromBody<T>(pub T);
 
 impl<T: DeserializeOwned> FromBody<T> {
@@ -31,12 +32,51 @@ impl<T: DeserializeOwned> FromBody<T> {
     pub async fn bind(name: &str, http_context: &mut HttpContext) -> Result<Self, BindError> {
         let media = content_type_media(&http_context.request).unwrap_or_else(|| "application/json".to_string());
         let bytes = read_body_for_binding(&mut http_context.request).await?;
-        let value = match media.as_str() {
-            "application/json" | "text/json" => json_field(&bytes, name)?,
-            "application/xml" | "text/xml" => xml_field(&bytes, name)?,
-            other => return Err(BindError::UnsupportedMediaType(other.to_string())),
-        };
-        Ok(Self(value))
+        let mut value = None;
+        let field = NamedField { name, value: &mut value };
+        match media.as_str() {
+            "application/json" | "text/json" => {
+                let mut json = serde_json::Deserializer::from_slice(bytes);
+                json.deserialize_map(field).and_then(|()| json.end()).map_err(|e| BindError::Deserialize(e.to_string()))?;
+            }
+            "application/xml" | "text/xml" => {
+                quick_xml::de::Deserializer::from_reader(bytes)
+                    .deserialize_map(field)
+                    .map_err(|e| BindError::Deserialize(e.to_string()))?;
+            }
+            _ => return Err(BindError::UnsupportedMediaType(media)),
+        }
+        match value {
+            Some(value) => Ok(Self(value)),
+            None => T::deserialize(de::value::UnitDeserializer::<de::value::Error>::new())
+                .map(Self)
+                .map_err(|_| BindError::MissingField(name.to_owned())),
+        }
+    }
+}
+
+/// Deserialize the named member in its original format, skipping unrelated values of any type.
+struct NamedField<'a, T> {
+    name: &'a str,
+    value: &'a mut Option<T>,
+}
+
+impl<'de, T: de::Deserialize<'de>> Visitor<'de> for NamedField<'_, T> {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("an object")
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<(), A::Error> {
+        while let Some(key) = map.next_key::<String>()? {
+            if key == self.name {
+                *self.value = Some(map.next_value().map_err(|e| de::Error::custom(format!("field `{}`: {e}", self.name)))?);
+            } else {
+                map.next_value::<IgnoredAny>()?;
+            }
+        }
+        Ok(())
     }
 }
 

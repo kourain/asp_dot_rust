@@ -1,7 +1,10 @@
-use crate::http_context::HttpContext;
+use crate::{
+    http_context::HttpContext,
+    services::routing::query_string::{decode_query_component, query_pairs},
+};
 
 use super::{
-    body_fields::{check_form_media, form_field, read_body_for_binding},
+    body_reader::{check_form_media, read_body_for_binding},
     error::BindError,
     from_param_value::FromParamValue,
 };
@@ -20,7 +23,7 @@ use super::{
 /// - **A key without a value is an empty value** (`a` and `a=` are the same): `String` gets `""`,
 ///   `bool` gets `true`, numbers fail.
 /// - Keys and values are decoded as form data: `+` is a space and `%2B` is a plus.
-/// - Every field binder reads and parses the whole body again. For many fields prefer `Form<Dto>`.
+/// - Each field binder searches the buffered form from the end. For many fields prefer `Form<Dto>`.
 pub struct FromForm<T>(pub T);
 
 impl<T: FromParamValue> FromForm<T> {
@@ -28,11 +31,13 @@ impl<T: FromParamValue> FromForm<T> {
     pub async fn bind(name: &str, http_context: &mut HttpContext) -> Result<Self, BindError> {
         check_form_media(&http_context.request)?;
         let bytes = read_body_for_binding(&mut http_context.request).await?;
-        let raw = form_field(&bytes, name)?;
-        match T::from_param_value(&raw) {
-            Ok(value) => Ok(Self(value)),
-            Err(()) => Err(BindError::ParseField { name: name.to_string(), value: raw }),
-        }
+        let text = std::str::from_utf8(bytes).map_err(|_| BindError::InvalidUtf8)?;
+        let (_, raw) = query_pairs(text).rfind(|(key, _)| key == name).ok_or_else(|| BindError::MissingField(name.to_owned()))?;
+        let value = decode_query_component(raw).ok_or_else(|| BindError::ParseField {
+            name: name.to_owned(),
+            value: raw.to_owned(),
+        })?;
+        T::from_param_value(&value).map(Self).map_err(|()| BindError::ParseField { name: name.to_owned(), value })
     }
 }
 

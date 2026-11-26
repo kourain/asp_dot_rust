@@ -73,9 +73,9 @@ fn login(&mut self, user: FromForm<String>, remember: FromForm<bool>) -> impl Ac
 - Form values are decoded like query values: `+` is a space, `%2B` is a plus, a key without `=` is an empty value (`bool` reads it as `true`) and a value that is not valid UTF-8 is HTTP 422.
 - `#[validate(...)]` is for query parameters only. To validate body fields use `Body<Dto>` / `Form<Dto>` with `Validate`.
 
-> **Warning: a repeated key keeps only its last value** (`a=1&a=2` binds `2`, so does `{"a":1,"a":2}`), without an error.
+> `FromForm` parses the last occurrence of a key. For a repeated scalar field, `FromBody` parses each occurrence and returns the last value. For example, `{"age":"x","age":2}` returns HTTP 422 for `FromBody<u32>`.
 
-Each field binder reads and parses the whole body again. For many fields prefer one DTO binder.
+Each field binder searches the buffered body for its argument. For many fields prefer one DTO binder.
 
 ### The whole body: `Body<T>` / `Form<T>`
 
@@ -159,9 +159,10 @@ The router writes the `BindError` message as `text/plain`. Route parameter error
 
 ```rust
 self.http_context.request.enable_buffering().await.unwrap();
-// first read (FromBody / read_body_bytes)
+let first = self.http_context.request.body.read_to_end().await.unwrap();
 self.http_context.request.seek_body(0).unwrap();
-// second read of the same bytes
+let second = self.http_context.request.body.read_to_end().await.unwrap();
+assert_eq!(first, second);
 ```
 
 - `enable_buffering` loads the stream into memory (no-op if already buffered).

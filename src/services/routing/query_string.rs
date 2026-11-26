@@ -2,12 +2,21 @@ use std::collections::HashMap;
 
 /// Percent-decode one query component. `+` is a space (form encoding), `%2B` stays a plus.
 /// `None` when the decoded bytes are not valid UTF-8.
-fn decode_query_component(raw: &str) -> Option<String> {
+pub(crate) fn decode_query_component(raw: &str) -> Option<String> {
     if raw.contains('+') {
         urlencoding::decode(&raw.replace('+', " ")).ok().map(std::borrow::Cow::into_owned)
     } else {
         urlencoding::decode(raw).ok().map(std::borrow::Cow::into_owned)
     }
+}
+
+/// Decoded nonempty keys and their raw values, in wire order.
+pub(crate) fn query_pairs(query: &str) -> impl DoubleEndedIterator<Item = (String, &str)> {
+    query.split('&').filter_map(|pair| {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        let key = decode_query_component(key).filter(|key| !key.is_empty())?;
+        Some((key, value))
+    })
 }
 
 /// Split a query string (or a form-urlencoded body) into decoded `(valid, invalid)` parameter maps.
@@ -21,11 +30,7 @@ fn decode_query_component(raw: &str) -> Option<String> {
 pub(crate) fn parse_query_string(query: &str) -> (HashMap<String, String>, HashMap<String, String>) {
     let mut valid = HashMap::new();
     let mut invalid = HashMap::new();
-    for pair in query.split('&').filter(|pair| !pair.is_empty()) {
-        let (raw_key, raw_value) = pair.split_once('=').unwrap_or((pair, ""));
-        let Some(key) = decode_query_component(raw_key).filter(|key| !key.is_empty()) else {
-            continue;
-        };
+    for (key, raw_value) in query_pairs(query) {
         match decode_query_component(raw_value) {
             Some(value) => {
                 invalid.remove(&key);
