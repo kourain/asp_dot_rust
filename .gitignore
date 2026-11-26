@@ -1,4 +1,8 @@
 target/
 /.vscode
+/tests
+.env
+appsettings.toml
+appsettings.*.toml
 Cargo.lock
 *.log
