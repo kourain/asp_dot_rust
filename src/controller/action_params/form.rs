@@ -38,6 +38,12 @@ impl<T: DeserializeOwned> Form<T> {
     }
 }
 
+impl<T: DeserializeOwned> super::BindSerdeBody for Form<T> {
+    fn bind(ctx: &mut HttpContext) -> impl std::future::Future<Output = Result<Self, BindError>> + Send {
+        Self::bind_serde(ctx)
+    }
+}
+
 impl<T> Form<T> {
     pub fn into_inner(self) -> T {
         self.0

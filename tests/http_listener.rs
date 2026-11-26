@@ -1,5 +1,7 @@
 #[path = "http_listener/body_fields.rs"]
 mod body_fields;
+#[path = "http_listener/wrapper_types.rs"]
+mod wrapper_types;
 
 use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,

@@ -12,6 +12,13 @@ pub fn validate(result: Result<(), ValidationError>) -> Result<(), super::BindEr
     result.map_err(super::BindError::Validation)
 }
 
+/// The scalar passed to a query validation rule. The binder selects the implementation by type.
+#[doc(hidden)]
+pub trait QueryValidationTarget<Marker> {
+    type Value;
+    fn validation_value(&self) -> Option<&Self::Value>;
+}
+
 /// Implement on a request DTO to validate it after a controller action binds its body or form.
 pub trait Validate {
     fn validate(&self) -> Result<(), ValidationError>;

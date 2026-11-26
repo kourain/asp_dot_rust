@@ -22,7 +22,7 @@ Action methods may take binder parameters. The `#[controller_route]` macro resol
 
 `FromOptionQuery<T>`, `FromOptionForm<T>` and `FromOptionBody<T>` are type aliases of `FromQuery<Option<T>>`, `FromForm<Option<T>>` and `FromBody<Option<T>>`, so the two spellings are the same type and the macro treats them the same. Because they are aliases, they cannot be used as a constructor or a pattern (write `FromQuery(Some(1))`).
 
-A route parameter is always present, so **`FromRoute<Option<T>>` is not allowed** and the macro reports it at compile time.
+A route parameter is always present. `FromRoute<T>::bind` requires `T: FromParamValue`. Rust rejects `FromRoute<std::option::Option<T>>` because the standard `Option<T>` does not implement that trait.
 
 An optional value that is there must still parse: `?limit=abc` is HTTP 422 for `FromOptionQuery<u32>`, it never becomes `None`. For `FromOptionBody<T>` a `null` is `None`.
 
@@ -34,7 +34,7 @@ Supported `T` for route/query: every type that implements `std::str::FromStr` (`
 - **Query keys and values** are decoded as form data: `+` is a space, `%2B` is a plus. A value that is not valid UTF-8 after decoding is HTTP 422 for both query binders. It is never replaced by a placeholder character or turned into `None`. A key that is not valid UTF-8 cannot match a parameter name and is ignored.
 - **A key without `=` has an empty value** (`?debug` and `?debug=` are the same). It can be used as a flag: `bool` reads an empty value as `true`, so `FromOptionQuery<bool>` is `Some(true)` for `?debug` and `None` when the key is absent, and `.flag()` gives `true` / `false` (`FromOptionQuery<bool>` and `FromOptionForm<bool>` have it). `String` accepts `""`, every other type rejects it with HTTP 422.
 
-> **Warning: a repeated query key keeps only its last value.** `?id=1&id=2` binds `2` and drops `1` without an error, for `FromQuery<T>`, `FromForm<T>` and their `FromOption...` aliases alike. To collect all the values or to reject a repeated key, read `http_context.request.uri.query()` in the action.
+> **Warning: a repeated query key keeps only its last value.** `?id=1&id=2` binds `2` and drops `1` without an error, for `FromQuery<T>`, `FromForm<T>` and their `FromOption...` aliases alike. To inspect repeated keys, read `http_context.request.uri.query()` for query parameters or the buffered request body for form fields.
 
 An action may have any number of body binders, but they must read the same kind of body: form binders (`FromForm`, `Form`) cannot be mixed with body binders (`FromBody`, `Body`), the macro reports that at compile time.
 
@@ -91,10 +91,10 @@ Each field binder searches the buffered body for its argument. For many fields p
 
 | `T` | Behaviour |
 | --- | --- |
-| `String` written as a single identifier | Reads raw UTF-8 text after checking the media type. |
-| Other type spelling or a deserializable model | `Body` uses JSON or XML. `Form` uses form-urlencoded deserialization. |
+| `String`, including aliases and qualified paths | Reads raw UTF-8 text after checking the media type. |
+| Other deserializable types | `Body` uses JSON or XML. `Form` uses form-urlencoded deserialization. |
 
-For `Body<T>`, the serde path accepts `application/json`, `text/json`, `application/xml` and `text/xml`. A missing header defaults to JSON. The raw `Body<String>` path additionally accepts `text/plain` and assumes plain text when the header is absent. The macro selects raw text by the spelling `String`. A type alias or `std::string::String` selects serde for either binder.
+For `Body<T>`, the serde path accepts `application/json`, `text/json`, `application/xml` and `text/xml`. A missing header defaults to JSON. The raw `Body<String>` path additionally accepts `text/plain` and assumes plain text when the header is absent. For either binder, a type alias of `String` and `std::string::String` also select raw text. Call `bind_serde` explicitly to deserialize a string.
 
 `Form<T>` accepts `application/x-www-form-urlencoded` and also attempts binding when the header is missing or the media type is empty.
 

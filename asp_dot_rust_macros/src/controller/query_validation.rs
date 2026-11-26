@@ -25,15 +25,19 @@ impl QueryValidation {
         Ok(Self { attribute: attr.path().require_ident()?.clone(), method, arguments })
     }
 
-    pub(super) fn check(&self, value: &Ident, field: &str, inner: &syn::Type) -> TokenStream {
+    pub(super) fn check(&self, binder: &Ident, field: &str, wrapper: &syn::Type) -> TokenStream {
         let main = asp_dot_rust_crate_path();
         // Preserve both source identifiers so IDE hover can resolve the attribute
         // and its rule to their documented functions in the expansion.
         let Self { attribute, method, arguments } = self;
+        let target = quote!(<#wrapper as #main::controller::validation::QueryValidationTarget<_>>);
+        let value = Ident::new("__asp_query_value", proc_macro2::Span::mixed_site());
         quote! {
-            #main::controller::validation::#attribute(
-                #main::controller::FromQuery::<#inner>::#method(#value, #field, #arguments)
-            )?;
+            if let ::core::option::Option::Some(#value) = #target::validation_value(&#binder) {
+                #main::controller::validation::#attribute(
+                    #main::controller::FromQuery::<#target::Value>::#method(#value, #field, #arguments)
+                )?;
+            }
         }
     }
 }

@@ -1,12 +1,12 @@
 use crate::controller::{
     ValidationError,
-    validation::{QueryBounds, QueryNumber},
+    validation::{QueryBounds, QueryNumber, QueryValidationTarget},
 };
 use crate::http_context::HttpContext;
 
 use super::{
     error::BindError,
-    from_param_value::{FieldError, FromParamField},
+    from_param_value::{FieldError, FromParamField, OptionalField, RequiredField},
 };
 
 /// Binds one value from the query string. The parameter name is the action argument name.
@@ -34,6 +34,22 @@ pub struct FromQuery<T>(pub T);
 /// A missing parameter is `None`, see [`FromQuery`] for the warnings about repeated keys and flags.
 /// It is a type alias, so it cannot be used as a constructor or a pattern, write `FromQuery(Some(1))` instead.
 pub type FromOptionQuery<T> = FromQuery<Option<T>>;
+
+impl<T: FromParamField<RequiredField>> QueryValidationTarget<RequiredField> for FromQuery<T> {
+    type Value = T;
+
+    fn validation_value(&self) -> Option<&T> {
+        Some(&self.0)
+    }
+}
+
+impl<T> QueryValidationTarget<OptionalField> for FromQuery<Option<T>> {
+    type Value = T;
+
+    fn validation_value(&self) -> Option<&T> {
+        self.0.as_ref()
+    }
+}
 
 impl FromQuery<String> {
     /// Check the number of Unicode scalar values in the decoded query string.

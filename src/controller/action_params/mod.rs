@@ -16,3 +16,10 @@ pub use from_form::{FromForm, FromOptionForm};
 pub use from_param_value::{FieldError, FromParamField, FromParamValue, OptionalField, RequiredField};
 pub use from_query::{FromOptionQuery, FromQuery};
 pub use from_route::FromRoute;
+
+/// Fallback used by controller actions for whole-body DTOs. The inherent `bind` on
+/// `Body<String>` and `Form<String>` takes precedence for raw text.
+#[doc(hidden)]
+pub trait BindSerdeBody: Sized {
+    fn bind(ctx: &mut crate::http_context::HttpContext) -> impl std::future::Future<Output = Result<Self, BindError>> + Send;
+}
