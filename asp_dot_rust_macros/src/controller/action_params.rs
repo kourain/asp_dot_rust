@@ -122,14 +122,8 @@ pub fn generate_bind_code(params: &[ActionParam]) -> (TokenStream2, Vec<TokenStr
         };
 
         let bind_expr = match param.kind {
-            BinderKind::FromRoute | BinderKind::FromQuery => {
+            BinderKind::FromRoute | BinderKind::FromQuery | BinderKind::FromOptionQuery => {
                 quote! { #wrapper::bind(#name_lit, &self.http_context)? }
-            }
-            BinderKind::FromOptionQuery if param.validation.is_some() => {
-                quote! { #wrapper::bind_if_present(#name_lit, &self.http_context)? }
-            }
-            BinderKind::FromOptionQuery => {
-                quote! { #wrapper::bind(#name_lit, &self.http_context) }
             }
             BinderKind::FromBody | BinderKind::FromForm if param.is_string => {
                 quote! { #wrapper::bind(&mut self.http_context).await? }

@@ -65,6 +65,9 @@ impl HomeController {
 - Path parameters use `matchit`'s `{name}` syntax (e.g. `/{id}`,
   `/{category}/{id}`). They are resolved per-request and exposed as
   `http_context.request.routing_info.path_params: HashMap<String, String>`.
+  The values are percent-decoded after the route matched (an encoded `%2F` does not
+  split a segment). A value that is not valid UTF-8 after decoding is left out of
+  `path_params` and kept, still encoded, in `routing_info.invalid_path_params`.
 - An action may declare several route attributes, including different paths for the same HTTP method. Registering the same controller twice or repeating a path and method panics during registration.
 
 ## HTTP QUERY
@@ -133,11 +136,18 @@ at match time. Insertion into `matchit` fails in `add_controller_route`, so `add
 `RoutingService::resolve` parses the request URI's query string into
 `http_context.request.routing_info.query_params: HashMap<String, String>`:
 
-- Both keys and values are percent-decoded (`urlencoding::decode`).
+- Keys and values are decoded as form data: `%XX` is decoded and `+` is a space
+  (`%2B` is a plus).
 - A flag-style parameter with no `=` (e.g. `?debug`) is kept with an empty
   string value (`"debug" -> ""`), it is not dropped.
-- Duplicate keys: the last occurrence wins, since parsing folds into a
-  `HashMap`.
+- Duplicate keys: the last occurrence wins, whether it is valid or not, so
+  `?id=1&id=2` gives `"2"`. The earlier values are discarded without an error.
+- Empty pairs (`a=1&&b=2`) and pairs with an empty key (`=v`) are skipped.
+- A value that is not valid UTF-8 after decoding is not placed in `query_params`
+  and not altered either: its raw text is kept in
+  `routing_info.invalid_query_params` (decoded key -> raw value) so the binders
+  can report it (HTTP 422). A key that is not valid UTF-8 cannot match any
+  parameter name and is dropped.
 
 ## Resolving a request: `Found` / `NotFound` / `MethodNotAllowed`
 

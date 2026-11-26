@@ -8,11 +8,19 @@ Action methods may take binder parameters. The `#[controller_route]` macro resol
 | --- | --- | --- |
 | `FromRoute<T>` | `path_params` | HTTP 404 |
 | `FromQuery<T>` | `query_params` | HTTP 422 |
-| `FromOptionQuery<T>` | `query_params` | Missing gives `None`. A parse failure gives `None` by default or HTTP 422 with `#[validate(...)]`. |
+| `FromOptionQuery<T>` | `query_params` | Missing gives `None`. A supplied value that does not parse is HTTP 422, with or without `#[validate(...)]`. |
 | `FromBody<T>` | request body | HTTP 422 for invalid data, 400 for read failures. See the `QUERY` exceptions below. |
 | `FromForm<T>` | form body | Same as `FromBody<T>`. |
 
-Supported scalar `T` for route/query: `String`, integers, floats, `bool`, `char` (`FromParamValue`).
+Supported `T` for route/query: every type that implements `std::str::FromStr` (`FromParamValue` is implemented for all of them): `String`, integers, floats, `bool`, `char`, `uuid::Uuid`, `ulid::Ulid`, `std::net::IpAddr` and your own types. A type that cannot implement `FromStr` can implement `FromParamValue` directly (but not both).
+
+### Value syntax
+
+- **Path values** are percent-decoded after the route matched, so `/users/a%20b` binds `a b` and an encoded `%2F` stays inside its segment. A value that is not valid UTF-8 after decoding is HTTP 404 for `FromRoute`.
+- **Query keys and values** are decoded as form data: `+` is a space, `%2B` is a plus. A value that is not valid UTF-8 after decoding is HTTP 422 for both query binders. It is never replaced by a placeholder character or turned into `None`. A key that is not valid UTF-8 cannot match a parameter name and is ignored.
+- **A key without `=` has an empty value** (`?debug` and `?debug=` are the same). It can be used as a flag: `bool` reads an empty value as `true`, so `FromOptionQuery<bool>` is `Some(true)` for `?debug` and `None` when the key is absent, and `FromOptionQuery::<bool>::flag()` gives `true` / `false`. `String` accepts `""`, every other type rejects it with HTTP 422.
+
+> **Warning: a repeated query key keeps only its last value.** `?id=1&id=2` binds `2` and drops `1` without an error, for `FromQuery<T>` and `FromOptionQuery<T>` alike. To collect all the values or to reject a repeated key, read `http_context.request.uri.query()` in the action.
 
 A route may have at most one of `FromBody` or `FromForm`.
 

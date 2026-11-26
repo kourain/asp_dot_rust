@@ -1,5 +1,31 @@
 # Change log
 
+## 0.2.12
+
+### 0.2.12 New
+
+- `FromRoute<T>`, `FromQuery<T>` and `FromOptionQuery<T>` accept every `T: FromStr` (`uuid::Uuid`, `ulid::Ulid`, `std::net::IpAddr`, your own types), `FromParamValue` is implemented for all of them. A type without `FromStr` can still implement `FromParamValue` itself.
+- Query flags: a key without a value (`?debug`, `?debug=`) is an empty value and `bool` reads it as `true`. `FromOptionQuery::<bool>::flag()` is `true` when the key is present (and not `false`), `false` when it is absent.
+- `ResolvedRoute::invalid_path_params` and `ResolvedRoute::invalid_query_params` keep the raw text of a value that is not valid UTF-8 after decoding.
+- Doc warnings on `FromQuery<T>` and `FromOptionQuery<T>`: a repeated query key keeps only its last value.
+
+### 0.2.12 Fix
+
+- Path parameters are percent-decoded (`/users/a%20b` binds `a b`), they were passed on still encoded.
+- Query strings are decoded as form data: `+` is a space, `%2B` is a plus (`+` was kept as a plus).
+- A query value that is not valid UTF-8 is an error (HTTP 422 for the binders), it was dropped, and for a `FromOptionQuery<T>` without `#[validate(...)]` it was `None`.
+- `FromOptionQuery<T>` returns HTTP 422 for a supplied value that does not parse, it was `None` unless the parameter had `#[validate(...)]`.
+- Empty query pairs and pairs with an empty key no longer create a `""` key.
+
+### 0.2.12 Breaking Change
+
+| Old | New | Note |
+| --- | --- | --- |
+| `FromOptionQuery::bind` returned `Self` and `?x=bad` gave `None` | `FromOptionQuery::bind` returns `Result<Self, BindError>` and `?x=bad` is HTTP 422 | `bind_if_present` is deprecated and calls `bind` |
+| `FromParamValue` was implemented for `String`, `bool`, `char`, integers and floats only | implemented for every `T: FromStr + 'static` | a user type that implemented `FromParamValue` and also has `FromStr` no longer compiles, keep one of them |
+| `ResolvedRoute` had 3 fields | `ResolvedRoute` has `invalid_path_params` and `invalid_query_params` too | build it with `..Default::default()` |
+| `routing_info.path_params` held the raw (encoded) value | holds the decoded value | `%2F` decodes inside its segment |
+
 ## 0.2.11
 
 ### 0.2.11 New

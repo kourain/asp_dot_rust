@@ -1,6 +1,4 @@
-use asp_dot_rust::controller::{
-    BindError, FromParamValue, FromQuery,
-};
+use asp_dot_rust::controller::{BindError, FromParamValue, FromQuery};
 
 #[test]
 fn query_rule_methods_accept_exact_and_inclusive_bounds() {
@@ -77,4 +75,55 @@ fn xml_serde_path() {
     let xml = quick_xml::se::to_string(&user).unwrap();
     let parsed: User = quick_xml::de::from_str(&xml).unwrap();
     assert_eq!(parsed, user);
+}
+
+#[test]
+fn from_param_value_accepts_every_from_str_type() {
+    let uuid = "0190d9d0-7b1e-7c3a-8f2e-123456789abc";
+    assert_eq!(uuid::Uuid::from_param_value(uuid).unwrap().to_string(), uuid);
+    assert!(uuid::Uuid::from_param_value("not-a-uuid").is_err());
+    let ulid = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    assert_eq!(ulid::Ulid::from_param_value(ulid).unwrap().to_string(), ulid);
+    assert!(ulid::Ulid::from_param_value("01ARZ3NDEKTSV4RRFFQ69G5FAU!").is_err());
+    assert_eq!(std::net::IpAddr::from_param_value("127.0.0.1").unwrap(), std::net::Ipv4Addr::LOCALHOST);
+    assert_eq!(char::from_param_value("x").unwrap(), 'x');
+    assert!(char::from_param_value("xy").is_err());
+    assert_eq!(f64::from_param_value("0.5").unwrap(), 0.5);
+}
+
+#[test]
+fn from_param_value_supports_user_types_with_from_str_or_with_a_direct_impl() {
+    #[derive(Debug, PartialEq)]
+    struct Code(u16);
+    impl std::str::FromStr for Code {
+        type Err = ();
+        fn from_str(s: &str) -> Result<Self, ()> {
+            s.strip_prefix("C-").and_then(|n| n.parse().ok()).map(Code).ok_or(())
+        }
+    }
+    assert_eq!(Code::from_param_value("C-7").unwrap(), Code(7));
+    assert!(Code::from_param_value("7").is_err());
+
+    // A type without `FromStr` can still implement the trait itself.
+    #[derive(Debug, PartialEq)]
+    struct Tag(String);
+    impl FromParamValue for Tag {
+        fn from_param_value(value: &str) -> Result<Self, ()> {
+            if value.is_empty() { Err(()) } else { Ok(Tag(value.to_uppercase())) }
+        }
+    }
+    assert_eq!(Tag::from_param_value("ab").unwrap(), Tag("AB".into()));
+    assert!(Tag::from_param_value("").is_err());
+}
+
+#[test]
+fn from_param_value_empty_value_is_a_flag_only_for_bool() {
+    assert_eq!(bool::from_param_value("").unwrap(), true);
+    assert_eq!(bool::from_param_value("true").unwrap(), true);
+    assert_eq!(bool::from_param_value("false").unwrap(), false);
+    assert!(bool::from_param_value("yes").is_err());
+    assert_eq!(String::from_param_value("").unwrap(), "");
+    assert!(u32::from_param_value("").is_err());
+    assert!(f64::from_param_value("").is_err());
+    assert!(uuid::Uuid::from_param_value("").is_err());
 }

@@ -1,6 +1,6 @@
 use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,
-    controller::{ActionResult, FromBody, FromForm, FromOptionQuery, FromQuery, Validate, ValidationError, get, post, query, results, route},
+    controller::{ActionResult, FromBody, FromForm, FromOptionQuery, FromQuery, FromRoute, Validate, ValidationError, get, post, query, results, route},
     http_context::{HttpContextRef, HttpHeaderExt},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -103,6 +103,18 @@ impl ListenerController {
         #[validate(prefix("ok"))] tag: FromOptionQuery<String>,
     ) -> impl ActionResult {
         results::ok(format!("{} {:?}", *code, *tag))
+    }
+    #[get("/typed/{id}")]
+    fn typed(&self, id: FromRoute<uuid::Uuid>, ulid: FromQuery<ulid::Ulid>, ip: FromOptionQuery<std::net::IpAddr>) -> impl ActionResult {
+        results::ok(format!("{} {} {:?}", *id, *ulid, *ip))
+    }
+    #[get("/names/{name}")]
+    fn names(&self, name: FromRoute<String>, note: FromOptionQuery<String>) -> impl ActionResult {
+        results::ok(format!("{} {:?}", *name, *note))
+    }
+    #[get("/flag")]
+    fn flag(&self, verbose: FromOptionQuery<bool>, count: FromOptionQuery<u32>) -> impl ActionResult {
+        results::ok(format!("{} {:?} {:?}", verbose.flag(), *verbose, *count))
     }
     #[get("/utf8-header")]
     pub async fn utf8_header(&mut self) -> impl ActionResult {
@@ -423,7 +435,6 @@ async fn query_rules_check_typed_values_and_skip_absent_optional_fields() {
         ("/optional-query", "None None None None"),
         ("/query-rule-method?code=%E1%BA%BFx", "ếx None"),
         ("/query-rule-method?code=ab&tag=okay", "ab Some(\"okay\")"),
-        ("/optional-query?legacy=bad", "None None None None"),
         ("/optional-query?term=%E1%BA%BF&score=0.5", "Some(\"ế\") Some(0.5) None None"),
         ("/optional-query?count=340282366920938463463374607431768211454", "None None Some(340282366920938463463374607431768211454) None"),
     ] {
@@ -443,6 +454,10 @@ async fn query_rules_check_typed_values_and_skip_absent_optional_fields() {
         ("/query-rule-method?code=xyz", "code"),
         ("/query-rule-method?code=xy&tag=no", "tag"),
         ("/optional-query?term=%FF", "term"),
+        ("/optional-query?legacy=bad", "legacy"),
+        ("/optional-query?legacy=", "legacy"),
+        ("/optional-query?legacy=256", "legacy"),
+        ("/optional-query?legacy=%FF", "legacy"),
         ("/optional-query?score=bad", "score"),
         ("/optional-query?score=NaN", "score"),
         ("/optional-query?score=-inf", "score"),
@@ -451,6 +466,83 @@ async fn query_rules_check_typed_values_and_skip_absent_optional_fields() {
         let response = raw_request(port, "GET", query, "").await;
         assert_eq!(status_of(&response), 422, "{query}: {response}");
         assert!(body_of(&response).contains(field), "{query}: {response}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn route_and_query_binders_accept_any_from_str_type() {
+    let port = 18714;
+    start(port, |_| {}, |_| {}).await;
+    let uuid = "0190d9d0-7b1e-7c3a-8f2e-123456789abc";
+    let ulid = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    for (path, expected) in [
+        (format!("/typed/{uuid}?ulid={ulid}"), format!("{uuid} {ulid} None")),
+        (format!("/typed/{uuid}?ulid={ulid}&ip=127.0.0.1"), format!("{uuid} {ulid} Some(127.0.0.1)")),
+        (format!("/typed/{uuid}?ulid={ulid}&ip=%3A%3A1"), format!("{uuid} {ulid} Some(::1)")),
+    ] {
+        let response = raw_request(port, "GET", &path, "").await;
+        assert_eq!(status_of(&response), 200, "{path}: {response}");
+        assert_eq!(body_of(&response), expected, "{path}");
+    }
+    // A route value that does not parse is 404, a query value that does not parse (or is missing) is 422.
+    for (path, status, field) in [
+        ("/typed/not-a-uuid?ulid=01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string(), 404, "id"),
+        (format!("/typed/{uuid}?ulid=nope"), 422, "ulid"),
+        (format!("/typed/{uuid}"), 422, "ulid"),
+        (format!("/typed/{uuid}?ulid={ulid}&ip=999.1.1.1"), 422, "ip"),
+    ] {
+        let response = raw_request(port, "GET", &path, "").await;
+        assert_eq!(status_of(&response), status, "{path}: {response}");
+        assert!(body_of(&response).contains(field), "{path}: {response}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn route_values_are_decoded_and_invalid_utf8_is_an_error() {
+    let port = 18715;
+    start(port, |_| {}, |_| {}).await;
+    for (path, expected) in [
+        ("/names/a%20b", "a b None"),
+        ("/names/%E1%BA%BF", "ế None"),
+        ("/names/a+b", "a+b None"),
+        ("/names/a%2Fb", "a/b None"),
+        ("/names/x?note=a+b", "x Some(\"a b\")"),
+        ("/names/x?note=1%2B1", "x Some(\"1+1\")"),
+        ("/names/x?note", "x Some(\"\")"),
+        ("/names/x?note=1&note=2", "x Some(\"2\")"),
+    ] {
+        let response = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&response), 200, "{path}: {response}");
+        assert_eq!(body_of(&response), expected, "{path}");
+    }
+    for (path, status, field) in [("/names/%FF", 404, "name"), ("/names/x?note=%FF", 422, "note")] {
+        let response = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&response), status, "{path}: {response}");
+        assert!(body_of(&response).contains(field), "{path}: {response}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn optional_bool_query_works_as_a_flag() {
+    let port = 18716;
+    start(port, |_| {}, |_| {}).await;
+    for (path, expected) in [
+        ("/flag", "false None None"),
+        ("/flag?verbose", "true Some(true) None"),
+        ("/flag?verbose=", "true Some(true) None"),
+        ("/flag?verbose=true", "true Some(true) None"),
+        ("/flag?verbose=false", "false Some(false) None"),
+        ("/flag?verbose&count=3", "true Some(true) Some(3)"),
+    ] {
+        let response = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&response), 200, "{path}: {response}");
+        assert_eq!(body_of(&response), expected, "{path}");
+    }
+    // Only `bool` reads an empty value as a flag, a number needs a digit.
+    for (path, field) in [("/flag?verbose=yes", "verbose"), ("/flag?count", "count"), ("/flag?count=-1", "count")] {
+        let response = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&response), 422, "{path}: {response}");
+        assert!(body_of(&response).contains(field), "{path}: {response}");
     }
 }
 

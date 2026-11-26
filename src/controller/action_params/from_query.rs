@@ -8,8 +8,20 @@ use super::{error::BindError, from_param_value::FromParamValue};
 
 /// Binds a required value from the query string.
 ///
-/// The parameter name is the action argument name. Missing or unparsable values
+/// The parameter name is the action argument name. Missing, unparsable or not valid UTF-8 values
 /// map to HTTP 422.
+///
+/// `T` is any type with [`FromParamValue`], which includes every `FromStr` type
+/// (numbers, `String`, `uuid::Uuid`, `ulid::Ulid`, ...).
+///
+/// # Warning
+///
+/// - **A repeated key keeps only its last value.** `?id=1&id=2` binds `2` and drops `1`
+///   without an error. To collect all the values or to reject a repeated key, read
+///   `http_context.request.uri.query()` yourself.
+/// - **A key without a value is an empty value** (`?name` and `?name=` are the same).
+///   `String` accepts it as `""`, numbers reject it with HTTP 422, `bool` reads it as `true`.
+/// - Keys and values are decoded as form data: `+` is a space and `%2B` is a plus.
 pub struct FromQuery<T>(pub T);
 
 impl FromQuery<String> {
@@ -39,7 +51,14 @@ impl<T: QueryNumber> FromQuery<T> {
 impl<T: FromParamValue> FromQuery<T> {
     /// Bind query parameter `name` into `T`.
     pub fn bind(name: &str, http_context: &HttpContext) -> Result<Self, BindError> {
-        let raw = http_context.request.routing_info.query_params.get(name).ok_or_else(|| BindError::MissingQueryParam(name.to_string()))?;
+        let routing_info = &http_context.request.routing_info;
+        if let Some(raw) = routing_info.invalid_query_params.get(name) {
+            return Err(BindError::ParseQueryParam {
+                name: name.to_string(),
+                value: raw.clone(),
+            });
+        }
+        let raw = routing_info.query_params.get(name).ok_or_else(|| BindError::MissingQueryParam(name.to_string()))?;
         parse_query_value(name, raw).map(Self)
     }
 
@@ -70,44 +89,56 @@ impl<T> std::ops::DerefMut for FromQuery<T> {
 
 /// Binds an optional value from the query string.
 ///
-/// Missing values become `None`. An unparsable value becomes `None` by default
-/// and produces HTTP 422 when the action parameter has a validation rule.
+/// A missing parameter is `None`. A supplied value must parse: a value that cannot be parsed
+/// into `T`, or that is not valid UTF-8 after decoding, is an error (HTTP 422) and never turns into `None`.
+///
+/// `T` is any type with [`FromParamValue`], which includes every `FromStr` type.
+///
+/// # Warning
+///
+/// - **A repeated key keeps only its last value.** `?id=1&id=2` binds `Some(2)` and drops `1`
+///   without an error. To collect all the values or to reject a repeated key, read
+///   `http_context.request.uri.query()` yourself.
+/// - **A key without a value is an empty value** (`?name` and `?name=` are the same), it is
+///   `Some("")` for `String`, an error for numbers and `Some(true)` for `bool`.
+///   `FromOptionQuery<bool>` is the flag binder, see [`FromOptionQuery::<bool>::flag`].
+/// - Keys and values are decoded as form data: `+` is a space and `%2B` is a plus.
 pub struct FromOptionQuery<T>(pub Option<T>);
 
 impl<T: FromParamValue> FromOptionQuery<T> {
-    /// Used by validated action parameters. A supplied value must parse successfully.
-    pub fn bind_if_present(name: &str, http_context: &HttpContext) -> Result<Self, BindError> {
-        if let Some(raw) = http_context.request.routing_info.query_params.get(name) {
-            return parse_query_value(name, raw).map(|value| Self(Some(value)));
+    /// Bind optional query parameter `name` into `Option<T>`.
+    ///
+    /// `Ok(None)` when the parameter is absent, an error when it is present but cannot be parsed.
+    pub fn bind(name: &str, http_context: &HttpContext) -> Result<Self, BindError> {
+        let routing_info = &http_context.request.routing_info;
+        if let Some(raw) = routing_info.invalid_query_params.get(name) {
+            return Err(BindError::ParseQueryParam {
+                name: name.to_string(),
+                value: raw.clone(),
+            });
         }
-        // Routing omits pairs with invalid UTF-8. A supplied but undecodable field
-        // is a parse error for a validated optional parameter.
-        if let Some(query) = http_context.request.uri.query().filter(|q| q.contains('%')) {
-            for (key, value) in query.split('&').filter_map(|pair| pair.split_once('=')) {
-                if urlencoding::decode(key).as_deref() == Ok(name) && urlencoding::decode(value).is_err() {
-                    return Err(BindError::ParseQueryParam {
-                        name: name.to_string(),
-                        value: value.to_string(),
-                    });
-                }
-            }
+        match routing_info.query_params.get(name) {
+            Some(raw) => parse_query_value(name, raw).map(|value| Self(Some(value))),
+            None => Ok(Self(None)),
         }
-        Ok(Self(None))
     }
 
-    /// Bind optional query parameter `name` into `Option<T>`.
-    pub fn bind(name: &str, http_context: &HttpContext) -> Self {
-        let Some(raw) = http_context.request.routing_info.query_params.get(name) else {
-            return FromOptionQuery(None);
-        };
-        match T::from_param_value(raw) {
-            Ok(value) => FromOptionQuery(Some(value)),
-            Err(()) => FromOptionQuery(None),
-        }
+    #[doc(hidden)]
+    #[deprecated(note = "`bind` reports an unparsable value as an error too, use it instead")]
+    pub fn bind_if_present(name: &str, http_context: &HttpContext) -> Result<Self, BindError> {
+        Self::bind(name, http_context)
     }
 
     pub fn into_inner(self) -> Option<T> {
         self.0
+    }
+}
+
+impl FromOptionQuery<bool> {
+    /// The query parameter as a flag: `true` when it is present (`?verbose`, `?verbose=`, `?verbose=true`),
+    /// `false` when it is absent or `?verbose=false`.
+    pub fn flag(&self) -> bool {
+        self.0 == Some(true)
     }
 }
 
