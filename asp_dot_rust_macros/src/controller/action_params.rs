@@ -83,11 +83,11 @@ pub fn parse_action_params(inputs: &mut syn::punctuated::Punctuated<FnArg, syn::
                 }
                 let mut validation = None;
                 for attr in attrs.iter().filter(|attr| attr.path().is_ident("validate")) {
-                    if kind != BinderKind::FromQuery {
-                        return Err(create_compiler_error(attr, "#[validate(...)] requires FromQuery or FromOptionQuery"));
+                    if matches!(kind, BinderKind::Body | BinderKind::Form) {
+                        return Err(create_compiler_error(attr, "#[validate(...)] requires a route, query, form or body field binder"));
                     }
                     if validation.is_some() {
-                        return Err(create_compiler_error(attr, "duplicate #[validate(...)] on this query parameter"));
+                        return Err(create_compiler_error(attr, "duplicate #[validate(...)] on this action parameter"));
                     }
                     validation = Some(QueryValidation::parse(attr).map_err(|e| proc_macro::TokenStream::from(e.into_compile_error()))?);
                 }
@@ -135,7 +135,7 @@ pub fn generate_bind_code(params: &[ActionParam]) -> (TokenStream2, Vec<TokenStr
 
         lets.push(quote! { let #name = #bind_expr; });
         if let Some(rule) = &param.validation {
-            lets.push(rule.check(name, &name_lit, wrapper));
+            lets.push(rule.check(name, &name_lit));
         }
         args.push(quote! { #name });
     }

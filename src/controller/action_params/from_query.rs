@@ -1,13 +1,8 @@
-use crate::controller::{
-    ValidationError,
-    validation::{QueryBounds, QueryNumber, QueryValidationTarget},
-};
 use crate::http_context::HttpContext;
 
 use super::{
     error::BindError,
     from_param_value::{FieldError, FromParamField},
-    marker::{OptionalField, RequiredField},
 };
 
 /// Binds one value from the query string. The parameter name is the action argument name.
@@ -35,46 +30,6 @@ pub struct FromQuery<T>(pub T);
 /// A missing parameter is `None`, see [`FromQuery`] for the warnings about repeated keys and flags.
 /// It is a type alias, so it cannot be used as a constructor or a pattern, write `FromQuery(Some(1))` instead.
 pub type FromOptionQuery<T> = FromQuery<Option<T>>;
-
-impl<T: FromParamField<RequiredField>> QueryValidationTarget<RequiredField> for FromQuery<T> {
-    type Value = T;
-
-    fn validation_value(&self) -> Option<&T> {
-        Some(&self.0)
-    }
-}
-
-impl<T> QueryValidationTarget<OptionalField> for FromQuery<Option<T>> {
-    type Value = T;
-
-    fn validation_value(&self) -> Option<&T> {
-        self.0.as_ref()
-    }
-}
-
-impl FromQuery<String> {
-    /// Check the number of Unicode scalar values in the decoded query string.
-    ///
-    /// `#[validate(length(2))]` requires exactly two. `#[validate(length(1, 80))]`
-    /// accepts one through eighty, inclusive. Use `length(min = 1)` or
-    /// `length(max = 80)` for a one-sided limit.
-    pub fn length(value: &str, field: &str, bounds: impl Into<QueryBounds<usize>>) -> Result<(), ValidationError> {
-        bounds.into().check(&value.chars().count(), field, "length")
-    }
-}
-
-impl<T: QueryNumber> FromQuery<T> {
-    /// Check a finite numeric query value against inclusive bounds in its own type.
-    ///
-    /// `#[validate(range(min = -10, max = 10))]` accepts both endpoints.
-    /// Supply just `min` or `max` for a one-sided range.
-    pub fn range(value: &T, field: &str, bounds: impl Into<QueryBounds<T>>) -> Result<(), ValidationError> {
-        if !value.is_finite() {
-            return Err(ValidationError::new(field, "value must be finite"));
-        }
-        bounds.into().check(value, field, "value")
-    }
-}
 
 impl<T> FromQuery<T> {
     /// Bind query parameter `name` into `T`, or into `Option<U>` for an optional parameter.

@@ -5,7 +5,7 @@ mod wrapper_types;
 
 use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,
-    controller::{ActionResult, Body, Form, FromBody, FromForm, FromOptionBody, FromOptionForm, FromOptionQuery, FromQuery, FromRoute, Validate, ValidationError, get, post, query, results, route},
+    controller::{ControllerActionFieldValidate, ActionResult, Body, Form, FromBody, FromForm, FromOptionBody, FromOptionForm, FromOptionQuery, FromQuery, FromRoute, Validate, ValidationError, get, post, query, results, route},
     http_context::{HttpContextRef, HttpHeaderExt},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -25,7 +25,7 @@ trait PrefixRule {
     fn prefix(value: &str, field: &str, prefix: &str) -> Result<(), ValidationError>;
 }
 
-impl PrefixRule for FromQuery<String> {
+impl PrefixRule for ControllerActionFieldValidate {
     fn prefix(value: &str, field: &str, prefix: &str) -> Result<(), ValidationError> {
         if value.starts_with(prefix) { Ok(()) } else { Err(ValidationError::new(field, "invalid prefix")) }
     }
@@ -132,6 +132,14 @@ impl ListenerController {
         #[validate(range(min = 0.0, max = 1.0))] score: FromQuery<f64>,
     ) -> impl ActionResult {
         results::ok(format!("{} {} {} {}", *term, *limit, *offset, *score))
+    }
+    #[post("/validated-body/{id}")]
+    fn validated_body(&self, #[validate(min(1))] id: FromRoute<u8>, #[validate(max(2))] count: FromOptionBody<i32>) -> impl ActionResult {
+        results::ok(format!("{} {:?}", *id, *count))
+    }
+    #[post("/validated-form")]
+    fn validated_form(&self, #[validate(prefix("ok"))] tag: FromForm<String>, #[validate(length(2))] code: FromOptionForm<String>) -> impl ActionResult {
+        results::ok(format!("{} {:?}", *tag, *code))
     }
     #[get("/optional-query")]
     fn optional_query(
@@ -523,6 +531,31 @@ async fn query_rules_check_typed_values_and_skip_absent_optional_fields() {
         let response = raw_request(port, "GET", query, "").await;
         assert_eq!(status_of(&response), 422, "{query}: {response}");
         assert!(body_of(&response).contains(field), "{query}: {response}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn action_field_rules_run_after_binding() {
+    let port = 18724;
+    start(port, |_| {}, |_| {}).await;
+    let json = "application/json";
+    let form = "application/x-www-form-urlencoded";
+    for (path, media, body, status, expected) in [
+        ("/validated-body/1", json, "{}", 200, "1 None"),
+        ("/validated-body/1", json, r#"{"count":null}"#, 200, "1 None"),
+        ("/validated-body/1", json, r#"{"count":2}"#, 200, "1 Some(2)"),
+        ("/validated-body/1", json, r#"{"count":3}"#, 422, "count"),
+        ("/validated-body/0", json, "{}", 422, "id"),
+        ("/validated-body/bad", json, "{}", 404, "id"),
+        ("/validated-form", form, "tag=okay", 200, "okay None"),
+        ("/validated-form", form, "tag=okay&code=ab", 200, "okay Some"),
+        ("/validated-form", form, "tag=okay&code=a", 422, "code"),
+        ("/validated-form", form, "tag=no", 422, "tag"),
+    ] {
+        let headers = format!("Content-Type: {media}\r\nContent-Length: {}\r\n", body.len());
+        let response = raw_request_with_body(port, "POST", path, &headers, body).await;
+        assert_eq!(status_of(&response), status, "{path}: {response}");
+        assert!(body_of(&response).contains(expected), "{path}: {response}");
     }
 }
 

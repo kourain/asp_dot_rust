@@ -1,6 +1,6 @@
 use std::fmt;
 
-/// `#[validate(rule(...))]` checks a query parameter before the controller action runs.
+/// `#[validate(rule(...))]` checks a bound action field before the controller action runs.
 ///
 /// Use `#[validate(length(2))]` for exactly two Unicode scalar values or
 /// `#[validate(length(1, 80))]` for an inclusive interval. Numeric parameters
@@ -12,11 +12,58 @@ pub fn validate(result: Result<(), ValidationError>) -> Result<(), super::BindEr
     result.map_err(super::BindError::Validation)
 }
 
-/// The scalar passed to a query validation rule. The binder selects the implementation by type.
+/// Built-in action field rules. Applications can add associated functions through a local extension trait.
+pub struct ControllerActionFieldValidate;
+
+impl ControllerActionFieldValidate {
+    /// Check the number of Unicode scalar values in the decoded string.
+    ///
+    /// `#[validate(length(2))]` requires exactly two. `#[validate(length(1, 80))]`
+    /// accepts one through eighty, inclusive. Use `length(min = 1)` or
+    /// `length(max = 80)` for a one-sided limit.
+    pub fn length(value: &str, field: &str, bounds: impl Into<ValidateBounds<usize>>) -> Result<(), ValidationError> {
+        bounds.into().check(&value.chars().count(), field, "length")
+    }
+
+    /// Check a finite numeric value against inclusive bounds in its own type.
+    ///
+    /// `#[validate(range(min = -10, max = 10))]` accepts both endpoints.
+    /// Supply just `min` or `max` for a one-sided range.
+    pub fn range<T: Number>(value: &T, field: &str, bounds: impl Into<ValidateBounds<T>>) -> Result<(), ValidationError> {
+        if !value.is_finite() {
+            return Err(ValidationError::new(field, "value must be finite"));
+        }
+        bounds.into().check(value, field, "value")
+    }
+
+    /// Accept a finite number at or above the inclusive lower bound.
+    pub fn min<T: Number>(value: &T, field: &str, min: T) -> Result<(), ValidationError> {
+        Self::range(value, field, ValidateBounds::Min(min))
+    }
+
+    /// Accept a finite number at or below the inclusive upper bound.
+    pub fn max<T: Number>(value: &T, field: &str, max: T) -> Result<(), ValidationError> {
+        Self::range(value, field, ValidateBounds::Max(max))
+    }
+}
+
+// Resolved at the concrete action parameter, including type aliases and serde-only DTOs.
 #[doc(hidden)]
-pub trait QueryValidationTarget<Marker> {
+pub struct FieldValue<'a, T>(pub &'a T);
+
+impl<'a, T> FieldValue<'a, Option<T>> {
+    pub fn present(&self) -> Option<&'a T> { self.0.as_ref() }
+}
+
+#[doc(hidden)]
+pub trait RequiredFieldValue {
     type Value;
-    fn validation_value(&self) -> Option<&Self::Value>;
+    fn present(&self) -> Option<&Self::Value>;
+}
+
+impl<T> RequiredFieldValue for FieldValue<'_, T> {
+    type Value = T;
+    fn present(&self) -> Option<&T> { Some(self.0) }
 }
 
 /// Implement on a request DTO to validate it after a controller action binds its body or form.
@@ -50,7 +97,7 @@ impl std::error::Error for ValidationError {}
 
 /// Accepted values for a query rule. A single value denotes an exact match and
 /// a pair denotes an inclusive interval. Named bounds can also be one-sided.
-pub enum QueryBounds<T> {
+pub enum ValidateBounds<T> {
     Exact(T),
     Between(T, T),
     Min(T),
@@ -58,13 +105,13 @@ pub enum QueryBounds<T> {
 }
 
 /// Numeric query values supported by the range rule.
-pub trait QueryNumber: Copy + PartialOrd + fmt::Display {
+pub trait Number: Copy + PartialOrd + PartialEq + fmt::Display {
     fn is_finite(self) -> bool;
 }
 
 macro_rules! impl_integer_query_number {
     ($($ty:ty),* $(,)?) => {$(
-        impl QueryNumber for $ty {
+        impl Number for $ty {
             fn is_finite(self) -> bool { true }
         }
     )*};
@@ -72,31 +119,31 @@ macro_rules! impl_integer_query_number {
 
 impl_integer_query_number!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
 
-impl QueryNumber for f32 {
+impl Number for f32 {
     fn is_finite(self) -> bool {
         f32::is_finite(self)
     }
 }
 
-impl QueryNumber for f64 {
+impl Number for f64 {
     fn is_finite(self) -> bool {
         f64::is_finite(self)
     }
 }
 
-impl<T> From<T> for QueryBounds<T> {
+impl<T> From<T> for ValidateBounds<T> {
     fn from(value: T) -> Self {
         Self::Exact(value)
     }
 }
 
-impl<T> From<(T, T)> for QueryBounds<T> {
+impl<T> From<(T, T)> for ValidateBounds<T> {
     fn from((min, max): (T, T)) -> Self {
         Self::Between(min, max)
     }
 }
 
-impl<T: PartialOrd + fmt::Display> QueryBounds<T> {
+impl<T: PartialOrd + fmt::Display> ValidateBounds<T> {
     pub(crate) fn check(&self, value: &T, field: &str, label: &str) -> Result<(), ValidationError> {
         let message = match self {
             Self::Exact(n) if value != n => format!("{label} must be exactly {n}"),

@@ -1,12 +1,12 @@
-use asp_dot_rust::controller::{BindError, FieldError, FromBody, FromForm, FromOptionBody, FromOptionForm, FromOptionQuery, FromParamField, FromParamValue, FromQuery};
+use asp_dot_rust::controller::{BindError, ControllerActionFieldValidate, FieldError, FromBody, FromForm, FromOptionBody, FromOptionForm, FromOptionQuery, FromParamField, FromParamValue, FromQuery};
 
 #[test]
 fn query_rule_methods_accept_exact_and_inclusive_bounds() {
-    assert!(FromQuery::length("ế", "term", 1).is_ok());
-    assert_eq!(FromQuery::length("ế", "term", 2).unwrap_err().to_string(), "term: length must be exactly 2");
-    assert!(FromQuery::length("ếx", "term", (1, 2)).is_ok());
-    assert!(FromQuery::range(&-10i8, "offset", (-10, 10)).is_ok());
-    assert!(FromQuery::range(&f64::NAN, "score", (0.0, 1.0)).is_err());
+    assert!(ControllerActionFieldValidate::length("ế", "term", 1).is_ok());
+    assert_eq!(ControllerActionFieldValidate::length("ế", "term", 2).unwrap_err().to_string(), "term: length must be exactly 2");
+    assert!(ControllerActionFieldValidate::length("ếx", "term", (1, 2)).is_ok());
+    assert!(ControllerActionFieldValidate::range(&-10i8, "offset", (-10, 10)).is_ok());
+    assert!(ControllerActionFieldValidate::range(&f64::NAN, "score", (0.0, 1.0)).is_err());
 }
 
 #[test]

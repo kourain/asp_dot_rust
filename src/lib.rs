@@ -1,3 +1,6 @@
+// private extern internal
+extern crate self as asp_dot_rust;
+
 mod application;
 pub mod configuration;
 pub mod controller;
@@ -16,7 +19,7 @@ pub mod prelude {
     pub use crate::controller::{
         ActionResult, BindError, Body, Form, FromBody, FromForm, FromOptionBody, FromOptionForm, FromOptionQuery, FromQuery, FromRoute, controller_inject, controller_route, delete, get, head, options, patch, post, put, query, results,
         results::RouteResult,
-        Validate, ValidationError,
+        ControllerActionFieldValidate, validate, Validate, ValidationError,
     };
     #[allow(deprecated)]
     pub use crate::dependency_injection::Cfg;

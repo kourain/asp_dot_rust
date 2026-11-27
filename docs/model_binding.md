@@ -38,9 +38,9 @@ Supported `T` for route/query: every type that implements `std::str::FromStr` (`
 
 An action may have any number of body binders, but they must read the same kind of body: form binders (`FromForm`, `Form`) cannot be mixed with body binders (`FromBody`, `Body`), the macro reports that at compile time.
 
-## Query validation
+## Action field validation
 
-Place a rule on a query parameter in the action signature. Both `FromQuery<T>` and `FromOptionQuery<T>` (that is `FromQuery<Option<T>>`) support the same rules. A rule is checked on the `T` inside the `Option`, and a missing optional parameter skips it.
+Place a rule on a `FromRoute`, `FromQuery`, `FromForm` or `FromBody` action field. Optional query, form and body fields skip validation for `None` and validate the inner value for `Some`.
 
 ```rust
 #[get("/search")]
@@ -57,7 +57,9 @@ fn search(
 
 `length(6)` requires exactly six Unicode scalar values in the decoded string. `length(1, 80)` accepts lengths from 1 through 80. Named bounds such as `length(max = 80)` and `length(min = 1, max = 80)` also work. `range` compares values in the parameter's numeric type and requires a finite floating-point value.
 
-The controller macro calls `FromQuery::<T>::rule(value, field, arguments)` for each annotated parameter. To add a rule, define an associated function on the binder or implement a local extension trait for `FromQuery<T>` and bring it into the controller's scope. The function borrows the parsed value, receives the field name, and returns `Result<(), ValidationError>`. A single positional argument is passed directly, multiple positional arguments as a tuple, and named bounds as `controller::validation::QueryBounds`.
+The controller macro calls `ControllerActionFieldValidate::rule(value, field, arguments)` for each annotated parameter. To add a rule, implement a local extension trait for `ControllerActionFieldValidate` and bring it into the controller's scope. The function borrows the parsed value, receives the field name, and returns `Result<(), ValidationError>`. A single positional argument is passed directly, multiple positional arguments as a tuple, and named bounds as `controller::validation::ValidateBounds`.
+
+Use `min(n)` and `max(n)` for inclusive numeric limits. A successfully parsed route value that fails a rule returns HTTP 422.
 
 An absent optional field skips validation. A supplied field, including an empty value, must parse and satisfy its rule. Failures return HTTP 422 with the parameter name before the action runs.
 

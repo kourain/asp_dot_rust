@@ -6,7 +6,8 @@ use syn::Ident;
 /// Returns a `TokenStream` that resolves to the path of the `asp_dot_rust` crate, whether it's the current crate or an external dependency.
 pub(crate) fn asp_dot_rust_crate_path() -> proc_macro2::TokenStream {
     match crate_name("asp_dot_rust") {
-        Ok(FoundCrate::Itself) => quote!(crate),
+        // rust-analyzer can report Itself for the package's integration tests too.
+        Ok(FoundCrate::Itself) => quote!(::asp_dot_rust),
         Ok(FoundCrate::Name(name)) => {
             let ident = Ident::new(&name, Span::call_site());
             quote!(::#ident)

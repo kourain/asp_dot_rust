@@ -25,17 +25,21 @@ impl QueryValidation {
         Ok(Self { attribute: attr.path().require_ident()?.clone(), method, arguments })
     }
 
-    pub(super) fn check(&self, binder: &Ident, field: &str, wrapper: &syn::Type) -> TokenStream {
+    pub(super) fn check(&self, binder: &Ident, field: &str) -> TokenStream {
         let main = asp_dot_rust_crate_path();
-        // Preserve both source identifiers so IDE hover can resolve the attribute
-        // and its rule to their documented functions in the expansion.
         let Self { attribute, method, arguments } = self;
-        let target = quote!(<#wrapper as #main::controller::validation::QueryValidationTarget<_>>);
         let value = Ident::new("__asp_query_value", proc_macro2::Span::mixed_site());
         quote! {
-            if let ::core::option::Option::Some(#value) = #target::validation_value(&#binder) {
-                #main::controller::validation::#attribute(
-                    #main::controller::FromQuery::<#target::Value>::#method(#value, #field, #arguments)
+            // One import per annotated parameter: hovering `validate` in
+            // #[validate(length(2))] resolves to the attribute macro's docs.
+            #[allow(unused_imports)]
+            use #main::macros::#attribute as _;
+            #[allow(unused_imports)]
+            use #main::controller::validation::RequiredFieldValue as _;
+            if let ::core::option::Option::Some(#value) = #main::controller::validation::FieldValue(&#binder.0).present() {
+                #main::controller::validation::validate(
+                    // Hovering the inner rule name resolves to its method, including extension-trait methods.
+                    #main::controller::ControllerActionFieldValidate::#method(#value, #field, #arguments)
                 )?;
             }
         }
@@ -59,7 +63,7 @@ fn named_bounds(args: &Punctuated<Expr, Token![,]>) -> syn::Result<TokenStream> 
         }
     }
     let main = asp_dot_rust_crate_path();
-    let bounds = quote!(#main::controller::validation::QueryBounds);
+    let bounds = quote!(#main::controller::validation::ValidateBounds);
     Ok(match (min, max) {
         (Some(min), Some(max)) => quote!(const {
             let (min, max) = (#min, #max);
