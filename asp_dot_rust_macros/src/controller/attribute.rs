@@ -13,8 +13,36 @@ pub(crate) struct AttrAlias {
     pub ty: &'static str,
 }
 
+/// The name of an attribute macro of this crate: the last segment of its path.
+pub(crate) fn attr_name(attr: &Attribute) -> Option<&syn::Ident> {
+    attr.path().segments.last().map(|segment| &segment.ident)
+}
+
+/// Whether the path starts at this crate: `asp_dot_rust::...`, `::asp_dot_rust::...`, the name the crate was renamed to in `Cargo.toml`,
+/// or `crate::...` when the crate is compiling itself. A path of another crate (`other::get`) is not.
+fn is_own_path(path: &syn::Path) -> bool {
+    let Some(first) = path.segments.first() else {
+        return false;
+    };
+    if first.ident == "asp_dot_rust" || first.ident == "asp_dot_rust_macros" {
+        return true;
+    }
+    match proc_macro_crate::crate_name("asp_dot_rust") {
+        Ok(proc_macro_crate::FoundCrate::Itself) => first.ident == "crate",
+        Ok(proc_macro_crate::FoundCrate::Name(name)) => first.ident == name.as_str(),
+        Err(_) => false,
+    }
+}
+
+/// Whether the attribute is the macro `name` of this crate. A path of one segment (`#[get]`) is taken as ours, a macro can not see what a name
+/// was imported from. A longer path has to start at this crate, so `#[other_crate::get(...)]` is left to the other crate.
+pub(crate) fn attr_named(attr: &Attribute, name: &str) -> bool {
+    let path = attr.path();
+    attr_name(attr).is_some_and(|ident| ident == name) && (path.segments.len() == 1 || is_own_path(path))
+}
+
 fn alias_of(attr: &Attribute) -> Option<&'static AttrAlias> {
-    crate::controller::extra_attribute::ATTR_ALIASES.iter().find(|alias| attr.path().is_ident(alias.name))
+    crate::controller::extra_attribute::ATTR_ALIASES.iter().find(|alias| attr_named(attr, alias.name))
 }
 
 /// `name = { let value: ty = <value>; value }`: the value is of the type of the alias, a value of another type is a compile error.
@@ -63,7 +91,7 @@ pub(crate) fn attr(args: &TokenStream, item: TokenStream, name: &str) -> TokenSt
 
 /// Attributes that `#[controller_route]` turns into route attributes: `#[attr(key = value, ...)]` and the built-in ones (`#[max_body_size(bytes)]`, ...).
 pub(crate) fn is_attr_attr(attr: &Attribute) -> bool {
-    attr.path().is_ident("attr") || alias_of(attr).is_some()
+    attr_named(attr, "attr") || alias_of(attr).is_some()
 }
 
 pub(crate) struct AttrEntry {

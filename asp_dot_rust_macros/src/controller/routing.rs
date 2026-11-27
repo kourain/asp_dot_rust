@@ -4,7 +4,7 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Expr, ExprLit, ImplItem, ItemImpl, Lit, LitStr, Token, parse_macro_input, punctuated::Punctuated};
 
 use crate::controller::action_params::{generate_bind_code, parse_action_params};
-use crate::controller::attribute::{is_attr_attr, merged_attribute_calls, parse_attr_entries};
+use crate::controller::attribute::{attr_name, attr_named, is_attr_attr, merged_attribute_calls, parse_attr_entries};
 use crate::utils::compiler_error::create_compiler_error;
 use crate::utils::find_crate::asp_dot_rust_crate_path;
 use crate::utils::macros::{ok_or_error, some_or_error};
@@ -12,8 +12,7 @@ use crate::utils::macros::{ok_or_error, some_or_error};
 const HTTP_METHODS: [&str; 8] = ["get", "post", "put", "delete", "patch", "options", "head", "query"];
 
 fn is_route_attr(attr: &Attribute) -> bool {
-    let path = attr.path();
-    path.is_ident("route") || HTTP_METHODS.iter().any(|method| path.is_ident(*method))
+    attr_named(attr, "route") || HTTP_METHODS.iter().any(|method| attr_named(attr, method))
 }
 
 fn is_http_method(method: impl AsRef<str>) -> bool {
@@ -131,8 +130,8 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
     // Attribute macros disappear after expansion. Keep their source identifiers on
     // macro references so IDEs can resolve hover independently of registration spans.
     let mut attribute_names: Vec<_> = input_impl.attrs.iter()
-        .filter(|attr| is_attr_attr(attr) || attr.path().segments.last().is_some_and(|s| s.ident == "controller_inject"))
-        .filter_map(|attr| attr.path().segments.last().map(|s| s.ident.clone()))
+        .filter(|attr| is_attr_attr(attr) || attr_named(attr, "controller_inject"))
+        .filter_map(|attr| attr_name(attr).cloned())
         .collect();
     for impl_item in &mut input_impl.items {
         let ImplItem::Fn(impl_method) = impl_item else {
@@ -142,7 +141,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
         let method_name = &impl_method.sig.ident;
         attribute_names.extend(impl_method.attrs.iter()
             .filter(|attr| is_route_attr(attr) || is_attr_attr(attr))
-            .filter_map(|attr| attr.path().get_ident().cloned()));
+            .filter_map(|attr| attr_name(attr).cloned()));
         let method_name_lit = LitStr::new(&method_name.to_string(), method_name.span());
         let is_async = impl_method.sig.asyncness.is_some();
         let cfg_attrs: Vec<_> = impl_method.attrs.iter().filter(|attr| attr.path().is_ident("cfg")).collect();

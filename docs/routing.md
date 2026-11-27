@@ -68,6 +68,7 @@ impl HomeController {
   The values are percent-decoded after the route matched (an encoded `%2F` does not
   split a segment). A value that is not valid UTF-8 after decoding is stored as `Err(raw)`.
 - An action may declare several route attributes, including different paths for the same HTTP method. Registering the same controller twice or repeating a path and method panics during registration.
+- A route attribute can be written by name (`#[get("/")]`) or with the full path of this crate (`#[asp_dot_rust::controller::get("/")]`). A name alone is always taken as the macro of this crate, so a `get` imported from another crate (`use other::get;`) is also taken as a route here. To use a macro of another crate with the same name, write its full path (`#[other::get("/")]`), a path that does not start at this crate is left to the other crate.
 
 ## HTTP QUERY
 
