@@ -1,4 +1,4 @@
-use crate::services::routing::{Route, RoutingResult, routing_result::ResolvedRoute};
+use crate::services::routing::{Route, RoutingResult, query_string::parse_query_string, routing_result::ResolvedRoute};
 use asp_dot_rust_macros::DependencyInjectableService;
 use matchit::Router;
 use std::{
@@ -15,43 +15,34 @@ pub struct RoutingService {
 
 impl RoutingService {
     pub fn resolve(&self, uri: &http::Uri, method: &http::Method) -> ResolvedRoute {
-        let matched = self._router.at(uri.path());
-        let query_params = if let Some(query_string) = uri.query() {
-            HashMap::from_iter(query_string.split('&').filter_map(|pair| {
-                let mut parts = pair.splitn(2, '=');
-                let key = urlencoding::decode(parts.next().unwrap_or("")).ok()?.into();
-                let value = urlencoding::decode(parts.next().unwrap_or("")).ok()?.into();
-                Some((key, value))
-            }))
-        } else {
-            HashMap::new()
+        let query_params = uri.query().map(parse_query_string).unwrap_or_default();
+        let mut resolved = ResolvedRoute { query_params, ..Default::default() };
+        let Ok(matched) = self._router.at(Self::normalize_path(uri.path())) else {
+            return resolved;
         };
-        match matched {
-            Err(_) => ResolvedRoute {
-                path_params: HashMap::new(),
-                router_info: RoutingResult::NotFound,
-                query_params,
-            },
-            Ok(matched) => {
-                if let Some(route_info) = matched.value.get(method) {
-                    let params = HashMap::from_iter(matched.params.iter().map(|(k, v)| (k.into(), v.into())));
-                    ResolvedRoute {
-                        path_params: params,
-                        router_info: RoutingResult::Found(route_info.clone()),
-                        query_params,
-                    }
-                } else {
-                    ResolvedRoute {
-                        path_params: HashMap::new(),
-                        router_info: RoutingResult::MethodNotAllowed(matched.value.keys().cloned().collect()),
-                        query_params,
-                    }
-                }
-            }
+        let route = match *method {
+            http::Method::HEAD => matched.value.get(method).or_else(|| matched.value.get(&http::Method::GET)),
+            _ => matched.value.get(method),
+        };
+        let Some(route) = route else {
+            resolved.router_info = RoutingResult::MethodNotAllowed(matched.value.keys().cloned().collect());
+            return resolved;
+        };
+
+        resolved.router_info = RoutingResult::Found(route.clone());
+        // Decode after matching so an encoded slash stays inside its path segment.
+        for (name, raw) in matched.params.iter() {
+            let value = urlencoding::decode(raw).map(|value| value.into_owned()).map_err(|_| raw.to_owned());
+            resolved.path_params.insert(name.to_owned(), value);
         }
+        resolved
+    }
+    fn normalize_path(path: &str) -> &str {
+        let trimmed = path.trim_end_matches('/');
+        if trimmed.is_empty() && path.starts_with('/') { "/" } else { trimmed }
     }
     pub fn get_allowed_methods(&self, path: &str) -> HashSet<http::Method> {
-        let matched = self._router.at(path);
+        let matched = self._router.at(Self::normalize_path(path));
         if let Ok(matched) = matched { matched.value.keys().cloned().collect() } else { HashSet::new() }
     }
 }

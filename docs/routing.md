@@ -42,7 +42,7 @@ impl HomeController {
 
     #[get("/{id}")] // -> GET /home/{id}, a dynamic path parameter
     pub async fn show(&mut self) -> impl ActionResult {
-        let id = self.http_context.request.routing_info.path_params.get("id").cloned().unwrap_or_default();
+        let id = self.http_context.request.routing_info.path_params.get("id").and_then(|value| value.as_deref().ok()).unwrap_or_default();
         results::ok(format!("home #{id}"))
     }
 
@@ -64,12 +64,15 @@ impl HomeController {
   `#[controller_route("home")]` + `#[get("index")]` produce the same route.
 - Path parameters use `matchit`'s `{name}` syntax (e.g. `/{id}`,
   `/{category}/{id}`). They are resolved per-request and exposed as
-  `http_context.request.routing_info.path_params: HashMap<String, String>`.
+  `http_context.request.routing_info.path_params: HashMap<String, Result<String, String>>`.
+  The values are percent-decoded after the route matched (an encoded `%2F` does not
+  split a segment). A value that is not valid UTF-8 after decoding is stored as `Err(raw)`.
 - An action may declare several route attributes, including different paths for the same HTTP method. Registering the same controller twice or repeating a path and method panics during registration.
+- A route attribute can be written by name (`#[get("/")]`) or with the full path of this crate (`#[asp_dot_rust::controller::get("/")]`). A name alone is always taken as the macro of this crate, so a `get` imported from another crate (`use other::get;`) is also taken as a route here. To use a macro of another crate with the same name, write its full path (`#[other::get("/")]`), a path that does not start at this crate is left to the other crate.
 
 ## HTTP QUERY
 
-Use `#[query("/search")]` or `#[route(["QUERY"], "/search")]` to register the `http::Method::QUERY` method. QUERY is safe and idempotent and describes the operation in its request body. Clients must send `Content-Type`. Use `FromBody<T>` to bind a JSON or XML query, or read the body in the action for a custom query format. [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html#section-2)
+Use `#[query("/search")]` or `#[route(["QUERY"], "/search")]` to register the `http::Method::QUERY` method. QUERY is safe and idempotent and describes the operation in its request body. Clients must send `Content-Type`. Use `Body<T>` to bind a JSON or XML query (or `FromBody<T>` for one field of it), or read the body in the action for a custom query format. [RFC 10008](https://www.rfc-editor.org/rfc/rfc10008.html#section-2)
 
 Generated OpenAPI 3.2 documents describe QUERY with the `query` field on the Path Item Object. [OpenAPI 3.2 Path Item Object](https://spec.openapis.org/oas/v3.2.1.html#path-item-object)
 
@@ -131,15 +134,26 @@ at match time. Insertion into `matchit` fails in `add_controller_route`, so `add
 ## Query string
 
 `RoutingService::resolve` parses the request URI's query string into
-`http_context.request.routing_info.query_params: HashMap<String, String>`:
+`http_context.request.routing_info.query_params: HashMap<String, Result<String, String>>`:
 
-- Both keys and values are percent-decoded (`urlencoding::decode`).
+- Keys and values are decoded as form data: `%XX` is decoded and `+` is a space
+  (`%2B` is a plus).
 - A flag-style parameter with no `=` (e.g. `?debug`) is kept with an empty
   string value (`"debug" -> ""`), it is not dropped.
-- Duplicate keys: the last occurrence wins, since parsing folds into a
-  `HashMap`.
+- Duplicate keys: the last occurrence wins, whether it is valid or not, so
+  `?id=1&id=2` gives `"2"`. The earlier values are discarded without an error.
+- Empty pairs (`a=1&&b=2`) and pairs with an empty key (`=v`) are skipped.
+- Invalid UTF-8 values retain the encoded text as `Err(raw)` for binder errors (HTTP 422).
+  A key with invalid UTF-8 cannot match a
+  parameter name and is dropped.
 
 ## Resolving a request: `Found` / `NotFound` / `MethodNotAllowed`
+
+Route lookup trims trailing slashes from the request path. For example, `/items`
+and `/items///` reach the same action. The root path remains `/`.
+
+HEAD selects an explicit HEAD action when one is registered, otherwise it uses
+the GET action for the same path. The response sends the status and headers only.
 
 `RoutingService::resolve(uri, method) -> ResolvedRoute` distinguishes two
 failure cases instead of collapsing them into one:
@@ -148,8 +162,8 @@ failure cases instead of collapsing them into one:
   built-in `auto_route` middleware replies `404 Not Found`.
 - `RoutingResult::MethodNotAllowed(Vec<http::Method>)` — the path matches a
   registered route, but not with this HTTP method. `auto_route` replies
-  `405 Method Not Allowed` and sets the `Allow` header to the methods that
-  *are* registered for that path, per RFC 7231.
+  `405 Method Not Allowed` and lists the explicitly registered methods in
+  the `Allow` header. HEAD appears only when the path has a registered HEAD action.
 - `RoutingResult::Found(Arc<Route>)` — the path and method both
   matched; `auto_route` invokes the matched controller action.
 

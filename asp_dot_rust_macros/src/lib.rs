@@ -40,6 +40,37 @@ pub fn controller_route(args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::controller_route(args, item)
 }
 
+/// Configures a route, query, form or body field on a routed controller action.
+/// `name` selects the request key. `default` supplies a value when the field is absent.
+/// Field validation runs on the default unless `validate_default = false` is set.
+#[proc_macro_attribute]
+pub fn bind(_args: TokenStream, item: TokenStream) -> TokenStream {
+    crate::utils::compiler_error::create_compiler_error_from_token_stream(&item, "#[bind(...)] belongs on a field binder of a routed controller action")
+}
+
+/// Validates a route, query, form or body field before the controller action runs.
+///
+/// `#[validate(length(2))]` requires exactly two Unicode scalar values.
+/// `#[validate(length(1, 80))]` accepts an inclusive interval
+/// `#[validate(range(min = 1, max = 100))]` checks a numeric value.
+/// User-defined rules dispatch to the corresponding method on `ControllerActionFieldValidate`.
+/// Missing optional parameters skip the rule. Invalid values produce HTTP 422.
+/// 
+///```no_run
+///use asp_dot_rust::controller::results::ok;
+///#[controller_route("")]
+///impl HomeController {
+///    #[get("/")]
+///    pub async fn index(&mut self, #[validate(range(max=32))] a : FromQuery<u32>) -> impl ActionResult {
+///       ok("Hello, World!")
+///   }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn validate(_args: TokenStream, item: TokenStream) -> TokenStream {
+    crate::utils::compiler_error::create_compiler_error_from_token_stream(&item, "#[validate(...)] belongs on a field binder of a routed controller action")
+}
+
 /// registers a function as a route handler for the specified HTTP method(s) <br>
 /// Example usage:
 ///

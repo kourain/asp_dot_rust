@@ -92,7 +92,7 @@ fn static_and_parameter_routes_keep_their_own_methods_in_either_order() {
             RoutingResult::MethodNotAllowed(_)
         ));
         let by_id = service.resolve(&"/user/42".parse().unwrap(), &http::Method::GET);
-        assert_eq!(by_id.path_params.get("id").map(String::as_str), Some("42"));
+        assert_eq!(by_id.path_params.get("id").map(Result::as_deref), Some(Ok("42")));
         assert!(matches!(by_id.router_info, RoutingResult::Found(_)));
         assert!(matches!(service.resolve(&"/user/new".parse().unwrap(), &http::Method::POST).router_info, RoutingResult::Found(_)));
     }

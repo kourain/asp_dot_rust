@@ -76,7 +76,7 @@ pub(crate) async fn hyper_service(
             let custom_req = HttpRequest::from_http(req, routing_info, max_body_size, client_socket_addr, local_listen_socket_addr, connection_id);
 
             // The response sends its head through `head_rx` as soon as the first byte is written or the response is complete
-            let (custom_resp, head_rx) = HttpResponse::new_streaming();
+            let (custom_resp, head_rx) = HttpResponse::new_streaming(&custom_req.method);
 
             let http_context = HttpContext::new(custom_req, custom_resp, service_provider.create_scope());
             Ok::<_, Infallible>(HandleError::run(middleware_pipeline, http_context, head_rx).await)

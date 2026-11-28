@@ -637,6 +637,14 @@ async fn head_request_gets_the_headers_without_body() {
     assert_eq!(head.status, 200);
     assert_eq!(head.header("content-length"), Some(TEXT_BODY.len().to_string().as_str()));
     // no body bytes may follow, the next response must start right after the head
+    conn.send("HEAD", "/complete/text///?q=1", &[]).await;
+    let head = conn.read_head().await;
+    assert_eq!(head.status, 200);
+    assert_eq!(head.header("content-length"), Some(TEXT_BODY.len().to_string().as_str()));
+    conn.send("HEAD", "/stream/status/", &[]).await;
+    let head = conn.read_head().await;
+    assert_eq!(head.status, 201);
+    assert_eq!(head.header("x-test"), Some("yes"));
     let (head, body) = conn.get("/complete/text", &[]).await;
     assert_eq!((head.status, body.as_slice()), (200, TEXT_BODY.as_bytes()));
 }
@@ -946,20 +954,34 @@ async fn compression_does_not_touch_a_response_that_is_already_streamed() {
 // HTTP/2
 // ---------------------------------------------------------------------------
 
-async fn h2_get(port: u16, path: &str) -> hyper::Response<hyper::body::Incoming> {
+async fn h2_request(port: u16, method: http::Method, path: &str) -> hyper::Response<hyper::body::Incoming> {
     let stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     let (mut sender, connection) = hyper::client::conn::http2::handshake(hyper_util::rt::TokioExecutor::new(), hyper_util::rt::TokioIo::new(stream))
         .await
         .unwrap();
     tokio::spawn(connection);
-    let request = hyper::Request::get(format!("http://127.0.0.1:{port}{path}")).body(Empty::<Bytes>::new()).unwrap();
+    let request = hyper::Request::builder().method(method).uri(format!("http://127.0.0.1:{port}{path}")).body(Empty::<Bytes>::new()).unwrap();
     sender.send_request(request).await.unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn http2_head_on_get_routes_returns_headers_and_an_empty_stream() {
+    let port = start_server(|_| {}).await;
+    for (path, status, header, value) in [
+        ("/complete/large/", 200, "content-length", LARGE_BODY_SIZE.to_string()),
+        ("/stream/status", 201, "x-test", "yes".to_owned()),
+    ] {
+        let response = h2_request(port, http::Method::HEAD, path).await;
+        assert_eq!(response.status(), status);
+        assert_eq!(response.headers()[header], value);
+        assert!(response.into_body().collect().await.unwrap().to_bytes().is_empty());
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn http2_streamed_response_sends_chunks_when_they_are_written() {
     let port = start_server(|_| {}).await;
-    let response = h2_get(port, "/stream/chunks").await;
+    let response = h2_request(port, http::Method::GET, "/stream/chunks").await;
     assert_eq!(response.status(), 200);
     let mut body = response.into_body();
     let first = body.frame().await.unwrap().unwrap().into_data().unwrap();
@@ -983,7 +1005,7 @@ async fn http2_streamed_response_sends_chunks_when_they_are_written() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn http2_complete_response_is_written_in_full() {
     let port = start_server(|_| {}).await;
-    let response = h2_get(port, "/complete/large").await;
+    let response = h2_request(port, http::Method::GET, "/complete/large").await;
     assert_eq!(response.status(), 200);
     assert_eq!(response.headers().get("content-length").unwrap(), LARGE_BODY_SIZE.to_string().as_str());
     let body = response.into_body().collect().await.unwrap().to_bytes();
@@ -993,7 +1015,7 @@ async fn http2_complete_response_is_written_in_full() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn http2_panic_after_the_first_write_breaks_the_stream() {
     let port = start_server(|_| {}).await;
-    let response = h2_get(port, "/stream/panic_after").await;
+    let response = h2_request(port, http::Method::GET, "/stream/panic_after").await;
     assert_eq!(response.status(), 200);
     // a clean end would make the client believe the body is complete
     assert!(response.into_body().collect().await.is_err(), "the stream ended as if it was complete");

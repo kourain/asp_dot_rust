@@ -1,6 +1,11 @@
+#[path = "http_listener/body_fields.rs"]
+mod body_fields;
+#[path = "http_listener/wrapper_types.rs"]
+mod wrapper_types;
+
 use asp_dot_rust::{
     Application, ApplicationBuilder, api_controller,
-    controller::{ActionResult, FromBody, get, post, query, results, route},
+    controller::{ControllerActionFieldValidate, ActionResult, Body, Form, FromBody, FromForm, FromOptionBody, FromOptionForm, FromOptionQuery, FromQuery, FromRoute, Validate, ValidationError, get, post, query, results, route},
     http_context::{HttpContextRef, HttpHeaderExt},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -13,9 +18,36 @@ use asp_dot_rust::configuration::{CorsConfiguration, HyperConfig, RequestTimeout
 
 api_controller!(pub ListenerController {});
 
+// A rule defined outside the framework follows the same dispatch path as length and range.
+trait PrefixRule {
+    /// Require the decoded query string to start with the specified prefix.
+    /// For example, `#[validate(prefix("ok"))]` accepts `okay` and rejects `no`.
+    fn prefix(value: &str, field: &str, prefix: &str) -> Result<(), ValidationError>;
+}
+
+impl PrefixRule for ControllerActionFieldValidate {
+    fn prefix(value: &str, field: &str, prefix: &str) -> Result<(), ValidationError> {
+        if value.starts_with(prefix) { Ok(()) } else { Err(ValidationError::new(field, "invalid prefix")) }
+    }
+}
+
 #[derive(serde::Deserialize)]
 struct SearchFilter {
     term: String,
+}
+
+#[derive(serde::Deserialize)]
+struct LimitedSearch {
+    term: String,
+}
+
+impl Validate for LimitedSearch {
+    fn validate(&self) -> Result<(), ValidationError> {
+        if self.term.chars().count() > 3 {
+            return Err(ValidationError::new("term", "maximum length is 3"));
+        }
+        Ok(())
+    }
 }
 
 #[controller_route]
@@ -34,8 +66,116 @@ impl ListenerController {
     }
     #[query("/search")]
     #[route(["QuErY"], "/search-alias")]
-    async fn search(&self, filter: FromBody<SearchFilter>) -> impl ActionResult {
+    async fn search(&self, filter: Body<SearchFilter>) -> impl ActionResult {
         results::ok(filter.into_inner().term)
+    }
+    #[post("/search-form")]
+    fn search_form(&self, filter: Form<SearchFilter>) -> impl ActionResult {
+        results::ok(filter.into_inner().term)
+    }
+    #[post("/limited-form")]
+    fn limited_form(&self, filter: Form<LimitedSearch>) -> impl ActionResult {
+        results::ok(filter.into_inner().term)
+    }
+    #[post("/limited-body")]
+    async fn limited_body(&self, filter: Body<LimitedSearch>) -> impl ActionResult {
+        results::ok(filter.into_inner().term)
+    }
+    #[query("/search-term")]
+    async fn search_term(&self, term: FromBody<String>) -> impl ActionResult {
+        results::ok(term.into_inner())
+    }
+    #[post("/fields-form")]
+    fn fields_form(&self, name: FromForm<String>, age: FromForm<u32>, admin: FromForm<bool>, id: FromForm<uuid::Uuid>) -> impl ActionResult {
+        results::ok(format!("{} {} {} {}", *name, *age, *admin, *id))
+    }
+    #[post("/fields-body")]
+    fn fields_body(&self, name: FromBody<String>, age: FromBody<u32>, nick: FromBody<Option<String>>, tags: FromBody<Vec<String>>) -> impl ActionResult {
+        results::ok(format!("{} {} {:?} {:?}", *name, *age, *nick, *tags))
+    }
+    #[post("/body-flag")]
+    fn body_flag(&self, flag: FromBody<bool>) -> impl ActionResult {
+        results::ok(flag.to_string())
+    }
+    #[post("/body-value")]
+    fn body_value(&self, value: FromBody<serde_json::Value>) -> impl ActionResult {
+        results::ok(value.to_string())
+    }
+    #[post("/option-fields")]
+    fn option_fields(&self, a: FromOptionForm<u32>, b: FromForm<Option<String>>, on: FromOptionForm<bool>) -> impl ActionResult {
+        results::ok(format!("{:?} {:?} {}", *a, *b, on.flag()))
+    }
+    #[post("/option-body")]
+    fn option_body(&self, a: FromOptionBody<u32>, b: FromBody<Option<String>>) -> impl ActionResult {
+        results::ok(format!("{:?} {:?}", *a, *b))
+    }
+    #[get("/direct-option-query")]
+    fn direct_option_query(&self, #[validate(length(2))] code: FromQuery<Option<String>>) -> impl ActionResult {
+        results::ok(format!("{:?}", *code))
+    }
+    #[post("/whole-and-field-form")]
+    fn whole_and_field_form(&self, user: Form<SearchFilter>, extra: FromForm<String>) -> impl ActionResult {
+        results::ok(format!("{} {}", user.term, *extra))
+    }
+    #[post("/field-then-raw-body")]
+    fn field_then_raw_body(&self, term: FromBody<String>, raw: Body<String>) -> impl ActionResult {
+        results::ok(format!("{}|{}", *term, *raw))
+    }
+    #[post("/field-then-action-reads")]
+    async fn field_then_action_reads(&mut self, term: FromBody<String>) -> impl ActionResult {
+        // the binder rewound the body, so the action reads it from the start
+        let raw = self.http_context.request.body.read_to_end().await.unwrap();
+        results::ok(format!("{}|{}", *term, String::from_utf8(raw).unwrap()))
+    }
+    #[get("/bounded-query")]
+    fn bounded_query(
+        &self,
+        #[validate(length(1, 80))] term: FromQuery<String>,
+        #[validate(range(min = 1, max = 100))] limit: FromQuery<u8>,
+        #[validate(range(min = -10, max = 10))] offset: FromQuery<i8>,
+        #[validate(range(min = 0.0, max = 1.0))] score: FromQuery<f64>,
+    ) -> impl ActionResult {
+        results::ok(format!("{} {} {} {}", *term, *limit, *offset, *score))
+    }
+    #[post("/validated-body/{id}")]
+    fn validated_body(&self, #[validate(min(1))] id: FromRoute<u8>, #[validate(max(2))] count: FromOptionBody<i32>) -> impl ActionResult {
+        results::ok(format!("{} {:?}", *id, *count))
+    }
+    #[post("/validated-form")]
+    fn validated_form(&self, #[validate(prefix("ok"))] tag: FromForm<String>, #[validate(length(2))] code: FromOptionForm<String>) -> impl ActionResult {
+        results::ok(format!("{} {:?}", *tag, *code))
+    }
+    #[get("/optional-query")]
+    fn optional_query(
+        &self,
+        #[validate(length(1))] term: FromOptionQuery<String>,
+        #[validate(range(max = 0.5))] score: FromOptionQuery<f32>,
+        #[validate(range(min = 340282366920938463463374607431768211454))] count: FromOptionQuery<u128>,
+        legacy: FromOptionQuery<u8>,
+    ) -> impl ActionResult {
+        results::ok(format!("{:?} {:?} {:?} {:?}", *term, *score, *count, *legacy))
+    }
+    #[get("/query-rule-method")]
+    fn query_rule_method(
+        &self,
+        #[validate(length(2))] code: FromQuery<String>,
+        #[bind(name = "abcd", default = "aaaa", validate_default = false)]
+        #[validate(length(2))] _code2: FromQuery<String>,
+        #[validate(prefix("ok"))] tag: FromOptionQuery<String>,
+    ) -> impl ActionResult {
+        results::ok(format!("{} {:?}", *code, *tag))
+    }
+    #[get("/typed/{id}")]
+    fn typed(&self, id: FromRoute<uuid::Uuid>, ulid: FromQuery<ulid::Ulid>, ip: FromOptionQuery<std::net::IpAddr>) -> impl ActionResult {
+        results::ok(format!("{} {} {:?}", *id, *ulid, *ip))
+    }
+    #[get("/names/{name}")]
+    fn names(&self, name: FromRoute<String>, note: FromOptionQuery<String>) -> impl ActionResult {
+        results::ok(format!("{} {:?}", *name, *note))
+    }
+    #[get("/flag")]
+    fn flag(&self, verbose: FromOptionQuery<bool>, count: FromOptionQuery<u32>) -> impl ActionResult {
+        results::ok(format!("{} {:?} {:?}", verbose.flag(), *verbose, *count))
     }
     #[get("/utf8-header")]
     pub async fn utf8_header(&mut self) -> impl ActionResult {
@@ -248,13 +388,14 @@ async fn raw_request(port: u16, method: &str, path: &str, extra_headers: &str) -
     raw_request_with_body(port, method, path, extra_headers, "").await
 }
 
-async fn raw_request_with_body(port: u16, method: &str, path: &str, extra_headers: &str, body: &str) -> String {
+async fn raw_request_with_body(port: u16, method: &str, path: &str, extra_headers: &str, body: impl AsRef<[u8]>) -> String {
     let mut stream = match TcpStream::connect(("127.0.0.1", port)).await {
         Ok(stream) => stream,
         Err(e) => return format!("ERROR connect: {e}"),
     };
-    let request = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n{extra_headers}\r\n{body}");
-    if let Err(e) = stream.write_all(request.as_bytes()).await {
+    let mut request = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n{extra_headers}\r\n").into_bytes();
+    request.extend_from_slice(body.as_ref());
+    if let Err(e) = stream.write_all(&request).await {
         return format!("ERROR write: {e}");
     }
     let mut buffer = Vec::new();
@@ -306,6 +447,15 @@ async fn query_routes_bind_body_and_are_discoverable() {
 
     let swagger = raw_request(port, "GET", "/swagger/v1/swagger.json", "").await;
     assert_eq!(status_of(&swagger), 200, "{swagger}");
+    let slash = raw_request(port, "GET", "/swagger/v1/swagger.json/", "").await;
+    assert_eq!(status_of(&slash), 200);
+    assert_eq!(body_of(&slash), body_of(&swagger));
+    for path in ["/swagger", "/swagger/", "/swagger/index.html"] {
+        let ui = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&ui), 200, "{path}");
+        assert_eq!(header_of(&ui, "content-type").as_deref(), Some("text/html; charset=utf-8"));
+        assert!(body_of(&ui).contains(r#"url: "/swagger/v1/swagger.json""#));
+    }
     let document: serde_json::Value = serde_json::from_str(body_of(&swagger)).unwrap();
     assert_eq!(document["openapi"], "3.2.1");
     let search = &document["paths"]["/search"]["query"];
@@ -315,6 +465,206 @@ async fn query_routes_bind_body_and_are_discoverable() {
     assert_ne!(search["operationId"], alias["operationId"]);
     assert!(document["paths"]["/listener"]["get"].is_object());
     assert!(document["paths"]["/search"].get("additionalOperations").is_none());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn controller_validates_only_dtos_that_implement_validate() {
+    let port = 18712;
+    start(port, |_| {}, |_| {}).await;
+    let form = "application/x-www-form-urlencoded";
+    let json = "application/json";
+    let error = "term: maximum length is 3";
+    for (method, path, media, body, status, expected) in [
+        ("POST", "/search-form", form, "term=hello", 200, "hello"),
+        ("QUERY", "/search", json, r#"{"term":"hello"}"#, 200, "hello"),
+        ("POST", "/limited-form", form, "term=abc", 200, "abc"),
+        ("POST", "/limited-form", form, "term=abcd", 422, error),
+        ("POST", "/limited-body", json, r#"{"term":"abc"}"#, 200, "abc"),
+        ("POST", "/limited-body", json, r#"{"term":"abcd"}"#, 422, error),
+        ("POST", "/limited-body", "application/xml", "<root><term>abcd</term></root>", 422, error),
+    ] {
+        let headers = format!("Content-Type: {media}\r\nContent-Length: {}\r\n", body.len());
+        let response = raw_request_with_body(port, method, path, &headers, body).await;
+        assert_eq!(status_of(&response), status, "{path}: {response}");
+        assert_eq!(body_of(&response), expected, "{path}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn query_rules_check_typed_values_and_skip_absent_optional_fields() {
+    let port = 18713;
+    start(port, |_| {}, |_| {}).await;
+    for (length, status) in [(80, 200), (81, 422)] {
+        let term = "%E1%BA%BF".repeat(length);
+        let path = format!("/bounded-query?term={term}&limit=1&offset=0&score=0");
+        let response = raw_request(port, "GET", &path, "").await;
+        assert_eq!(status_of(&response), status, "{response}");
+    }
+    for (query, expected) in [
+        ("/bounded-query?term=x&limit=1&offset=-10&score=0.0", "x 1 -10 0"),
+        ("/bounded-query?term=y&limit=100&offset=10&score=1.0", "y 100 10 1"),
+        ("/optional-query", "None None None None"),
+        ("/query-rule-method?code=%E1%BA%BFx", "ếx None"),
+        ("/query-rule-method?code=ab&tag=okay", "ab Some(\"okay\")"),
+        ("/optional-query?term=%E1%BA%BF&score=0.5", "Some(\"ế\") Some(0.5) None None"),
+        ("/optional-query?count=340282366920938463463374607431768211454", "None None Some(340282366920938463463374607431768211454) None"),
+    ] {
+        let response = raw_request(port, "GET", query, "").await;
+        assert_eq!(status_of(&response), 200, "{query}: {response}");
+        assert_eq!(body_of(&response), expected, "{query}");
+    }
+    for (query, field) in [
+        ("/bounded-query?term=&limit=1&offset=0&score=0", "term"),
+        ("/bounded-query?term=x&offset=0&score=0", "limit"),
+        ("/bounded-query?term=x&limit=101&offset=0&score=0", "limit"),
+        ("/bounded-query?term=x&limit=1&offset=-11&score=0", "offset"),
+        ("/bounded-query?term=x&limit=1&offset=0&score=1.1", "score"),
+        ("/optional-query?term=", "term"),
+        ("/optional-query?term=ab", "term"),
+        ("/query-rule-method?code=x", "code"),
+        ("/query-rule-method?code=xyz", "code"),
+        ("/query-rule-method?code=xy&tag=no", "tag"),
+        ("/optional-query?term=%FF", "term"),
+        ("/optional-query?legacy=bad", "legacy"),
+        ("/optional-query?legacy=", "legacy"),
+        ("/optional-query?legacy=256", "legacy"),
+        ("/optional-query?legacy=%FF", "legacy"),
+        ("/optional-query?score=bad", "score"),
+        ("/optional-query?score=NaN", "score"),
+        ("/optional-query?score=-inf", "score"),
+        ("/optional-query?count=340282366920938463463374607431768211453", "count"),
+    ] {
+        let response = raw_request(port, "GET", query, "").await;
+        assert_eq!(status_of(&response), 422, "{query}: {response}");
+        assert!(body_of(&response).contains(field), "{query}: {response}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn action_field_rules_run_after_binding() {
+    let port = 18724;
+    start(port, |_| {}, |_| {}).await;
+    let json = "application/json";
+    let form = "application/x-www-form-urlencoded";
+    for (path, media, body, status, expected) in [
+        ("/validated-body/1", json, "{}", 200, "1 None"),
+        ("/validated-body/1", json, r#"{"count":null}"#, 200, "1 None"),
+        ("/validated-body/1", json, r#"{"count":2}"#, 200, "1 Some(2)"),
+        ("/validated-body/1", json, r#"{"count":3}"#, 422, "count"),
+        ("/validated-body/0", json, "{}", 422, "id"),
+        ("/validated-body/bad", json, "{}", 404, "id"),
+        ("/validated-form", form, "tag=okay", 200, "okay None"),
+        ("/validated-form", form, "tag=okay&code=ab", 200, "okay Some"),
+        ("/validated-form", form, "tag=okay&code=a", 422, "code"),
+        ("/validated-form", form, "tag=no", 422, "tag"),
+    ] {
+        let headers = format!("Content-Type: {media}\r\nContent-Length: {}\r\n", body.len());
+        let response = raw_request_with_body(port, "POST", path, &headers, body).await;
+        assert_eq!(status_of(&response), status, "{path}: {response}");
+        assert!(body_of(&response).contains(expected), "{path}: {response}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn route_and_query_binders_accept_any_from_str_type() {
+    let port = 18714;
+    start(port, |_| {}, |_| {}).await;
+    let uuid = "0190d9d0-7b1e-7c3a-8f2e-123456789abc";
+    let ulid = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    for (path, expected) in [
+        (format!("/typed/{uuid}?ulid={ulid}"), format!("{uuid} {ulid} None")),
+        (format!("/typed/{uuid}?ulid={ulid}&ip=127.0.0.1"), format!("{uuid} {ulid} Some(127.0.0.1)")),
+        (format!("/typed/{uuid}?ulid={ulid}&ip=%3A%3A1"), format!("{uuid} {ulid} Some(::1)")),
+    ] {
+        let response = raw_request(port, "GET", &path, "").await;
+        assert_eq!(status_of(&response), 200, "{path}: {response}");
+        assert_eq!(body_of(&response), expected, "{path}");
+    }
+    // A route value that does not parse is 404, a query value that does not parse (or is missing) is 422.
+    for (path, status, field) in [
+        ("/typed/not-a-uuid?ulid=01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string(), 404, "id"),
+        (format!("/typed/{uuid}?ulid=nope"), 422, "ulid"),
+        (format!("/typed/{uuid}"), 422, "ulid"),
+        (format!("/typed/{uuid}?ulid={ulid}&ip=999.1.1.1"), 422, "ip"),
+    ] {
+        let response = raw_request(port, "GET", &path, "").await;
+        assert_eq!(status_of(&response), status, "{path}: {response}");
+        assert!(body_of(&response).contains(field), "{path}: {response}");
+    }
+    // A missing required parameter and an unparsable one are told apart.
+    let missing = raw_request(port, "GET", &format!("/typed/{uuid}"), "").await;
+    assert!(body_of(&missing).contains("missing"), "{missing}");
+    let unparsable = raw_request(port, "GET", &format!("/typed/{uuid}?ulid=nope"), "").await;
+    assert!(body_of(&unparsable).contains("cannot parse"), "{unparsable}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn route_values_are_decoded_and_invalid_utf8_is_an_error() {
+    let port = 18715;
+    start(port, |_| {}, |_| {}).await;
+    for (path, expected) in [
+        ("/names/a%20b", "a b None"),
+        ("/names/%E1%BA%BF", "ế None"),
+        ("/names/a+b", "a+b None"),
+        ("/names/a%2Fb", "a/b None"),
+        ("/names/x?note=a+b", "x Some(\"a b\")"),
+        ("/names/x?note=1%2B1", "x Some(\"1+1\")"),
+        ("/names/x?note", "x Some(\"\")"),
+        ("/names/x?note=1&note=2", "x Some(\"2\")"),
+    ] {
+        let response = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&response), 200, "{path}: {response}");
+        assert_eq!(body_of(&response), expected, "{path}");
+    }
+    for (path, status, field) in [("/names/%FF", 404, "name"), ("/names/x?note=%FF", 422, "note")] {
+        let response = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&response), status, "{path}: {response}");
+        assert!(body_of(&response).contains(field), "{path}: {response}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn optional_bool_query_works_as_a_flag() {
+    let port = 18716;
+    start(port, |_| {}, |_| {}).await;
+    for (path, expected) in [
+        ("/flag", "false None None"),
+        ("/flag?verbose", "true Some(true) None"),
+        ("/flag?verbose=", "true Some(true) None"),
+        ("/flag?verbose=true", "true Some(true) None"),
+        ("/flag?verbose=false", "false Some(false) None"),
+        ("/flag?verbose&count=3", "true Some(true) Some(3)"),
+    ] {
+        let response = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&response), 200, "{path}: {response}");
+        assert_eq!(body_of(&response), expected, "{path}");
+    }
+    // Only `bool` reads an empty value as a flag, a number needs a digit.
+    for (path, field) in [("/flag?verbose=yes", "verbose"), ("/flag?count", "count"), ("/flag?count=-1", "count")] {
+        let response = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&response), 422, "{path}: {response}");
+        assert!(body_of(&response).contains(field), "{path}: {response}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn query_rules_apply_to_a_directly_written_from_query_of_option() {
+    let port = 18721;
+    start(port, |_| {}, |_| {}).await;
+    for (path, status, expected) in [
+        ("/direct-option-query", 200, "None"),
+        ("/direct-option-query?code=ab", 200, "Some(\"ab\")"),
+        ("/direct-option-query?code=a", 422, "code"),
+        ("/direct-option-query?code=abc", 422, "code"),
+    ] {
+        let response = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&response), status, "{path}: {response}");
+        if status == 200 {
+            assert_eq!(body_of(&response), expected, "{path}");
+        } else {
+            assert!(body_of(&response).contains(expected), "{path}: {response}");
+        }
+    }
 }
 
 /// `HTTP/1.1 200 OK ...` -> 200 (0 when the response is not an HTTP response)

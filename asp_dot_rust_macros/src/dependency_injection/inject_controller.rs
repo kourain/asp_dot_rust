@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{ItemImpl, parse_macro_input};
+use syn::ItemImpl;
 
 use super::{
     flags::ConstructorInjectOptions,
@@ -9,7 +9,10 @@ use super::{
 use crate::utils::find_crate::asp_dot_rust_crate_path;
 
 pub(crate) fn expand(item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as ItemImpl);
+    let input = match syn::parse::<ItemImpl>(item.clone()) {
+        Ok(input) => input,
+        Err(error) => return error.to_compile_error().into(),
+    };
     let main_crate = asp_dot_rust_crate_path();
     let constructor = Constructor {
         trait_name: format_ident!("DependencyInjectableController"),
@@ -22,5 +25,12 @@ pub(crate) fn expand(item: TokenStream) -> TokenStream {
         }),
         options: ConstructorInjectOptions::OPTIONAL | ConstructorInjectOptions::CHECK_REGISTRATIONS,
     };
-    expand_constructor(&input, constructor, &main_crate).map_or_else(|error| error, |inject| quote! { #input #inject }.into())
+    expand_constructor(&input, constructor, &main_crate).map_or_else(
+        |error| error,
+        |inject| {
+            let mut output = item;
+            output.extend(TokenStream::from(inject));
+            output
+        },
+    )
 }

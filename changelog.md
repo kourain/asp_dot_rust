@@ -1,5 +1,46 @@
 # Change log
 
+## 0.2.12
+
+### 0.2.12 New
+
+- `FromRoute<T>`, `FromQuery<T>` and `FromOptionQuery<T>` accept every `T: FromStr` (`uuid::Uuid`, `ulid::Ulid`, `std::net::IpAddr`, your own types), `FromParamValue` is implemented for all of them. A type without `FromStr` can still implement `FromParamValue` itself.
+- Query flags: a key without a value (`?debug`, `?debug=`) is an empty value and `bool` reads it as `true`. `FromOptionQuery::<bool>::flag()` is `true` when the key is present (and not `false`), `false` when it is absent.
+- Path and query parameters retain invalid UTF-8 as `Err(raw)`.
+- Doc warnings on `FromQuery<T>` and `FromOptionQuery<T>`: a repeated query key keeps only its last value.
+- `FromForm<T>` and `FromBody<T>` bind **one field** of the form / JSON / XML body (the argument name is the field name, `T: FromParamValue` for a form field, `T: Deserialize` for a body field, `FromBody<Option<U>>` accepts a missing field). `Body<T>` and `Form<T>` bind the **whole** body, they are the old `FromBody<T>` and `FromForm<T>`.
+- An action can have several body binders. They rewind the body after reading, so they can share it and the action can still read it. Mixing form binders with body binders in one action is a compile error.
+- `BindError::MissingField` and `BindError::ParseField` (HTTP 422).
+- `FromOptionQuery<T>` is a type alias of `FromQuery<Option<T>>`. The new aliases `FromOptionForm<T>` (`FromForm<Option<T>>`) and `FromOptionBody<T>` (`FromBody<Option<T>>`) work the same way. `FromQuery<Option<T>>` and the other spellings are accepted by `#[controller_route]` as well, and `#[validate(...)]` is checked on the `T` inside the `Option`.
+- `FromParamField` (with the markers `RequiredField` and `OptionalField` and the error `FieldError`) turns a query or form value into `T` or `Option<T>`, `FromQuery` and `FromForm` use it. `FromOptionForm<bool>::flag()` like the query flag.
+- `FromRoute<Option<T>>` is a compile error (a route parameter is always present).
+
+### 0.2.12 Fix
+
+- Path parameters are percent-decoded (`/users/a%20b` binds `a b`), they were passed on still encoded.
+- Query strings are decoded as form data: `+` is a space, `%2B` is a plus (`+` was kept as a plus).
+- A query value that is not valid UTF-8 is an error (HTTP 422 for the binders), it was dropped, and for a `FromOptionQuery<T>` without `#[validate(...)]` it was `None`.
+- `FromOptionQuery<T>` returns HTTP 422 for a supplied value that does not parse, it was `None` unless the parameter had `#[validate(...)]`.
+- A route under `#[cfg(...)]` no longer makes rust-analyzer grey out the other actions of its controller (see the macro changelog).
+- Empty query pairs and pairs with an empty key no longer create a `""` key.
+- Route attributes written with a full path (`#[asp_dot_rust::controller::get("/")]`, `#[asp_dot_rust::controller::route(...)]`, `#[asp_dot_rust::controller::attr(...)]`) are recognised like the imported ones, they were ignored and the route was not registered. On the controller impl a full path `attr` was a compile error. A path that does not start at this crate (`#[other::get(...)]`) is still left to the other crate.
+- `#[validate(...)]` on an action parameter written with a full path (`#[asp_dot_rust::controller::validate(length(2))]`) is recognised like the imported one, it was a rustc error ("expected non-macro attribute").
+
+### 0.2.12 Breaking Change
+
+| Old | New | Note |
+| --- | --- | --- |
+| `FromOptionQuery::bind` returned `Self` and `?x=bad` gave `None` | `FromOptionQuery::bind` returns `Result<Self, BindError>` and `?x=bad` is HTTP 422 | `bind_if_present` is removed, use `bind` |
+| `FromOptionQuery<T>` was a struct `FromOptionQuery<T>(pub Option<T>)` | it is the alias `FromQuery<Option<T>>` | the value is still `.0` and `*q`. `FromOptionQuery(x)` as a constructor or a pattern no longer compiles, write `FromQuery(x)` |
+| `FromQuery::bind` and `FromForm::bind` needed `T: FromParamValue` | they need `T: FromParamField<_>` | `T` and `Option<T>` are accepted. A type that implements `FromParamValue` itself still works |
+| `FromParamValue` was implemented for `String`, `bool`, `char`, integers and floats only | implemented for every `T: FromStr + 'static` | a user type that implemented `FromParamValue` and also has `FromStr` no longer compiles, keep one of them |
+| Path and query maps held strings | Both maps hold `Result<String, String>` | Use `as_deref()` to borrow the decoded value or inspect the original text on error |
+| `routing_info.path_params` held the raw (encoded) value | holds the decoded value | `%2F` decodes inside its segment |
+| `FromBody<T>` / `FromForm<T>` bound the whole body (`bind_serde`, `FromBody<String>` was the raw text) | they bind one field named like the argument | rename them to `Body<T>` / `Form<T>`. `FromBody<String>` still compiles but now reads a field, so a raw-text action fails with HTTP 422 until it is `Body<String>` |
+| at most one `FromBody` or `FromForm` per action | any number, but not form together with body binders | |
+| the body cursor was left at the end after binding | the cursor is rewound to the start | an action that read the rest of the body after binding got nothing, it now gets all of it |
+| `BindError` had no field variants | `BindError::MissingField` and `BindError::ParseField` | add the arms if you match `BindError` exhaustively |
+
 ## 0.2.11
 
 ### 0.2.11 New

@@ -1,6 +1,8 @@
+#[cfg(not(debug_assertions))]
+use asp_dot_rust::controller::route;
 use asp_dot_rust::{
     api_controller,
-    controller::{ActionResult, get, post, put, results, route},
+    controller::{ActionResult, get, post, put, results},
     http_context::{HttpContextRef, HttpHeaderExt},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -37,6 +39,7 @@ impl HomeController {
         results::ok(self.temp.clone())
     }
 
+    #[cfg(not(debug_assertions))]
     #[route(["get", "post"], "/health")]
     pub async fn health(&self) -> impl ActionResult {
         results::ok("ok".to_string())

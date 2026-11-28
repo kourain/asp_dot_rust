@@ -49,7 +49,7 @@ impl Application {
         if ip.is_empty() {
             ip.insert("127.0.0.1".parse::<std::net::IpAddr>().unwrap());
         }
-        if http_port.is_empty() {
+        if http_port.is_empty() && https_port.is_empty() {
             http_port.insert(8080);
         }
         let configuration = service_provider.get_service::<ConfigurationService>().await;
