@@ -6,7 +6,7 @@ use std::time::Duration;
 use asp_dot_rust::{
     ApplicationBuilder, api_controller,
     configuration::HyperConfig,
-    controller::{ActionResult, attr, max_body_size, post, route},
+    controller::{ActionResult, attr, max_body_size, post, results, route},
     http_context::HttpContextRef,
     logging::LOGGER,
     macros::{controller_inject, controller_route},
@@ -41,47 +41,53 @@ impl LimitController {
     #[post("/small")]
     #[max_body_size(10)]
     pub async fn small(&self) -> impl ActionResult {
-        "small"
+        results::ok("small")
     }
 
     // the limit may be any expression of usize, and be above the default limit
     #[max_body_size(10 * 100)]
     #[post("/big")]
     pub async fn big(&self) -> impl ActionResult {
-        "big"
+        results::ok("big")
     }
 
     #[post("/default")]
     pub async fn default_limit(&self) -> impl ActionResult {
-        "default"
+        results::ok("default")
+    }
+
+    #[post("/non_usize_limit")]
+    #[attr(max_body_size = 1024i32)]
+    pub async fn non_usize_limit(&self) -> impl ActionResult {
+        results::ok("default")
     }
 
     #[route(["post", "put"], "/multi")]
     #[max_body_size(10)]
     pub async fn multi(&self) -> impl ActionResult {
-        "multi"
+        results::ok("multi")
     }
 
     #[post("/read_small")]
     #[max_body_size(10)]
     pub async fn read_small(&mut self) -> impl ActionResult {
-        self.read_all().await
+        results::ok(self.read_all().await)
     }
 
     #[post("/read_default")]
     pub async fn read_default(&mut self) -> impl ActionResult {
-        self.read_all().await
+        results::ok(self.read_all().await)
     }
 
     #[post("/value_small")]
     #[max_body_size(10)]
     pub async fn value_small(&self) -> impl ActionResult {
-        self.http_context.request.path()
+        results::ok(self.http_context.request.path().to_owned())
     }
 
     #[post("/value_default")]
     pub async fn value_default(&self) -> impl ActionResult {
-        self.http_context.request.path()
+        results::ok(self.http_context.request.path().to_owned())
     }
 }
 
@@ -101,26 +107,26 @@ mod controller_level {
 
         #[post("/inherit")]
         pub async fn inherit(&self) -> impl ActionResult {
-            "inherit"
+            results::ok("inherit")
         }
 
         #[post("/override")]
         #[max_body_size(5)]
         pub async fn override_limit(&self) -> impl ActionResult {
-            "override"
+            results::ok("override")
         }
 
         // the long form of #[max_body_size(7)], the value has to be a usize here: `7` alone would be an i32, an unsuffixed number is a usize here too
         #[post("/by_attr")]
         #[attr(max_body_size = 7usize)]
         pub async fn by_attr(&self) -> impl ActionResult {
-            "by_attr"
+            results::ok("by_attr")
         }
 
         // the limit is a route attribute like any other
         #[post("/as_attribute")]
         pub async fn as_attribute(&self) -> impl ActionResult {
-            format!("{:?}", self.http_context.request.route_attribute::<usize>("max_body_size"))
+            results::ok(format!("{:?}", self.http_context.request.route_attribute::<usize>("max_body_size")))
         }
     }
 }
@@ -182,6 +188,13 @@ async fn route_without_limit_uses_the_default_limit() {
     let port = start_server().await;
     assert_eq!(post_sized(port, "/default", DEFAULT_LIMIT).await, (200, "default".into()));
     assert_eq!(post_sized(port, "/default", DEFAULT_LIMIT + 1).await.0, 413);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn non_usize_route_limit_uses_the_configured_default() {
+    let port = start_server().await;
+    assert_eq!(post_sized(port, "/non_usize_limit", DEFAULT_LIMIT).await, (200, "default".into()));
+    assert_eq!(post_sized(port, "/non_usize_limit", DEFAULT_LIMIT + 1).await.0, 413);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

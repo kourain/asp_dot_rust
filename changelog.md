@@ -1,5 +1,58 @@
 # Change log
 
+## 0.2.12
+
+### 0.2.12 New
+
+- `#[query("/search")]` and `#[route(["QUERY"], "/search")]` register HTTP QUERY actions. A missing or blank `Content-Type` produces 400. A media type rejected by the body binder produces 415.
+- Route registration supports multiple paths for an action and reports duplicate controllers, duplicate method/path registrations and conflicting path patterns at startup. Registration errors identify the action and point to its route attribute. `#[cfg]` on an action also controls its registration and dispatch.
+- `FromBody<T>` binds one top-level JSON member or XML child element. `FromForm<T>` binds one URL-encoded form field. `Body<T>` and `Form<T>` bind whole payloads. An action can combine several binders of the same body format, including whole-payload and field binders. The request is buffered once and remains readable from the start. Each body field binder parses the document separately.
+- `#[bind(name = "abcd", default = "aaaa", validate_default = false)]` selects a request key and supplies a fallback for an absent route, query, form or body field. `validate_default` defaults to `true`. Supplied values still go through binding and validation, even when they equal the fallback. Empty query/form values and explicit JSON `null` count as supplied. A route default applies only after the URL matches. Raw Rust argument names such as `r#type` bind the key `type`.
+- `#[validate(...)]` checks route, query, form and body fields before the action runs. `length` counts Unicode scalar values. `range`, `min` and `max` check finite numbers with inclusive bounds. Extension traits on `ControllerActionFieldValidate` can supply custom rules. Whole `Body<T>` and `Form<T>` DTOs can implement `Validate`. A failed rule returns 422 and identifies the field.
+- Path, query and URL-encoded form fields accept types implementing `FromStr + 'static`, including `Uuid`, `IpAddr` and user types. Types with a custom parser can implement `FromParamValue`. `FromParamField`, `RequiredField`, `OptionalField` and `FieldError` distinguish missing and invalid query/form fields.
+- `FromOptionQuery<T>`, `FromOptionForm<T>` and `FromOptionBody<T>` are aliases for the corresponding binder of `Option<T>`. An absent optional field yields `None` unless it has a default. A supplied value must parse. An optional JSON field accepts explicit `null`, while a missing required `FromBody<serde_json::Value>` yields `MissingField`. Field rules skip `None`. Path parameters require a concrete value.
+- `controller::results` provides typed `RouteResult<T>` status helpers such as `ok`, `created`, `bad_request` and `no_content`, with PascalCase aliases. Use `headers_mut()` for response headers and `with_location()` or a redirect helper for a validated `Location` header. Custom results can borrow request data and write a buffered or streaming body. `HttpResponse::has_finished()` lets middleware detect a completed or aborted stream.
+- Serializable models and collections negotiate JSON or XML using `Accept`, including weights and wildcards. JSON is the default. Negotiated responses set `Vary: Accept` and return 406 when no offered format is acceptable. Strings produce UTF-8 text. `Json`, `Xml` and `Raw` select a fixed representation.
+- Controllers and middleware support field injection through `#[derive(DependencyInjectableController)]` and `#[derive(DependencyInjectableMiddleware)]`. Middleware constructor dependencies resolve when the pipeline is built. Extra parameters on `invoke_async` resolve from the request scope. Controller injection receives the current `HttpContextRef`.
+- `third_party` now also re-exports `chrono`, `http`, `http_body`, `http_body_util`, `jsonwebtoken`, `matchit`, `quick_xml` and `serde_urlencoded`.
+
+### 0.2.12 Fix
+
+- Route lookup trims trailing slashes just as registration does. `/items`, `/items/` and `/items///` reach the same action. Path parameters are percent-decoded after matching, so `/files/a%2Fb` binds `a/b` as one parameter.
+- Query and URL-encoded form fields decode `+` as a space and `%2B` as a literal plus. Repeated keys select their last value. The query parser skips empty or undecodable keys and preserves invalid UTF-8 values for binding errors. A bare boolean flag or an empty boolean value binds `true`. The optional query and form bool binders expose `.flag()`.
+- CORS handles `OPTIONS` as a preflight when `Access-Control-Request-Method` is present on a qualifying cross-origin request. Ordinary OPTIONS requests reach routing. The default CORS method set includes QUERY. CORS and compression preserve existing `Vary` entries.
+- Compression can use its defaults without a registered `CompressionConfiguration` and removes strong ETags when encoding changes the body. A timeout before headers are sent returns a plain-text 408 with `Cache-Control: no-store` and clears stale representation, framing and redirect headers. A timeout after headers have been sent aborts the stream. A successfully served static file sets status 200 and its content length.
+- Rate limiting updates the sliding window and block state together for each client IP and periodically evicts inactive entries. Concurrent requests from the same client share the same limit.
+- HTTP listeners bind the configured IP/port combinations in a deterministic order. Startup reports a required bind failure. When IPv4 wildcard binding succeeds, an unavailable IPv6 wildcard listener is skipped with a warning. Port 8080 is selected only when both port lists are empty. This version serves HTTP listeners only.
+
+### 0.2.12 Change
+
+| Old | New | Note |
+| --- | --- | --- |
+| A HEAD request required an explicitly registered HEAD action | HEAD selects that action when available and otherwise dispatches to GET | Buffered and streaming responses send headers only. Buffered GET fallbacks retain the representation length. `Allow` and `get_allowed_methods()` still list only explicitly registered methods. |
+| Swagger generated OpenAPI 3.0.3 and used the controller and action names for each operation ID | OpenAPI 3.2.1 supports `query`, `trace` and `additionalOperations`. Duplicate operation IDs include the method and path. | Register `builder.add_swagger_gen()` before `build()`, then call `app.use_swagger()` to serve `/swagger` and `/swagger/v1/swagger.json`. Read registered operations through `OpenApiService::registered_operations()`. |
+| Service cycles were checked during `build()` | `Application::run()` loads configuration and installs routing before checking the service graph for cycles, missing services and configuration dependencies | Errors identify the dependency path before listeners open. All `Cfg*` wrappers require a registered type, and `CfgRequire<T>` requires a populated entry. Generated controller and middleware invocation code checks direct registrations. |
+| The running server held the application after pipeline construction | Startup consumes the middleware and hosted-service factories | Data used only during construction can be released while the pipeline serves requests. |
+| The default watched filename was `appsetting.toml` | The default is `appsettings.toml` | Rename the file or register its path explicitly. |
+| Request panic logging included the connection ID, request ID and panic payload | With `panic = "unwind"`, the report includes both IDs, the panic location, thread and backtrace | Before headers are committed the client receives 500. Afterward the server terminates the stream. Builds using `panic = "abort"` set `X-AspRs-Panic: abort` and retain process-abort behavior. `LOGGER::is_running()` exposes the logger state. |
+
+### 0.2.12 Breaking Change
+
+| Old | New | Note |
+| --- | --- | --- |
+| `FromBody<T>` and `FromForm<T>` read whole payloads | They now read a single named field | Use `Body<T>` or `Form<T>` for the whole payload. `Body<String>` and `Form<String>` read raw text. |
+| `FromOptionQuery<T>` was a tuple struct and `bind` returned `Self` | It is an alias for `FromQuery<Option<T>>` and `bind` returns `Result<Self, BindError>` | Handle 422 for an invalid supplied value. Use `FromQuery(value)` as a constructor or pattern. `.0`, dereferencing and `into_inner()` still work. |
+| Custom types could implement both `FromStr` and `FromParamValue` | The blanket `FromParamValue` implementation covers `FromStr + 'static` | Remove overlapping implementations. Query/form binders use `FromParamField<Marker>` for required and optional fields. |
+| `ResolvedRoute::path_params` and `query_params` held `String` values | Both maps hold `Result<String, String>` | `Ok` holds decoded text and `Err` holds the original invalid input. Route binding failures return 404 and query binding failures return 422. |
+| Matches on `BindError` covered the old variants | `MissingField`, `ParseField` and `Validation` also map to 422 | Add arms to exhaustive matches. |
+| `PresetResponse`, raw byte results and the previous `ActionResult` methods | Use `controller::results` and `ActionResult: Send + Sync` | Wrap bytes in `Raw` to preserve a binary response. For custom results implement `status_code`, `write_header` and `write_body_async` as needed. |
+| Manual dispatch used `Routing`, and `Middleware` included construction | `Controller` dispatch returns `Result<Box<dyn ActionResult + '_>, RoutingError>`. Middleware construction uses `DependencyInjectableMiddleware::inject`. | Migrate manual implementations. `Routing` remains a deprecated alias for `Controller`. |
+| `RoutingServiceBuilder::add_controller_route` accepted separate route components and an invoker. `build()` returned `RoutingService`. | `add_controller_route` accepts a root and an `ActionRoute`. `build()` returns `(RoutingService, OpenApiService)`. | Update manual registrations and callers that build the routing service directly. |
+| Controllers could use `ShareMutPtr` directly, and the request ID and request service provider were mutable | `ShareMutPtr` is private. `request_id` and the request's `service_provider` use `ReadOnly<T>`. | Use `http_context::HttpContextRef` for the controller context. Import `ArcAny` from the crate root. |
+| `HttpRequest::max_body_size` exposed the body limit | The field was removed | Use `#[max_body_size(bytes)]` to configure a route. A manual `max_body_size` attribute of the wrong type now falls back to `HyperConfig::max_request_body_size`. |
+
+See [model binding](docs/model_binding.md), [routing](docs/routing.md), [dependency injection](docs/dependency_injection.md), [middleware](docs/middleware.md), [Swagger](docs/swagger.md) and the [companion macro changelog](asp_dot_rust_macros/changelog.md).
+
 ## 0.2.11
 
 ### 0.2.11 New

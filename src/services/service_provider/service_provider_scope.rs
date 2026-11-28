@@ -32,7 +32,7 @@ impl ServiceProviderScope {
                             Serv(Arc::new(sv) as Arc<dyn std::any::Any + Send + Sync>)
                         })
                         .await;
-                    Serv::<T>::downcast(arc_any).expect("Type mismatch when downcasting service")
+                    Serv::<T>::downcast(arc_any).unwrap_or_else(|_| panic!("Type mismatch when downcasting service: {}", std::any::type_name::<T>()))
                 }
                 ServiceType::Transient => {
                     let sv = T::inject(self).await;
@@ -40,7 +40,7 @@ impl ServiceProviderScope {
                 }
             },
             None => {
-                panic!("Service {} not found in scope", std::any::type_name::<T>());
+                panic!("{}", T::forgot_register_message());
             }
         }
     }
@@ -61,6 +61,28 @@ impl ServiceProviderScope {
         let instance: Arc<ServiceInstanceType> = Arc::new(OnceCell::new());
         let _ = instance.set(Serv(service));
         self._inner_map.insert(type_id, ServiceInstance { service_type, instance });
+    }
+
+    /// Stores a built instance in an existing registration, preserving its lifetime.
+    #[track_caller]
+    pub(crate) fn store_instance<T>(&mut self, service: Arc<T>)
+    where
+        T: DependencyInjectableService,
+    {
+        let registration = self._inner_map.get_mut(&TypeId::of::<T>()).unwrap_or_else(|| panic!("{}", T::forgot_register_message()));
+        assert!(registration.service_type != ServiceType::Transient, "Cannot store a transient service {}", type_name::<T>());
+        let service: Serv<dyn std::any::Any + Send + Sync> = Serv(service);
+        if registration.instance.set(service.clone()).is_err() {
+            registration.instance = Arc::new(OnceCell::from(service));
+        }
+    }
+    pub(crate) fn store_instace_if_exist<T>(&mut self, service: Arc<T>)
+    where
+        T: DependencyInjectableService,
+    {
+        if self.contains_service::<T>() {
+            self.store_instance(service);
+        }
     }
     fn add<T>(&mut self, service_type: ServiceType)
     where
@@ -105,5 +127,8 @@ impl ServiceProviderScope {
     }
     pub fn contains_type_id(&self, type_id: &TypeId) -> bool {
         self._inner_map.contains_key(type_id)
+    }
+    pub(crate) fn registration(&self, type_id: &TypeId) -> Option<&ServiceInstance> {
+        self._inner_map.get(type_id)
     }
 }

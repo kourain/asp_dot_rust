@@ -1,7 +1,7 @@
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
-/// Minimal OpenAPI 3.0 document built from registered routes.
+/// Minimal OpenAPI 3.2 document built from registered routes.
 #[derive(Debug, Clone, Serialize)]
 pub struct OpenApiDocument {
     pub openapi: &'static str,
@@ -33,6 +33,12 @@ pub struct OpenApiPathItem {
     pub options: Option<OpenApiOperation>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub head: Option<OpenApiOperation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace: Option<OpenApiOperation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<OpenApiOperation>,
+    #[serde(rename = "additionalOperations", skip_serializing_if = "BTreeMap::is_empty")]
+    pub additional_operations: BTreeMap<String, OpenApiOperation>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -76,17 +82,20 @@ pub struct RegisteredOperation {
 }
 
 impl OpenApiDocument {
-    /// Builds an OpenAPI 3.0 document from the list of registered operations.
+    /// Builds an OpenAPI 3.2 document from the list of registered operations.
     pub fn from_operations(title: impl Into<String>, version: impl Into<String>, operations: &[RegisteredOperation]) -> Self {
         let mut paths: BTreeMap<String, OpenApiPathItem> = BTreeMap::new();
+        let operation_ids: Vec<_> = operations.iter().map(|op| format!("{}_{}", op.controller_name, op.action_name)).collect();
+        let mut id_counts = HashMap::new();
+        for id in &operation_ids {
+            *id_counts.entry(id.as_str()).or_insert(0) += 1;
+        }
 
-        for op in operations {
-            let openapi_path = op.path.clone();
-            let parameters = path_parameters(&op.path);
+        for (op, id) in operations.iter().zip(&operation_ids) {
             let operation = OpenApiOperation {
                 tags: vec![op.controller_name.to_string()],
-                operation_id: format!("{}_{}", op.controller_name, op.action_name),
-                parameters,
+                operation_id: if id_counts[id.as_str()] == 1 { id.clone() } else { format!("{id}:{}:{}", op.method, op.path) },
+                parameters: path_parameters(&op.path),
                 responses: BTreeMap::from([(
                     "200".to_string(),
                     OpenApiResponse {
@@ -95,7 +104,7 @@ impl OpenApiDocument {
                 )]),
             };
 
-            let item = paths.entry(openapi_path).or_default();
+            let item = paths.entry(op.path.clone()).or_default();
             match op.method.as_str() {
                 "GET" => item.get = Some(operation),
                 "POST" => item.post = Some(operation),
@@ -104,12 +113,16 @@ impl OpenApiDocument {
                 "PATCH" => item.patch = Some(operation),
                 "OPTIONS" => item.options = Some(operation),
                 "HEAD" => item.head = Some(operation),
-                _ => {}
+                "TRACE" => item.trace = Some(operation),
+                "QUERY" => item.query = Some(operation),
+                method => {
+                    item.additional_operations.insert(method.to_owned(), operation);
+                }
             }
         }
 
         Self {
-            openapi: "3.0.3",
+            openapi: "3.2.1",
             info: OpenApiInfo {
                 title: title.into(),
                 version: version.into(),

@@ -1,11 +1,12 @@
 use crate::{
     Application,
     configuration::{CompressionConfiguration, CompressionLevel},
-    dependency_injection::{CfgOption, CfgRequire},
-    http_context::{HttpContext, HttpHeaderExt, HttpResponse},
+    dependency_injection::{CfgOption, CfgRequire, Serv},
+    http_context::{HttpContext, HttpHeaderExt, HttpResponse, append_vary},
     logging::LOGGER,
     macros::middleware,
     middleware::MiddlewareNext,
+    services::configuration::ConfigurationService,
 };
 use async_compression::{
     Level,
@@ -123,7 +124,12 @@ pub struct CompressionMiddleware {
 }
 #[middleware]
 impl CompressionMiddleware {
-    pub fn new(next: MiddlewareNext, configuration: CfgOption<CompressionConfiguration>) -> Self {
+    pub fn new(next: MiddlewareNext, configuration_service: Serv<ConfigurationService>) -> Self {
+        let configuration: CfgOption<CompressionConfiguration> = if configuration_service.contains::<CompressionConfiguration>() {
+            configuration_service.get().capture()
+        } else {
+            CfgOption(Some(Default::default()))
+        };
         Self {
             next,
             configuration: configuration.unwrap_or_default(),
@@ -133,8 +139,6 @@ impl CompressionMiddleware {
         self.next.next_async(http_context).await;
         self.compress_response(&http_context.request.headers, &mut http_context.response).await;
     }
-}
-impl CompressionMiddleware {
     fn should_compress(&self, response: &HttpResponse) -> bool {
         let status = response.status_code;
         // the head (and maybe a part of the body) is already sent, the headers can not describe a compressed body any more
@@ -179,14 +183,7 @@ impl CompressionMiddleware {
             return;
         }
         // the response depends on Accept-Encoding even when this request is not compressed
-        let has_vary = response
-            .headers
-            .get_all(header::VARY)
-            .iter()
-            .any(|value| value.to_str().is_ok_and(|v| v.to_ascii_lowercase().contains("accept-encoding")));
-        if !has_vary {
-            response.headers.append_str("Vary", "Accept-Encoding");
-        }
+        append_vary(&mut response.headers, "Accept-Encoding");
         let Some(encoding) = select_encoding(request_headers, &self.configuration) else {
             return;
         };
@@ -202,6 +199,9 @@ impl CompressionMiddleware {
             return;
         }
         response.body = compressed;
+        if response.headers.get(header::ETAG).is_some_and(|tag| !tag.as_bytes().starts_with(b"W/")) {
+            response.headers.remove(header::ETAG);
+        }
         response.headers.remove(header::ACCEPT_RANGES);
         response.headers.set_content_length(response.body.len());
         response.headers.insert_str("Content-Encoding", encoding.as_str());

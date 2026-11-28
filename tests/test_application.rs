@@ -1,22 +1,40 @@
 mod controllers;
 mod middleware;
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use asp_dot_rust::{
     ApplicationBuilder,
     configuration::{CorsConfiguration, RateLimitConfiguration},
     logging::LOGGER,
+    services::routing::{ControllerBootstrapRegistration, RoutingServiceBuilder},
 };
 
 use crate::middleware::TestMidware;
+
+#[test]
+fn health_route_follows_action_cfg() {
+    let mut builder = RoutingServiceBuilder::default();
+    for registration in inventory::iter::<ControllerBootstrapRegistration> {
+        (registration.bootstrap)(&mut builder);
+    }
+    let (router, _) = builder.build();
+    assert_eq!(router.get_allowed_methods("/"), HashSet::from([http::Method::GET]));
+    let expected = if cfg!(debug_assertions) {
+        HashSet::new()
+    } else {
+        HashSet::from([http::Method::GET, http::Method::POST])
+    };
+    assert_eq!(router.get_allowed_methods("/health"), expected);
+}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 16)]
 async fn test_application() {
     LOGGER::disable();
     let mut app_builder = ApplicationBuilder::new("TestApp");
-    app_builder.with_any_ip().with_http_port(8080).with_http_port(9999);
+    app_builder.with_loopback_ip().with_http_port(8080).with_http_port(9999);
     app_builder
-        .configuration.update(|config: &mut CorsConfiguration| {
+        .configuration
+        .update(|config: &mut CorsConfiguration| {
             config.allowed_origins = ["*".into()].into();
             config.allowed_methods = [http::Method::GET, http::Method::POST].into();
             config.allowed_headers = ["Content-Type".into()].into();

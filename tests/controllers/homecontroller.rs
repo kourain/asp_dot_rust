@@ -1,7 +1,9 @@
+#[cfg(not(debug_assertions))]
+use asp_dot_rust::controller::route;
 use asp_dot_rust::{
     api_controller,
-    controller::{ActionResult, get, post, put, route},
-    http_context::HttpContextRef,
+    controller::{ActionResult, get, post, put, results},
+    http_context::{HttpContextRef, HttpHeaderExt},
     logging::LOGGER,
     macros::{controller_inject, controller_route},
 };
@@ -24,21 +26,22 @@ impl HomeController {
         LOGGER::info("Handling index action".to_string());
         self.http_context.response.headers.insert_str("Content-Type", "text/html");
         self.http_context.response.status_code = http::StatusCode::OK;
-        "<html><body><h1>Hello, World!</h1></body></html>"
+        results::ok("<html><body><h1>Hello, World!</h1></body></html>")
     }
 
     #[post("/update")]
     pub fn update(&mut self) -> impl ActionResult {
-        self.temp.clone()
+        results::ok(self.temp.clone())
     }
 
     #[put("/replace")]
     pub async fn replace(&mut self) -> impl ActionResult {
-        self.temp.clone()
+        results::ok(self.temp.clone())
     }
 
+    #[cfg(not(debug_assertions))]
     #[route(["get", "post"], "/health")]
     pub async fn health(&self) -> impl ActionResult {
-        "ok".to_string()
+        results::ok("ok".to_string())
     }
 }

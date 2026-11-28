@@ -1,10 +1,4 @@
-use std::sync::Arc;
-
-use crate::{
-    ApplicationBuilder,
-    logging::LOGGER,
-    services::{routing::RoutingServiceBuilder, service_provider::ServiceType},
-};
+use crate::{ApplicationBuilder, logging::LOGGER, services::routing::RoutingServiceBuilder};
 
 pub struct ControllerBootstrapRegistration {
     pub bootstrap: fn(&mut RoutingServiceBuilder),
@@ -12,19 +6,18 @@ pub struct ControllerBootstrapRegistration {
 
 inventory::collect!(ControllerBootstrapRegistration);
 
-pub(crate) fn bootstrap_registered_controllers() -> RoutingServiceBuilder {
-    LOGGER::info("Bootstrapping registered controllers...");
-    let mut routing_sv = RoutingServiceBuilder::default();
-    for registration in inventory::iter::<ControllerBootstrapRegistration> {
-        (registration.bootstrap)(&mut routing_sv);
+impl RoutingServiceBuilder {
+    pub(crate) fn bootstrap_registered_controllers(&mut self) {
+        LOGGER::info("Bootstrapping registered controllers...");
+        for registration in inventory::iter::<ControllerBootstrapRegistration> {
+            (registration.bootstrap)(self);
+        }
     }
-    routing_sv
 }
 
 impl ApplicationBuilder {
     pub fn add_controllers(&mut self) -> &mut Self {
-        let routing_snapshot = bootstrap_registered_controllers();
-        self.service.add_instance(Arc::new(routing_snapshot.build()), ServiceType::Singleton);
+        self.routing_builder.bootstrap_registered_controllers();
         self
     }
 }

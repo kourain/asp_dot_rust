@@ -8,29 +8,130 @@ Action methods may take binder parameters. The `#[controller_route]` macro resol
 | --- | --- | --- |
 | `FromRoute<T>` | `path_params` | HTTP 404 |
 | `FromQuery<T>` | `query_params` | HTTP 422 |
-| `FromOptionQuery<T>` | `query_params` | `None` (no error) |
-| `FromBody<T>` | request body | HTTP 422 (or 400 if body cannot be read) |
-| `FromForm<T>` | form body | HTTP 422 (or 400 if body cannot be read) |
+| `FromOptionQuery<T>` | `query_params` | Alias of `FromQuery<Option<T>>`. Missing gives `None`. A supplied value that does not parse is HTTP 422, with or without `#[validate(...)]`. |
+| `FromBody<T>` | one field of the JSON / XML body | HTTP 422 for a missing or invalid field, 400 for read failures. See the `QUERY` exceptions below. |
+| `FromOptionBody<T>` | one field of the JSON / XML body | Alias of `FromBody<Option<T>>`. Missing or `null` gives `None`. |
+| `FromForm<T>` | one field of the form body | Same as `FromBody<T>`. |
+| `FromOptionForm<T>` | one field of the form body | Alias of `FromForm<Option<T>>`. Missing gives `None`. A supplied value that does not parse is HTTP 422. |
+| `Body<T>` | the whole body | HTTP 422 for invalid data, 400 for read failures. |
+| `Form<T>` | the whole form body | Same as `Body<T>`. |
 
-Supported scalar `T` for route/query: `String`, integers, floats, `bool`, `char` (`FromParamValue`).
+`FromRoute`, `FromQuery`, `FromForm`, `FromBody` and their `FromOption...` aliases bind **one value** and the argument name is its key. `Body` and `Form` bind the **whole** body into a DTO (or raw text).
 
-A route may have at most one of `FromBody` or `FromForm`.
+### Optional values
 
-## FromBody / FromForm
+Use `#[bind]` on a route, query, form or body field to select its request key and supply a default.
+
+```rust
+#[get("/search")]
+fn search(
+    &self,
+    #[bind(name = "abcd", default = "aaaa", validate_default = false)]
+    #[validate(length(2))] _code2: FromQuery<String>,
+) -> impl ActionResult {
+    results::ok(_code2.into_inner())
+}
+```
+
+Omitting `abcd` returns `aaaa`. Supplying `?abcd=xy` returns `xy`. Supplying
+`?abcd=aaaa` returns HTTP 422 because the rule applies to every supplied value.
+`validate_default` defaults to `true`, so omitting that option also checks the fallback.
+
+Each option may be given independently. The default is a Rust expression evaluated when
+the field is absent, for example `default = 10` for `FromQuery<u32>`. String literal
+defaults can be used directly for `String` and `Option<String>`. An empty query or
+form value and an explicit JSON `null` count as supplied. Binding errors propagate normally.
+Route defaults apply after a route matches. Use a second route pattern to match a URL without the segment.
+
+`FromOptionQuery<T>`, `FromOptionForm<T>` and `FromOptionBody<T>` are type aliases of `FromQuery<Option<T>>`, `FromForm<Option<T>>` and `FromBody<Option<T>>`, so the two spellings are the same type and the macro treats them the same. Because they are aliases, they cannot be used as a constructor or a pattern (write `FromQuery(Some(1))`).
+
+A route parameter is always present. `FromRoute<T>::bind` requires `T: FromParamValue`. Rust rejects `FromRoute<std::option::Option<T>>` because the standard `Option<T>` does not implement that trait. The error is reported on the parameter in the action signature and explains that a route parameter cannot be optional. A type of your own named `Option` that implements `FromStr` is a different type and is accepted.
+
+An optional value that is there must still parse: `?limit=abc` is HTTP 422 for `FromOptionQuery<u32>`, it never becomes `None`. For `FromOptionBody<T>` a `null` is `None`.
+
+Supported `T` for route/query: every type that implements `std::str::FromStr` (`FromParamValue` is implemented for all of them): `String`, integers, floats, `bool`, `char`, `uuid::Uuid`, `ulid::Ulid`, `std::net::IpAddr` and your own types. A type that cannot implement `FromStr` can implement `FromParamValue` directly (but not both).
+
+### Value syntax
+
+- **Path values** are percent-decoded after the route matched, so `/users/a%20b` binds `a b` and an encoded `%2F` stays inside its segment. A value that is not valid UTF-8 after decoding is HTTP 404 for `FromRoute`.
+- **Query keys and values** are decoded as form data: `+` is a space, `%2B` is a plus. A value that is not valid UTF-8 after decoding is HTTP 422 for both query binders. It is never replaced by a placeholder character or turned into `None`. A key that is not valid UTF-8 cannot match a parameter name and is ignored.
+- **A key without `=` has an empty value** (`?debug` and `?debug=` are the same). It can be used as a flag: `bool` reads an empty value as `true`, so `FromOptionQuery<bool>` is `Some(true)` for `?debug` and `None` when the key is absent, and `.flag()` gives `true` / `false` (`FromOptionQuery<bool>` and `FromOptionForm<bool>` have it). `String` accepts `""`, every other type rejects it with HTTP 422.
+
+> **Warning: a repeated query key keeps only its last value.** `?id=1&id=2` binds `2` and drops `1` without an error, for `FromQuery<T>`, `FromForm<T>` and their `FromOption...` aliases alike. To inspect repeated keys, read `http_context.request.uri.query()` for query parameters or the buffered request body for form fields.
+
+An action may have any number of body binders, but they must read the same kind of body: form binders (`FromForm`, `Form`) cannot be mixed with body binders (`FromBody`, `Body`), the macro reports that at compile time.
+
+## Action field validation
+
+Place a rule on a `FromRoute`, `FromQuery`, `FromForm` or `FromBody` action field. Optional query, form and body fields skip validation for `None` and validate the inner value for `Some`.
+
+```rust
+#[get("/search")]
+fn search(
+    &self,
+    #[validate(length(1, 80))] term: FromQuery<String>,
+    #[validate(range(min = 1, max = 100))] limit: FromQuery<u8>,
+    #[validate(range(min = -10, max = 10))] offset: FromOptionQuery<i8>,
+    #[validate(range(min = 0.0, max = 1.0))] score: FromOptionQuery<f64>,
+) -> impl ActionResult {
+    results::ok(format!("{} {} {:?} {:?}", *term, *limit, *offset, *score))
+}
+```
+
+`length(6)` requires exactly six Unicode scalar values in the decoded string. `length(1, 80)` accepts lengths from 1 through 80. Named bounds such as `length(max = 80)` and `length(min = 1, max = 80)` also work. `range` compares values in the parameter's numeric type and requires a finite floating-point value.
+
+The controller macro calls `ControllerActionFieldValidate::rule(value, field, arguments)` for each annotated parameter. To add a rule, implement a local extension trait for `ControllerActionFieldValidate` and bring it into the controller's scope. The function borrows the parsed value, receives the field name, and returns `Result<(), ValidationError>`. A single positional argument is passed directly, multiple positional arguments as a tuple, and named bounds as `controller::validation::ValidateBounds`.
+
+Use `min(n)` and `max(n)` for inclusive numeric limits. A successfully parsed route value that fails a rule returns HTTP 422.
+
+An absent optional field skips validation. A supplied field, including an empty value, must parse and satisfy its rule. Failures return HTTP 422 with the parameter name before the action runs.
+
+## Body and form
+
+### One field: `FromBody<T>` / `FromForm<T>`
+
+```rust
+#[post("/users")]
+fn create(&mut self, name: FromBody<String>, age: FromBody<u32>, nick: FromBody<Option<String>>) -> impl ActionResult { /* ... */ }
+
+#[post("/login")]
+fn login(&mut self, user: FromForm<String>, remember: FromForm<bool>) -> impl ActionResult { /* ... */ }
+```
+
+| Binder | Reads | `T` |
+| --- | --- | --- |
+| `FromBody<T>` | member `name` of the top-level JSON object, or child element `name` of the XML root element | any serde `Deserialize` type |
+| `FromForm<T>` | field `name` of `application/x-www-form-urlencoded` | any `FromParamValue` (every `FromStr` type) |
+
+- `FromBody` accepts `application/json`, `text/json`, `application/xml` and `text/xml`, JSON is assumed when the header is missing. `FromForm` accepts `application/x-www-form-urlencoded` and also a missing or empty media type. Both ignore media type parameters and compare media types case-insensitively.
+- A missing required field is HTTP 422. Both `FromForm<Option<U>>` and `FromBody<Option<U>>` bind a missing field as `None`. A JSON `null` also binds as `None` for an optional body field. A field of the wrong type, a body that is not an object, and a Content-Type mismatch are HTTP 422.
+- Form values are decoded like query values: `+` is a space, `%2B` is a plus, a key without `=` is an empty value (`bool` reads it as `true`) and a value that is not valid UTF-8 is HTTP 422.
+- Use `#[validate(...)]` for an individual field and `Validate` for a whole `Body<Dto>` or `Form<Dto>`.
+
+> `FromForm` parses the last occurrence of a key. For a repeated scalar field, `FromBody` parses each occurrence and returns the last value. For example, `{"age":"x","age":2}` returns HTTP 422 for `FromBody<u32>`.
+
+Each field binder searches the buffered body for its argument. For many fields prefer one DTO binder.
+
+### The whole body: `Body<T>` / `Form<T>`
 
 | `T` | Behaviour |
 | --- | --- |
-| `String` | Body is read as UTF-8 text (no serde). |
-| other (`Deserialize`) | JSON or XML by `Content-Type` (`FromBody`); form-urlencoded (`FromForm`). |
+| `String`, including aliases and qualified paths | Reads raw UTF-8 text after checking the media type. |
+| Other deserializable types | `Body` uses JSON or XML. `Form` uses form-urlencoded deserialization. |
 
-`FromBody` media types: `application/json`, `text/json`, `application/xml`, `text/xml` (missing header defaults to JSON). Mismatch → 422.
+For `Body<T>`, the serde path accepts `application/json`, `text/json`, `application/xml` and `text/xml`. A missing header defaults to JSON. The raw `Body<String>` path additionally accepts `text/plain` and assumes plain text when the header is absent. For either binder, a type alias of `String` and `std::string::String` also select raw text. Call `bind_serde` explicitly to deserialize a string.
 
-`FromForm` media type: `application/x-www-form-urlencoded`. Mismatch → 422.
+`Form<T>` accepts `application/x-www-form-urlencoded` and also attempts binding when the header is missing or the media type is empty.
+
+## DTO validation
+
+Implement `Validate` on a DTO to run its rules in every controller action that accepts it through `Body<T>` or `Form<T>`. The router calls `validate()` after deserialization and before invoking the action. A DTO with only `Deserialize` proceeds directly to the action. Calling `bind_serde` directly performs deserialization alone.
 
 ## Example
 
 ```rust
 use asp_dot_rust::prelude::*;
+use asp_dot_rust::third_party::async_trait;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -38,6 +139,17 @@ struct CreateUser {
     name: String,
     age: u32,
 }
+
+impl Validate for CreateUser {
+    fn validate(&self) -> Result<(), ValidationError> {
+        if self.name.chars().count() > 80 {
+            return Err(ValidationError::new("name", "maximum length is 80"));
+        }
+        Ok(())
+    }
+}
+
+asp_dot_rust::api_controller!(UsersController {});
 
 #[controller_route("users")]
 #[controller_inject]
@@ -52,29 +164,29 @@ impl UsersController {
         id: FromRoute<u32>,
         verbose: FromOptionQuery<bool>,
     ) -> impl ActionResult {
-        format!("user {id}, verbose={:?}", *verbose)
+        results::ok(format!("user {}, verbose={:?}", *id, *verbose))
     }
 
     #[get("/search")]
     pub async fn search(&mut self, q: FromQuery<String>) -> impl ActionResult {
-        format!("q={}", *q)
+        results::ok(format!("q={}", *q))
     }
 
     #[post("/")]
-    pub async fn create(&mut self, body: FromBody<CreateUser>) -> impl ActionResult {
-        format!("created {}", body.name)
+    pub async fn create(&mut self, body: Body<CreateUser>) -> impl ActionResult {
+        results::ok(format!("created {}", body.name))
     }
 
     #[post("/raw")]
-    pub async fn raw(&mut self, body: FromBody<String>) -> impl ActionResult {
-        body.into_inner()
+    pub async fn raw(&mut self, body: Body<String>) -> impl ActionResult {
+        results::ok(body.into_inner())
     }
 }
 ```
 
 ## Errors
 
-`BindError` carries the message written as `text/plain` body. Status codes: route → 404, query/body/form → 422, body read failure → 400.
+The router writes the `BindError` message as `text/plain`. Route parameter errors return 404, body read failures return 400, and invalid query, body or form values normally return 422. For a matched HTTP `QUERY` action, the router returns 400 before binding if `Content-Type` is missing or blank. An unsupported media type reported by a binder on `QUERY` returns 415.
 
 ## Body buffering (multiple reads)
 
@@ -82,12 +194,13 @@ impl UsersController {
 
 ```rust
 self.http_context.request.enable_buffering().await.unwrap();
-// first read (FromBody / read_body_bytes)
+let first = self.http_context.request.body.read_to_end().await.unwrap();
 self.http_context.request.seek_body(0).unwrap();
-// second read of the same bytes
+let second = self.http_context.request.body.read_to_end().await.unwrap();
+assert_eq!(first, second);
 ```
 
 - `enable_buffering` loads the stream into memory (no-op if already buffered).
 - `seek_body(0)` resets the read position.
-- `FromBody` / `FromForm` call `read_body_bytes`, which buffers on first use; seek to `0` before binding again if the same request must be parsed twice.
+- The body binders (`FromBody`, `FromForm`, `Body`, `Form`) buffer the body on first use, read it from the start and rewind it to `0` afterwards. Several binders can read the same body and the action can still read it itself, no manual `seek_body(0)` is needed.
 - `request.body` is `RequestBody` (`Stream` or `Buffered`), not raw `Limited<Incoming>`.

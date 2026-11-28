@@ -12,13 +12,12 @@ controllers.
 | ------- | ---- | ------- |
 | Container | `ServiceProviderScope` | Holds every registered service and resolves them by type. Exposed as the public `service` field on `ApplicationBuilder`. |
 | Injectable service | `#[inject]` on an `impl` block | Marks a type as constructible by the container and records its dependency edges for cycle detection. |
-| Injectable controller | `#[controller_inject]` on an `impl` block | Same as above, but for controllers, which additionally may receive an `HttpContextRef`. |
+| Injectable controller | `#[controller_inject]` on an `impl` block or `#[derive(DependencyInjectableController)]` on a struct | Injects request dependencies and can provide an `HttpContextRef`. |
 | Lifetime | `ServiceType::{Singleton, Scope, Transient}` | Controls how long a resolved instance is reused. |
 
 ## Registering a service
 
 ```rust
-use std::sync::Arc;
 use asp_dot_rust::macros::inject;
 
 pub struct ExService {
@@ -40,8 +39,6 @@ impl ExService {
 ```rust
 let mut builder = ApplicationBuilder::new("MyApp");
 builder.service.add_singleton::<ExService>();
-builder.service.add_scope::<ExService>();
-builder.service.add_transient::<ExService>();
 ```
 
 `add_singleton`, `add_scope`, and `add_transient` only register the type;
@@ -103,7 +100,7 @@ skipped entirely:
 
 ```rust
 use asp_dot_rust::dependency_injection::Serv;
-use asp_dot_rust_macros::DependencyInjectableService;
+use asp_dot_rust::macros::DependencyInjectableService;
 
 #[derive(DependencyInjectableService)]
 pub struct Ex2Service {
@@ -146,45 +143,32 @@ pub struct Ex3Service {
 }
 ```
 
-Misuse of the attribute is a compile error rather than a silent no-op:
+The service derive recognizes `default` on ordinary fields. It ignores unknown or empty `di` options. A misspelling such as `#[di(defualt)]` on an ordinary field leaves the default-field warning active.
 
-| Written | Result |
-| --- | --- |
-| `#[di(default)]` on a non-wrapper field | defaulted, no warning |
-| `#[di(default)]` on `Serv<T>` / `CfgOption<T>` / `CfgRequire<T>` / `CfgReload<T>` | **error** — it would replace a real dependency with `Default::default()` |
-| `#[di]` or `#[di()]` | **error** — the option is missing |
-| `#[di(defualt)]` and other unknown options | **error** — unknown `di` option |
-
-A `#[di(default)]` field registers no dependency edge, so it is ignored by
-the startup cycle check.
+On a recognized DI wrapper, injection takes precedence even if the field carries `#[di(default)]`. The macro resolves the wrapper and records its dependency. Ordinary defaulted fields contribute no dependency edge.
 
 If the field needs real construction logic rather than just a default, use
 `#[inject]` on a hand-written `fn new` instead.
 
 ## Injecting configuration
 
-Configuration is resolved from the application's `ConfigurationService`
-rather than the service container, via three wrapper types depending on how
-missing configuration should be handled:
+All three wrappers require `T` to be registered in the application's
+`ConfigurationService`, for example with `insert::<T>()` or
+`configure::<T>()`. The wrapper determines how a registered entry is read.
 
-| Wrapper | Resolves via | If never registered |
+| Wrapper | Resolves via | Registered entry without a value |
 | ------- | ------------- | -------------------- |
 | `CfgOption<T>` (`Cfg<T>`, deprecated) | `ConfigurationService::get::<T>().capture()` | no value (`has_value()` is `false`) |
 | `CfgRequire<T>` | `ConfigurationService::get::<T>().capture().unwrap()` | panics |
 | `CfgReload<T>` | `ConfigurationService::get::<T>()` | a handle without a value |
 
 ```rust
-use asp_dot_rust::dependency_injection::{CfgOption, CfgRequire};
+use asp_dot_rust::{dependency_injection::CfgRequire, macros::inject};
 
 #[inject]
-impl Ex2Service {
-    pub fn new(config: CfgOption<AuditConfiguration>) -> Self {
-        Ex2Service { enabled: config.has_value() && config.unwrap().enabled }
-    }
-
-    // or, if the service cannot function without this configuration:
-    pub fn new_strict(config: CfgRequire<AuditConfiguration>) -> Self {
-        Ex2Service { enabled: config.enabled }
+impl AuditService {
+    pub fn new(config: CfgRequire<AuditConfiguration>) -> Self {
+        Self { enabled: config.enabled }
     }
 }
 ```
@@ -193,7 +177,7 @@ impl Ex2Service {
 application is running, `capture()` gives the value now. `CfgOption<T>` and
 `CfgRequire<T>` are values captured when the service is built (see
 [`appsettings.md`](./appsettings.md) for `configure::<T>()` and
-`reload_all_async()`).
+`load_all_async()`).
 
 ## Injecting into a controller
 
@@ -204,47 +188,74 @@ parameters:
 
 ```rust
 use asp_dot_rust::prelude::*;
+use asp_dot_rust::third_party::async_trait;
 
 #[controller_route("home")]
+#[controller_inject]
 impl HomeController {
-    fn new(ctx: HttpContextRef, ex_service: Serv<ExService>) -> Self {
-        HomeController { ctx, ex_service }
+    fn new(http_context: HttpContextRef, ex_service: Serv<ExService>) -> Self {
+        HomeController { http_context, ex_service }
     }
 
     #[get("/")]
     pub async fn index(&mut self) -> impl ActionResult {
-        self.ex_service.greet("world")
+        results::ok(self.ex_service.greet("world"))
     }
 }
 ```
 
-## Circular dependency detection
+`#[controller("home")]` combines `#[controller_route("home")]` and
+`#[controller_inject]`. Use `#[controller]` to omit the route prefix.
+Without `fn new`, `#[controller_inject]` leaves construction to a derive
+or a manual `DependencyInjectableController` implementation.
 
-Every `#[inject]`/`#[controller_inject]` impl registers its
-dependency edges globally via `inventory::submit!`. `ApplicationBuilder::build()`
-walks this graph — restricted to the types actually registered in that
-builder's scope — and panics with the offending path if it finds a cycle,
-for example:
+Use the derive to inject fields directly from the request scope:
+
+```rust
+use asp_dot_rust::{
+    api_controller,
+    dependency_injection::Serv,
+    macros::DependencyInjectableController,
+};
+
+api_controller!(
+    #[derive(DependencyInjectableController)]
+    HomeController {
+        ex_service: Serv<ExService>,
+    }
+);
+```
+
+`api_controller!` supplies the `http_context: HttpContextRef` field used by
+`#[controller_route]`. When deriving on a struct that intentionally omits an
+`HttpContextRef` field, add `#[di(ignore_missing_http_context)]` below the
+derive to suppress the warning. Use `#[di(default)]` on fields initialized
+with `Default::default()`.
+
+## Startup dependency validation
+
+Service injection macros submit non-empty constructor dependencies as
+`ServiceDependencies` metadata to `inventory`.
+The dependency graph includes only services registered in the current provider.
+`Application::run()` loads configuration, builds and stores the routing singleton,
+then checks service cycles and missing registrations before initializing middleware
+or hosted services and opening a port. Missing registrations report the dependency path.
 
 ```rs
 thread 'main' panicked at 'Found circular dependency: CycleServiceX -> CycleServiceY -> CycleServiceX'
 ```
 
-This check runs on every build profile (debug and release), not only in
-debug builds, so a circular dependency is caught immediately on startup no
-matter how the application is compiled.
-
-If a registered service depends on a type that was never registered, the
-container does not panic — it logs a warning instead, since this is
-sometimes only reached through a code path that never runs. Prefer fixing
-the registration, since resolving the missing service will still panic at
-runtime.
+Middleware and hosted service constructors resolve their dependencies during
+`run()`. Controller injection and middleware `inject_invoke_async` check all direct
+dependency registrations before resolving their arguments for the current request.
+They use checks generated by the macros. Controller, middleware, and hosted-service
+registrations add no nodes to the service dependency graph.
+All configuration wrappers require a registration. `CfgRequire<T>` also requires
+a value when resolved, while `CfgOption<T>` and `CfgReload<T>` allow an empty entry.
 
 ## Known limitations (What not work)
 
-- `fn new` cannot be `async`. Services that require asynchronous
-  initialization (opening a database connection pool, calling an external
-  API, etc.) must perform that work lazily inside a method other than `new`.
+- Services using `#[inject]` may define `async fn new`. Resolution awaits the constructor. The `#[controller_inject]` and `#[middleware]` constructor macros require a synchronous `fn new`.
 - `get_service::<T>()` panics rather than returning `Option`/`Result` when
   `T` was never registered; there is currently no `try_get_service`.
 - Only a single implementation per concrete type is supported. Registering
@@ -266,4 +277,4 @@ runtime.
 | `get_service::<T>()` | `ServiceProviderScope` | Resolve `T`. Panics if `T` was never registered. |
 | `contains_service::<T>()` | `ServiceProviderScope` | Check whether `T` is registered. |
 | `create_scope()` | `ServiceProviderScope` | Create a new scope that shares Singletons but gets fresh Scope/Transient instances. |
-| `check_dependency_cycles()` | `ServiceProviderScope` | Panic if the registered services form a circular dependency. Called automatically by `ApplicationBuilder::build()`. |
+| `check_dependency_cycles()` | `ServiceProviderScope` | Check registered service cycles and service registrations. Startup validation runs in `Application::run()`. |

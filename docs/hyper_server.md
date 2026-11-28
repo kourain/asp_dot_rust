@@ -1,61 +1,29 @@
-# HyperConfig (HTTP Server Tuning)
+# HyperConfig (HTTP server tuning)
 
-`HyperConfig` is a regular configuration type (see `docs/appsettings.md` /
-`docs/dependency_injection.md`) that tunes the underlying `hyper` server
-used by every HTTP/HTTPS listener: how long to wait for a slow client to
-finish sending headers, and how HTTP/2 keep-alive pings behave.
+`HyperConfig` controls request limits and connection timers for every HTTP listener. The listener captures the current configuration when it accepts a TCP connection. A successful configuration reload applies to future connections. Requests on an existing connection keep that connection's snapshot.
 
-## Fields
+| Field | Type and default | Effect |
+| ----- | ---------------- | ------ |
+| `header_read_timeout` | `u64`, 10 seconds | Time allowed to read HTTP/1 request headers. |
+| `http2_keep_alive_interval` | `u64`, 20 seconds | Interval between HTTP/2 keep-alive pings. |
+| `http2_keep_alive_timeout` | `u64`, 10 seconds | Time to wait for acknowledgement of a keep-alive ping. |
+| `max_request_body_size` | `usize`, 100 MiB | Default request body limit. A matched route can override it with `#[max_body_size(...)]`. |
+| `max_request_headers_size` | `usize`, 32 KiB | Caps parsed request headers. HTTP/2 also receives this value as its maximum header list size, capped at `u32::MAX`. |
 
-| Field | Type | Default | Applies to | Effect |
-| ----- | ---- | ------- | ---------- | ------ |
-| `header_read_timeout` | `u64` (seconds) | `10` | HTTP/1.1 | On a kept-alive connection, how long the server waits for the client to finish sending request headers before closing the connection. Prevents a slow or idle client from holding a connection/task open forever. |
-| `http2_keep_alive_interval` | `u64` (seconds) | `20` | HTTP/2 | How often the server sends an HTTP/2 PING frame on an otherwise idle connection. |
-| `http2_keep_alive_timeout` | `u64` (seconds) | `10` | HTTP/2 | How long the server waits for a PING to be acknowledged before treating the connection as dead and closing it. |
-| `max_request_body_size` | `usize` (bytes) | `100 * 1024 * 1024` (100 MB) | — | **Not currently enforced** (see Known limitations). |
-| `max_request_headers_size` | `usize` (bytes) | `8 * 1024` (8 KB) | — | **Not currently enforced** (see Known limitations). |
-| `max_response_headers_size` | `usize` (bytes) | `8 * 1024` (8 KB) | — | **Not currently enforced** (see Known limitations). |
+Before the middleware pipeline runs, ASP.RS checks the request headers, counting the name length, value length and four bytes of overhead per field. An excess returns **431**. A declared `Content-Length` above the effective body limit returns **413**. The incoming body stream also enforces the limit while it is read. [Per-route body limits](./routing.md#request-body-limit-per-route)
 
-## Using the defaults
+## Configure the listener
 
-`HyperConfig` does not need to be registered manually. If no value has
-been registered via `add_default_configuration`/`add_custom_configuration`/
-`insert`, the HTTP listener falls back to `HyperConfig::default()`
-automatically.
-
-## Customizing it
+The builder registers `HyperConfig::default()` under the TOML key `hyper_server`. The built-in file policy matches the full path constructed from the executable directory and `\appsettings.toml`. The default watched file is relative to the working directory, so those paths can differ. Use `configuration.update()` for an in-code change that preserves the file binding.
 
 ```rust
 use asp_dot_rust::{ApplicationBuilder, configuration::HyperConfig};
 
 let mut builder = ApplicationBuilder::new("MyApp");
-
-builder.add_custom_configuration::<HyperConfig>(|cfg| {
+builder.configuration.update::<HyperConfig>(|cfg| {
     cfg.header_read_timeout = 5;
-    cfg.http2_keep_alive_interval = 15;
-    cfg.http2_keep_alive_timeout = 5;
+    cfg.max_request_body_size = 8 * 1024 * 1024;
 });
 ```
 
-`add_default_configuration::<HyperConfig>()` registers `HyperConfig::default()`
-as-is. Both `add_default_configuration` and `add_custom_configuration` panic
-if a `HyperConfig` has already been registered — call it only once, before
-`build()`/`run()`.
-
-`HyperConfig` can also be loaded from a TOML section the same way as any
-other configuration type, via `ConfigurationService::configure::<HyperConfig>(section)`
-(see `docs/appsettings.md`).
-
-## Known limitations (What not work)
-
-- `max_request_body_size`, `max_request_headers_size`, and
-  `max_response_headers_size` are currently **unused** — setting them has
-  no effect on the server. The server runs with `hyper`'s own built-in
-  defaults for these limits regardless of what is configured here.
-- `header_read_timeout` only bounds the time to read request *headers*; it
-  does not bound how long sending the request *body* may take.
-- One `HyperConfig` applies to every listener (every IP/port registered via
-  `with_any_ip`/`with_http_port`/etc.) — there is no per-listener override.
-- No hot-reload: the value is read once per connection when the listener
-  accepts it; changing the registered `HyperConfig` at runtime does not
-  affect connections already being served.
+To bind a file of your choice, call `builder.configuration.add_toml_file("server.toml", true).configure::<HyperConfig>("hyper_server")`. Supply all five fields in the TOML section. If the registered entry has no value, a new connection uses `HyperConfig::default()`. [TOML configuration](./appsettings.md)
