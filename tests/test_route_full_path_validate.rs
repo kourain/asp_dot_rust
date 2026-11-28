@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use asp_dot_rust::{
-    ApplicationBuilder, api_controller,
+    ApplicationBuilder,
     controller::{ActionResult, FromOptionQuery, FromQuery, get, results},
     http_context::HttpContextRef,
     logging::LOGGER,
@@ -14,18 +14,22 @@ use tokio::{
     net::TcpStream,
 };
 
-api_controller!(pub FullPathValidateController {});
+mod inner {
+    pub struct FullPathValidateController {
+        pub(super) http_context: super::HttpContextRef,
+    }
+}
 
 #[controller_route("fullvalidate")]
 #[controller_inject]
-impl FullPathValidateController {
+impl inner::FullPathValidateController {
     fn new(http_context: HttpContextRef) -> Self {
         Self { http_context }
     }
 
     #[get("/required")]
-    pub async fn required(&self, #[asp_dot_rust::controller::validate(length(2))] code: FromQuery<String>) -> impl ActionResult {
-        results::ok(code.into_inner())
+    pub async fn required(&self, #[asp_dot_rust::controller::validate(length(2))] r#type: FromQuery<String>) -> impl ActionResult {
+        results::ok(r#type.into_inner())
     }
 
     #[get("/optional")]
@@ -67,10 +71,10 @@ async fn get_status(port: u16, path: &str) -> (u16, String) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn full_path_validate_checks_the_rule_on_a_required_parameter() {
     let port = start_server().await;
-    assert_eq!(get_status(port, "/fullvalidate/required?code=ab").await, (200, "ab".to_string()));
-    let (status, body) = get_status(port, "/fullvalidate/required?code=a").await;
+    assert_eq!(get_status(port, "/fullvalidate/required?type=ab").await, (200, "ab".to_string()));
+    let (status, body) = get_status(port, "/fullvalidate/required?type=a").await;
     assert_eq!(status, 422, "{body}");
-    assert!(body.contains("code"), "{body}");
+    assert!(body.starts_with("type:"), "{body}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

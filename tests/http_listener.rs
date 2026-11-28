@@ -97,6 +97,10 @@ impl ListenerController {
     fn body_flag(&self, flag: FromBody<bool>) -> impl ActionResult {
         results::ok(flag.to_string())
     }
+    #[post("/body-value")]
+    fn body_value(&self, value: FromBody<serde_json::Value>) -> impl ActionResult {
+        results::ok(value.to_string())
+    }
     #[post("/option-fields")]
     fn option_fields(&self, a: FromOptionForm<u32>, b: FromForm<Option<String>>, on: FromOptionForm<bool>) -> impl ActionResult {
         results::ok(format!("{:?} {:?} {}", *a, *b, on.flag()))

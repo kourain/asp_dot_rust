@@ -43,10 +43,31 @@ impl<T: DeserializeOwned> FromBody<T> {
         }
         match value {
             Some(value) => Ok(Self(value)),
-            None => T::deserialize(de::value::UnitDeserializer::<de::value::Error>::new())
+            None => T::deserialize(MissingField)
                 .map(Self)
                 .map_err(|_| BindError::MissingField(name.to_owned())),
         }
+    }
+}
+
+// Follow Serde's missing-field convention: only a request to deserialize an option receives None.
+// An explicit null still goes through the document's normal deserializer.
+struct MissingField;
+
+impl<'de> Deserializer<'de> for MissingField {
+    type Error = de::value::Error;
+
+    fn deserialize_any<V: Visitor<'de>>(self, _: V) -> Result<V::Value, Self::Error> {
+        Err(de::Error::custom("missing body field"))
+    }
+
+    fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        visitor.visit_none()
+    }
+
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string bytes byte_buf
+        unit unit_struct newtype_struct seq tuple tuple_struct map struct enum identifier ignored_any
     }
 }
 

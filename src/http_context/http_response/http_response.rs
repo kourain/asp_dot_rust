@@ -35,6 +35,7 @@ pub struct HttpResponse {
     pub headers: HeaderMap<HeaderValue>,
     pub body: Vec<u8>,
     pub written_phase: WritenPhase,
+    is_head_request: bool,
     /// Waits for the head, it is `None` once the head is sent.
     head_tx: Option<oneshot::Sender<ResponseHead>>,
     /// Receiver half of the stream, moved into the head when it is sent.
@@ -56,7 +57,7 @@ fn status_forbids_body(status: StatusCode) -> bool {
 
 impl HttpResponse {
     /// Creates the response and the receiver of its head, the receiver gets the head when the first byte is written or the response ends.
-    pub(crate) fn new_streaming() -> (Self, oneshot::Receiver<ResponseHead>) {
+    pub(crate) fn new_streaming(method: &http::Method) -> (Self, oneshot::Receiver<ResponseHead>) {
         let mut headers = HeaderMap::new();
         headers.insert("server", "ASP.RS".parse().unwrap());
         let (head_tx, head_rx) = oneshot::channel();
@@ -66,6 +67,7 @@ impl HttpResponse {
             headers,
             body: Vec::new(),
             written_phase: WritenPhase::NONE,
+            is_head_request: *method == http::Method::HEAD,
             head_tx: Some(head_tx),
             pending_body: Some(body_rx),
             body_tx: Some(body_tx),
@@ -122,7 +124,10 @@ impl HttpResponse {
             Some(_) if status_forbids_body(self.status_code) => {
                 self.headers.remove(http::header::CONTENT_LENGTH);
             }
-            Some(length) => self.headers.set_content_length(length),
+            Some(length) => self.set_representation_length(length),
+        }
+        if self.is_head_request {
+            self.body_tx = None;
         }
         let mut head = http::Response::new(body);
         *head.status_mut() = self.status_code;
@@ -161,7 +166,7 @@ impl HttpResponse {
     pub async fn write_async(&mut self, data: impl AsRef<[u8]>) -> io::Result<()> {
         let data = data.as_ref();
         self.commit(None)?;
-        if data.is_empty() {
+        if data.is_empty() || self.is_head_request {
             return Ok(());
         }
         self.send_chunk(Bytes::copy_from_slice(data)).await
@@ -171,7 +176,7 @@ impl HttpResponse {
     pub async fn write_bytes_async(&mut self, data: impl Into<Bytes>) -> io::Result<()> {
         let data = data.into();
         self.commit(None)?;
-        if data.is_empty() {
+        if data.is_empty() || self.is_head_request {
             return Ok(());
         }
         self.send_chunk(data).await
@@ -179,8 +184,16 @@ impl HttpResponse {
 
     pub(crate) fn set_buffered_content_length(&mut self) {
         if !self.has_started() && !status_forbids_body(self.status_code) {
-            self.headers.set_content_length(self.body.len());
+            self.set_representation_length(self.body.len());
         }
+    }
+
+    fn set_representation_length(&mut self, length: usize) {
+        // A dedicated HEAD handler may supply the GET length without generating a body.
+        if self.is_head_request && length == 0 && self.headers.contains_key(http::header::CONTENT_LENGTH) {
+            return;
+        }
+        self.headers.set_content_length(length);
     }
 
     /// Writes the bytes of `body` to the stream, the head is sent first with Content-Length = `body.len()` if it is not sent yet.
@@ -188,7 +201,7 @@ impl HttpResponse {
         let body = Bytes::from(std::mem::take(&mut self.body));
         let content_length = if self.has_started() { None } else { Some(body.len()) };
         self.commit(content_length)?;
-        if status_forbids_body(self.final_status()) {
+        if self.is_head_request || status_forbids_body(self.final_status()) {
             return Ok(());
         }
         let mut offset = 0;

@@ -149,6 +149,12 @@ at match time. Insertion into `matchit` fails in `add_controller_route`, so `add
 
 ## Resolving a request: `Found` / `NotFound` / `MethodNotAllowed`
 
+Route lookup trims trailing slashes from the request path. For example, `/items`
+and `/items///` reach the same action. The root path remains `/`.
+
+HEAD selects an explicit HEAD action when one is registered, otherwise it uses
+the GET action for the same path. The response sends the status and headers only.
+
 `RoutingService::resolve(uri, method) -> ResolvedRoute` distinguishes two
 failure cases instead of collapsing them into one:
 
@@ -156,8 +162,8 @@ failure cases instead of collapsing them into one:
   built-in `auto_route` middleware replies `404 Not Found`.
 - `RoutingResult::MethodNotAllowed(Vec<http::Method>)` — the path matches a
   registered route, but not with this HTTP method. `auto_route` replies
-  `405 Method Not Allowed` and sets the `Allow` header to the methods that
-  *are* registered for that path, per RFC 7231.
+  `405 Method Not Allowed` and lists the explicitly registered methods in
+  the `Allow` header. HEAD appears only when the path has a registered HEAD action.
 - `RoutingResult::Found(Arc<Route>)` — the path and method both
   matched; `auto_route` invokes the matched controller action.
 

@@ -97,9 +97,24 @@ fn query_params_without_equals_sign_become_empty_string_values() {
 #[test]
 fn get_allowed_methods_returns_registered_methods_for_a_path() {
     let service = build_test_service();
-    assert_eq!(service.get_allowed_methods("/home"), HashSet::from([http::Method::GET, http::Method::POST]));
-    assert_eq!(service.get_allowed_methods("/home/42"), HashSet::from([http::Method::GET]));
+    assert_eq!(service.get_allowed_methods("/home/"), HashSet::from([http::Method::GET, http::Method::POST]));
+    assert_eq!(service.get_allowed_methods("/home/42///"), HashSet::from([http::Method::GET]));
     assert_eq!(service.get_allowed_methods("/does-not-exist"), HashSet::new());
+}
+
+#[test]
+fn explicit_head_takes_priority_over_get_after_path_normalization() {
+    let mut builder = RoutingServiceBuilder::default();
+    builder.register_controller::<TestController>("/", vec![
+        ActionRoute::new("index", vec!["get"], "/"),
+        ActionRoute::new("headers", vec!["head"], "/"),
+    ]);
+    let (service, _) = builder.build();
+    assert_eq!(service.get_allowed_methods("/"), HashSet::from([http::Method::GET, http::Method::HEAD]));
+    for (method, expected) in [(http::Method::HEAD, "headers"), (http::Method::GET, "index")] {
+        let resolved = service.resolve(&http::Uri::from_static("/"), &method);
+        assert!(matches!(resolved.router_info, RoutingResult::Found(route) if route.action_name == expected));
+    }
 }
 
 fn resolve_get(path_and_query: &str) -> asp_dot_rust::services::routing::ResolvedRoute {

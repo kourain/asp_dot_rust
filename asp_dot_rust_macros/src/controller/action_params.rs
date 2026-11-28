@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, quote_spanned};
-use syn::{FnArg, Pat, PatType, Type, spanned::Spanned};
+use syn::{FnArg, Pat, PatType, Type, ext::IdentExt, spanned::Spanned};
 
 use super::{attribute::attr_named, validation::ControllerActionValidation};
 use crate::utils::compiler_error::create_compiler_error;
@@ -109,7 +109,7 @@ pub fn generate_bind_code(params: &[ActionParam]) -> (TokenStream2, Vec<TokenStr
 
     for param in params {
         let name = &param.name;
-        let name_lit = name.to_string();
+        let name_lit = name.unraw().to_string();
         let wrapper = &param.wrapper;
         // Put the generated binder call on the parameter type, so a rejected type is reported there and not on `#[controller_route]`.
         let span = wrapper.span();

@@ -50,6 +50,12 @@ async fn from_body_binds_single_fields_of_json_and_xml() {
     start(port, |_| {}, |_| {}).await;
     let json = "application/json";
     let xml = "application/xml";
+    let missing = post_with(port, "/body-value", json, "{}").await;
+    assert_eq!(status_of(&missing), 422);
+    assert!(body_of(&missing).contains("missing field `value`"));
+    let explicit_null = post_with(port, "/body-value", json, r#"{"value":null}"#).await;
+    assert_eq!(status_of(&explicit_null), 200);
+    assert_eq!(body_of(&explicit_null), "null");
     for (media, body, expected) in [
         (json, r#"{"name":"Ada","age":36,"tags":["x","y"]}"#, r#"Ada 36 None ["x", "y"]"#),
         (json, r#"{"other":{"deep":[1]},"tags":[],"age":1,"name":"ế","nick":"A"}"#, r#"ế 1 Some("A") []"#),

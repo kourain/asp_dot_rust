@@ -17,10 +17,14 @@ impl RoutingService {
     pub fn resolve(&self, uri: &http::Uri, method: &http::Method) -> ResolvedRoute {
         let query_params = uri.query().map(parse_query_string).unwrap_or_default();
         let mut resolved = ResolvedRoute { query_params, ..Default::default() };
-        let Ok(matched) = self._router.at(uri.path()) else {
+        let Ok(matched) = self._router.at(Self::normalize_path(uri.path())) else {
             return resolved;
         };
-        let Some(route) = matched.value.get(method) else {
+        let route = match *method {
+            http::Method::HEAD => matched.value.get(method).or_else(|| matched.value.get(&http::Method::GET)),
+            _ => matched.value.get(method),
+        };
+        let Some(route) = route else {
             resolved.router_info = RoutingResult::MethodNotAllowed(matched.value.keys().cloned().collect());
             return resolved;
         };
@@ -33,8 +37,12 @@ impl RoutingService {
         }
         resolved
     }
+    fn normalize_path(path: &str) -> &str {
+        let trimmed = path.trim_end_matches('/');
+        if trimmed.is_empty() && path.starts_with('/') { "/" } else { trimmed }
+    }
     pub fn get_allowed_methods(&self, path: &str) -> HashSet<http::Method> {
-        let matched = self._router.at(path);
+        let matched = self._router.at(Self::normalize_path(path));
         if let Ok(matched) = matched { matched.value.keys().cloned().collect() } else { HashSet::new() }
     }
 }

@@ -153,8 +153,6 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
     let root_route = parse_macro_input!(args as Option<LitStr>).unwrap_or_else(|| LitStr::new("", proc_macro2::Span::call_site()));
     let mut input_impl = parse_macro_input!(item as ItemImpl);
     let self_ty = input_impl.self_ty.as_ref();
-    let controller_bootstrap_name = syn::Ident::new(&format!("__asp_register_{}", quote! {#self_ty}), input_impl.span());
-    let controller_bootstrap_fn_name = syn::Ident::new(&format!("__asp_register_{}_routes", quote! {#self_ty}), input_impl.span());
     let impl_entries = match parse_attr_entries(&input_impl.attrs, "the controller impl") {
         Ok(entries) => entries,
         Err(error) => return error,
@@ -263,17 +261,16 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
             }
         }
 
-        #[allow(nonstandard_style)]
-        const #controller_bootstrap_name: () = {
+        const _: () = {
             // One import per controller or action attribute (e.g. #[controller_inject], #[get], #[attr]).
             #(#[allow(unused_imports)] use #main_crate_path::macros::#attribute_names as _;)*
-            fn #controller_bootstrap_fn_name(routing_registry: &mut #main_crate_path::services::routing::RoutingServiceBuilder) {
+            fn register_routes(routing_registry: &mut #main_crate_path::services::routing::RoutingServiceBuilder) {
                 routing_registry.register_controller_type::<#self_ty>();
                 #(#action_route_registrations)*
             }
             #main_crate_path::third_party::inventory::submit! {
                 #main_crate_path::services::routing::ControllerBootstrapRegistration {
-                    bootstrap: #controller_bootstrap_fn_name,
+                    bootstrap: register_routes,
                 }
             }
         };
