@@ -31,3 +31,10 @@ ASP.RS includes a lightweight, `TypeId`-based dependency injection container ins
 Three lifetimes are supported — `add_singleton`,`add_scope`, and `add_transient` — and circular dependencies between services are detected automatically when the application is built, in every build profile (will be optional in future).
 
 See [`docs/dependency_injection.md`](docs/dependency_injection.md) for the full guide, including configuration injection, controller injection, and known limitations.
+
+## License
+
+Copyright (c) 2026 kourain.
+
+The `asp_dot_rust` crate is licensed under the [Mozilla Public License 2.0](LICENSE).
+The `asp_dot_rust_macros` crate is licensed under the [MIT License](asp_dot_rust_macros/LICENSE).
