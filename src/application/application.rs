@@ -5,8 +5,8 @@ use crate::{
     hosted_service::ApplicationHostedService,
     http_listener::hyper_server,
     logging::LOGGER,
-    middleware::{app_middlewares::ApplicationMiddlewares},
-    services::{configuration::ConfigurationService, service_provider::service_provider_scope::ServiceProviderScope},
+    middleware::app_middlewares::ApplicationMiddlewaresBuilder,
+    services::{configuration::ConfigurationService, routing::RoutingServiceBuilder, service_provider::service_provider_scope::ServiceProviderScope},
 };
 
 pub struct Application {
@@ -16,36 +16,53 @@ pub struct Application {
     pub(crate) http_port: HashSet<u16>,
     pub(crate) https_port: HashSet<u16>,
     pub service_provider: ServiceProviderScope,
-    pub(crate) _middlewares: ApplicationMiddlewares,
+    pub(crate) _middlewares: ApplicationMiddlewaresBuilder,
     pub(crate) _hosted_services: ApplicationHostedService,
+    pub(crate) routing_builder: RoutingServiceBuilder,
 }
 impl Application {
     pub fn new(name: &str) -> ApplicationBuilder {
         ApplicationBuilder::new(name)
     }
-
-    pub async fn run(mut self) {
-        // ensure defaults so the server keeps running even if user didn't set ip/ports
-        if self.ip.is_empty() {
-            self.ip.insert("127.0.0.1".parse::<std::net::IpAddr>().unwrap());
-        }
-        if self.http_port.is_empty() {
-            self.http_port.insert(8080);
-        }
-        // load every configuration from its TOML file before anything resolves a configuration or a port is opened
-        self.service_provider.get_service::<ConfigurationService>().await.load_all_async().await;
-        self._middlewares.build_pipeline(&self.service_provider).await;
-        let mut hosted_services_app = std::mem::take(&mut self._hosted_services); // clear hosted services from app since we're moving them to the async block
-        let app = Arc::new(self);
-        // let mut hosted_services_app = Vec::new();
-        while let Some((name, service)) = hosted_services_app.pop() {
-            let app_clone = app.clone();
+    async fn run_bacground_service(hosted_services: ApplicationHostedService, service_provider: &ServiceProviderScope) {
+        let hosted_services = futures::future::join_all(hosted_services.into_iter().map(|(name, factory)| async move { (name, factory(service_provider).await) })).await;
+        for (name, mut service) in hosted_services {
             tokio::spawn(async move {
                 LOGGER::info(format!("Starting background service: {}", name));
-                service(&app_clone.service_provider).await.invoke_async().await
+                service.invoke_async().await;
             });
         }
-        if let Err(e) = hyper_server(&app).await {
+    }
+    pub async fn run(self) {
+        let Self {
+            name: _,
+            runner_id: _,
+            mut ip,
+            mut http_port,
+            https_port,
+            mut service_provider,
+            _middlewares: middleware_builder,
+            _hosted_services: hosted_services,
+            routing_builder,
+        } = self;
+
+        if ip.is_empty() {
+            ip.insert("127.0.0.1".parse::<std::net::IpAddr>().unwrap());
+        }
+        if http_port.is_empty() && https_port.is_empty() {
+            http_port.insert(8080);
+        }
+        let configuration = service_provider.get_service::<ConfigurationService>().await;
+        configuration.load_all_async().await;
+        let (routing_sv, open_api_sv) = routing_builder.build();
+        service_provider.store_instance(Arc::new(routing_sv));
+        service_provider.store_instace_if_exist(Arc::new(open_api_sv));
+        service_provider.validate_startup_dependencies(&configuration);
+        drop(configuration);
+
+        let middleware_pipeline = middleware_builder.build_pipeline(&service_provider).await;
+        Self::run_bacground_service(hosted_services, &service_provider).await;
+        if let Err(e) = hyper_server(ip, http_port, service_provider, middleware_pipeline).await {
             panic!("Error occurred while running the application: {}", e);
         }
     }

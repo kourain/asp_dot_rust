@@ -7,12 +7,15 @@ pub(crate) mod cors;
 pub(crate) mod rate_limit;
 pub(crate) mod request_timeout;
 pub(crate) mod static_file;
+pub(crate) mod swagger;
+
+use crate::dependency_injection::DependencyInjectableMiddleware;
 use crate::http_context::HttpContext;
-use crate::services::service_provider::service_provider_scope::ServiceProviderScope;
 use std::pin::Pin;
 use std::sync::Arc;
 
 /// The next middleware of the chain, given to the constructor of a middleware (like `RequestDelegate` in ASP.NET).
+#[derive(Clone)]
 pub struct MiddlewareNext(Arc<dyn Middleware>);
 impl MiddlewareNext {
     pub(crate) fn new<M: Middleware + 'static>(middleware: M) -> Self {
@@ -24,13 +27,9 @@ impl MiddlewareNext {
     }
 }
 
-/// Creates a middleware from the services and the next middleware.
 /// A middleware of the chain, `#[middleware]` implements it.
 #[async_trait::async_trait]
-pub trait Middleware: Send + Sync {
-    async fn inject(service_scope: &ServiceProviderScope, next: MiddlewareNext) -> Self
-    where
-        Self: Sized;
+pub trait Middleware: DependencyInjectableMiddleware + Send + Sync {
     async fn inject_invoke_async(&self, http_context: &mut HttpContext);
 }
 
@@ -38,6 +37,7 @@ pub trait Middleware: Send + Sync {
 #[macro_export]
 macro_rules! middleware {
     ($vis:vis $name:ident, |$ctx:ident, $next:ident| $body:block) => {
+        #[derive($crate::macros::DependencyInjectableMiddleware)]
         $vis struct $name {
             next: $crate::middleware::MiddlewareNext,
         }

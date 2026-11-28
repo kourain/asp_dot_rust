@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.10
+
+- `#[controller_route]` binders: `FromBody<T>` and `FromForm<T>` bind one field named like the argument, `Body<T>` and `Form<T>` bind the whole body (the old `FromBody<T>` and `FromForm<T>`). An action can have several body binders, mixing form binders with body binders is a compile error. The generated code awaits the binders with `bind(..).await?`.
+- `FromOptionQuery<T>`, `FromOptionForm<T>` and `FromOptionBody<T>` are accepted as aliases of `FromQuery<Option<T>>`, `FromForm<Option<T>>` and `FromBody<Option<T>>`, and so are those spellings. `#[validate(...)]` is checked on the `T` inside the `Option` and skipped when the parameter is missing.
+- `FromRoute<Option<T>>` is a compile error.
+- The generated binder call carries the span of the parameter type, so a rejected binder type (`FromRoute<Option<T>>`, a `FromQuery<T>` without `FromStr`, a `Body<T>` without `Deserialize`) is reported on the parameter and not on `#[controller_route]`. On stable Rust the span is the first token of the type.
+- A route under `#[cfg(...)]` no longer makes rust-analyzer grey out the other actions of the controller. The registration of such a route carried tokens of the impl header (the controller type, the `#[controller_route("...")]` argument and the impl level `#[attr]`s), so the inactive range stretched from the header to the action. Those tokens now take the span of the route attribute.
+- A route attribute written as a bare name (`#[get(...)]`) that does not parse is reported with a hint: the name is taken as the macro of this crate, a macro of another crate with the same name has to be written with its full path.
+- `#[validate(...)]` on an action parameter is recognised with the full path of this crate too, like the route attributes.
+- Needs `asp_dot_rust` 0.2.12.
+
 ## 0.2.9
 
 - `#[inject]` now supports an `async fn new` constructor; the generated injection code awaits it.

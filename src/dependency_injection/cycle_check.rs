@@ -3,70 +3,112 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
-use crate::{dependency_injection::edge::DependencyEdge, logging::LOGGER, services::service_provider::ServiceProviderScope};
+use super::{Dependency, ServiceDependencies};
+use crate::services::{
+    configuration::ConfigurationService,
+    service_provider::{ServiceInstance, ServiceProviderScope, ServiceType},
+};
 
 impl ServiceProviderScope {
+    /// Checks the declared dependencies of services registered in this provider.
     #[track_caller]
-    pub fn check_dependency_cycles(self: &ServiceProviderScope) {
-        let mut graph: HashMap<TypeId, (&'static str, Vec<TypeId>)> = HashMap::new();
+    pub fn check_dependency_cycles(&self) {
+        let graph = DependencyGraph::new(self);
+        Validator::new(&graph, self, None).registered_services();
+    }
 
-        for edge in inventory::iter::<DependencyEdge> {
-            let owner = (edge.owner)();
-            if !self.contains_type_id(&owner) {
-                continue;
+    pub(crate) fn validate_startup_dependencies(&self, configuration: &ConfigurationService) {
+        let graph = DependencyGraph::new(self);
+        Validator::new(&graph, self, Some(configuration)).registered_services();
+    }
+}
+
+struct DependencyNode {
+    name: &'static str,
+    dependencies: Vec<Dependency>,
+}
+
+/// Only service registrations in this provider participate in cycle validation.
+struct DependencyGraph {
+    nodes: HashMap<TypeId, DependencyNode>,
+}
+
+impl DependencyGraph {
+    fn new(scope: &ServiceProviderScope) -> Self {
+        let mut graph = Self { nodes: HashMap::new() };
+        for entry in inventory::iter::<ServiceDependencies> {
+            let owner = (entry.owner)();
+            if scope.contains_type_id(&owner) {
+                graph.nodes.insert(
+                    owner,
+                    DependencyNode {
+                        name: (entry.owner_name)(),
+                        dependencies: (entry.dependencies)(),
+                    },
+                );
             }
-
-            let deps = (edge.dependencies)();
-            let mut filtered_deps = Vec::new();
-
-            for (dep_id, dep_name) in &deps {
-                if self.contains_type_id(dep_id) {
-                    filtered_deps.push(*dep_id);
-                } else {
-                    // owner registered but dependency of it has not been registered —
-                    // this is almost certainly a DI configuration error
-                    LOGGER::warn(format!("Service {} require {} but it has not been registered in ServiceProviderScope", edge.owner_name, dep_name));
-                }
-            }
-
-            graph.entry(owner).or_insert((edge.owner_name, Vec::new())).1.extend(filtered_deps);
         }
+        graph
+    }
+}
 
-        let mut visited = HashSet::new();
-        let mut stack = HashSet::new();
-        let mut path = Vec::new();
+struct Validator<'a> {
+    graph: &'a DependencyGraph,
+    scope: &'a ServiceProviderScope,
+    configuration: Option<&'a ConfigurationService>,
+    visited: HashSet<TypeId>,
+    visiting: HashSet<TypeId>,
+    path: Vec<&'static str>,
+}
 
-        for &start in graph.keys() {
-            if !visited.contains(&start)
-                && let Some(cycle) = Self::dfs_detect(start, &graph, &mut visited, &mut stack, &mut path) {
-                    let dependency_path = cycle.iter().map(|id| graph.get(id).map(|(n, _)| *n).unwrap_or("?")).collect::<Vec<_>>().join(" -> ");
-                    panic!("Found circular dependency: {}", dependency_path);
-                }
+impl<'a> Validator<'a> {
+    fn new(graph: &'a DependencyGraph, scope: &'a ServiceProviderScope, configuration: Option<&'a ConfigurationService>) -> Self {
+        Self {
+            graph,
+            scope,
+            configuration,
+            visited: HashSet::new(),
+            visiting: HashSet::new(),
+            path: Vec::new(),
         }
     }
-    fn dfs_detect(node: TypeId, graph: &HashMap<TypeId, (&'static str, Vec<TypeId>)>, visited: &mut HashSet<TypeId>, stack: &mut HashSet<TypeId>, path: &mut Vec<TypeId>) -> Option<Vec<TypeId>> {
-        visited.insert(node);
-        stack.insert(node);
-        path.push(node);
 
-        if let Some((_, deps)) = graph.get(&node) {
-            for &dep in deps {
-                if stack.contains(&dep) {
-                    // found loop, return the cycle path
-                    let start_idx = path.iter().position(|&n| n == dep).unwrap();
-                    let mut cycle = path[start_idx..].to_vec();
-                    cycle.push(dep);
-                    return Some(cycle);
-                }
-                if !visited.contains(&dep)
-                    && let Some(cycle) = Self::dfs_detect(dep, graph, visited, stack, path) {
-                        return Some(cycle);
-                    }
+    fn registered_services(&mut self) {
+        for &owner in self.graph.nodes.keys() {
+            if let Some(registration) = self.scope.registration(&owner) {
+                self.service(owner, registration);
             }
         }
+    }
 
-        stack.remove(&node);
-        path.pop();
-        None
+    fn service(&mut self, owner: TypeId, registration: &ServiceInstance) {
+        if self.visited.contains(&owner) || (registration.instance.initialized() && registration.service_type != ServiceType::Scope) {
+            return;
+        }
+        let Some(node) = self.graph.nodes.get(&owner) else {
+            return;
+        };
+        if !self.visiting.insert(owner) {
+            panic!("Found circular dependency: {} -> {}", self.path.join(" -> "), node.name);
+        }
+        self.path.push(node.name);
+        for dependency in &node.dependencies {
+            match *dependency {
+                Dependency::Service(id, name) => match self.scope.registration(&id) {
+                    Some(registration) => self.service(id, registration),
+                    None => panic!("Invalid dependency graph: {} -> service {name} is not registered", self.path.join(" -> ")),
+                },
+                Dependency::Configuration { name, problem } => {
+                    if let Some(configuration) = self.configuration
+                        && let Some(reason) = problem(configuration)
+                    {
+                        panic!("Invalid dependency graph: {} -> configuration {name} {reason}", self.path.join(" -> "));
+                    }
+                }
+            }
+        }
+        self.path.pop();
+        self.visiting.remove(&owner);
+        self.visited.insert(owner);
     }
 }

@@ -4,9 +4,7 @@ use crate::{ApplicationBuilder, hosted_service::BackGroundService, services::ser
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-pub type HostedServiceFactory = Box<
-    dyn FnOnce(&ServiceProviderScope) -> BoxFuture<'_, Box<dyn BackGroundService>> + Send + Sync
->;
+pub type HostedServiceFactory = Box<dyn FnOnce(&ServiceProviderScope) -> BoxFuture<'_, Box<dyn BackGroundService>> + Send + Sync>;
 
 pub type ApplicationHostedService = Vec<(&'static str, HostedServiceFactory)>;
 

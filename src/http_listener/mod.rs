@@ -1,3 +1,4 @@
+mod handle_error;
 pub(crate) mod hyper_server;
 pub(crate) mod hyper_service;
 

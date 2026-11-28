@@ -1,3 +1,6 @@
+// private extern internal
+extern crate self as asp_dot_rust;
+
 mod application;
 pub mod configuration;
 pub mod controller;
@@ -14,7 +17,9 @@ pub mod macros {
 }
 pub mod prelude {
     pub use crate::controller::{
-        ActionResult, BindError, FromBody, FromForm, FromOptionQuery, FromQuery, FromRoute, controller_inject, controller_route, delete, get, head, options, patch, post, put, route,
+        ActionResult, BindError, Body, Form, FromBody, FromForm, FromOptionBody, FromOptionForm, FromOptionQuery, FromQuery, FromRoute, controller_inject, controller_route, delete, get, head, options, patch, post, put, query, results,
+        results::RouteResult,
+        ControllerActionFieldValidate, bind, validate, Validate, ValidationError,
     };
     #[allow(deprecated)]
     pub use crate::dependency_injection::Cfg;
@@ -22,15 +27,22 @@ pub mod prelude {
     pub use crate::http_context::{HttpContext, HttpContextRef};
     pub use crate::middleware::Middleware;
     pub use crate::services::app_queue::AppQueueService;
-    pub use crate::utils::ShareMutPtr;
 }
 pub mod utils;
 pub mod third_party {
     pub use async_trait;
+    pub use chrono;
+    pub use http;
+    pub use http_body;
+    pub use http_body_util;
     pub use inventory;
+    pub use jsonwebtoken;
+    pub use matchit;
+    pub use quick_xml;
     pub use regex;
     pub use serde;
     pub use serde_json;
+    pub use serde_urlencoded;
     pub use tokio;
     pub use toml;
     pub use urlencoding;
@@ -40,3 +52,4 @@ pub mod third_party {
 pub use application::{Application, ApplicationBuilder};
 
 pub type MutexAsync<T> = tokio::sync::Mutex<T>;
+pub type ArcAny = std::sync::Arc<dyn std::any::Any + Send + Sync + 'static>;

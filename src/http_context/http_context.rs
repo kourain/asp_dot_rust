@@ -1,8 +1,11 @@
 use crate::http_context::http_request::HttpRequest;
 use crate::http_context::http_response::HttpResponse;
 use crate::services::service_provider::service_provider_scope::ServiceProviderScope;
+use crate::utils::ReadOnly;
 use std::any::Any;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 /// Key used by authorize middleware to store the authenticated user in `context_data`.
 pub const USER_CONTEXT_KEY: &str = "user";
@@ -10,9 +13,10 @@ pub const USER_CONTEXT_KEY: &str = "user";
 pub struct HttpContext {
     pub request: HttpRequest,
     pub response: HttpResponse,
-    pub service_provider: ServiceProviderScope,
+    pub service_provider: ReadOnly<ServiceProviderScope>,
     /// Per-request bag for middleware and handlers (e.g. authenticated user under `"user"`).
     pub context_data: HashMap<String, Box<dyn Any + Send + Sync>>,
+    pub(crate) is_shareable: Arc<AtomicBool>,
 }
 
 impl HttpContext {
@@ -20,8 +24,9 @@ impl HttpContext {
         Self {
             request,
             response,
-            service_provider,
+            service_provider: ReadOnly::new(service_provider),
             context_data: HashMap::new(),
+            is_shareable: Arc::new(AtomicBool::new(true)),
         }
     }
 
@@ -49,5 +54,11 @@ impl HttpContext {
     /// Removes and returns a value previously stored with `set_item`.
     pub fn take_item<T: Any + Send + Sync + 'static>(&mut self, key: &str) -> Option<T> {
         self.context_data.remove(key).and_then(|v| v.downcast::<T>().ok().map(|b| *b))
+    }
+}
+
+impl Drop for HttpContext {
+    fn drop(&mut self) {
+        self.is_shareable.store(false, std::sync::atomic::Ordering::Release);
     }
 }

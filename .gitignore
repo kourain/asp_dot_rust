@@ -6,3 +6,4 @@ appsettings.toml
 appsettings.*.toml
 Cargo.lock
 *.log
+*.db
