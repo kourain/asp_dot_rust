@@ -22,7 +22,8 @@ impl QueryValidation {
             let args = args.iter();
             quote!((#(#args),*))
         };
-        Ok(Self { attribute: attr.path().require_ident()?.clone(), method, arguments })
+        let attribute = crate::controller::attribute::attr_name(attr).cloned().ok_or_else(|| syn::Error::new_spanned(attr, "expected #[validate(...)]"))?;
+        Ok(Self { attribute, method, arguments })
     }
 
     pub(super) fn check(&self, binder: &Ident, field: &str) -> TokenStream {

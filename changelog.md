@@ -21,8 +21,10 @@
 - Query strings are decoded as form data: `+` is a space, `%2B` is a plus (`+` was kept as a plus).
 - A query value that is not valid UTF-8 is an error (HTTP 422 for the binders), it was dropped, and for a `FromOptionQuery<T>` without `#[validate(...)]` it was `None`.
 - `FromOptionQuery<T>` returns HTTP 422 for a supplied value that does not parse, it was `None` unless the parameter had `#[validate(...)]`.
+- A route under `#[cfg(...)]` no longer makes rust-analyzer grey out the other actions of its controller (see the macro changelog).
 - Empty query pairs and pairs with an empty key no longer create a `""` key.
 - Route attributes written with a full path (`#[asp_dot_rust::controller::get("/")]`, `#[asp_dot_rust::controller::route(...)]`, `#[asp_dot_rust::controller::attr(...)]`) are recognised like the imported ones, they were ignored and the route was not registered. On the controller impl a full path `attr` was a compile error. A path that does not start at this crate (`#[other::get(...)]`) is still left to the other crate.
+- `#[validate(...)]` on an action parameter written with a full path (`#[asp_dot_rust::controller::validate(length(2))]`) is recognised like the imported one, it was a rustc error ("expected non-macro attribute").
 
 ### 0.2.12 Breaking Change
 

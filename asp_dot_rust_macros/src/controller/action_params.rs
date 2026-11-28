@@ -2,7 +2,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, quote_spanned};
 use syn::{FnArg, Pat, PatType, Type, spanned::Spanned};
 
-use super::query_validation::QueryValidation;
+use super::{attribute::attr_named, query_validation::QueryValidation};
 use crate::utils::compiler_error::create_compiler_error;
 use crate::utils::extract_type::type_name;
 use crate::utils::find_crate::asp_dot_rust_crate_path;
@@ -82,7 +82,7 @@ pub fn parse_action_params(inputs: &mut syn::punctuated::Punctuated<FnArg, syn::
                     ));
                 }
                 let mut validation = None;
-                for attr in attrs.iter().filter(|attr| attr.path().is_ident("validate")) {
+                for attr in attrs.iter().filter(|attr| attr_named(attr, "validate")) {
                     if matches!(kind, BinderKind::Body | BinderKind::Form) {
                         return Err(create_compiler_error(attr, "#[validate(...)] requires a route, query, form or body field binder"));
                     }
@@ -91,7 +91,7 @@ pub fn parse_action_params(inputs: &mut syn::punctuated::Punctuated<FnArg, syn::
                     }
                     validation = Some(QueryValidation::parse(attr).map_err(|e| proc_macro::TokenStream::from(e.into_compile_error()))?);
                 }
-                attrs.retain(|attr| !attr.path().is_ident("validate"));
+                attrs.retain(|attr| !attr_named(attr, "validate"));
                 params.push(ActionParam { name, kind, wrapper: (**ty).clone(), validation });
             }
         }

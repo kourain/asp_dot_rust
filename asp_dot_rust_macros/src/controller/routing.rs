@@ -1,5 +1,6 @@
 use proc_macro::TokenStream;
-use quote::{quote, quote_spanned};
+use proc_macro2::{Group, Span, TokenStream as TokenStream2, TokenTree};
+use quote::{ToTokens, quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::{Attribute, Expr, ExprLit, ImplItem, ItemImpl, Lit, LitStr, Token, parse_macro_input, punctuated::Punctuated};
 
@@ -13,6 +14,16 @@ const HTTP_METHODS: [&str; 8] = ["get", "post", "put", "delete", "patch", "optio
 
 fn is_route_attr(attr: &Attribute) -> bool {
     attr_named(attr, "route") || HTTP_METHODS.iter().any(|method| attr_named(attr, method))
+}
+
+/// A name without a path is always taken as the macro of this crate, so say how to leave a macro of another crate alone.
+fn bare_name_hint(attr: &Attribute) -> String {
+    let segments = &attr.path().segments;
+    if segments.len() != 1 {
+        return String::new();
+    }
+    let name = &segments[0].ident;
+    format!(". A name without a path is taken as the macro of this crate. If `{name}` is a macro of another crate, write its full path (for example `#[other_crate::{name}(...)]`) so that #[controller_route] leaves it alone")
 }
 
 fn is_http_method(method: impl AsRef<str>) -> bool {
@@ -46,6 +57,23 @@ fn unexpected_route_argument(values: &Punctuated<Expr, Token![,]>) -> Option<Str
     values.iter().nth(2).map(|_| "#[route(...)] accepts exactly two arguments: HTTP methods and path".to_string())
 }
 
+/// Give every token of `tokens` the same `span`.
+fn respan(tokens: TokenStream2, span: Span) -> TokenStream2 {
+    tokens
+        .into_iter()
+        .map(|mut tree| {
+            if let TokenTree::Group(group) = &tree {
+                let mut respanned = Group::new(group.delimiter(), respan(group.stream(), span));
+                respanned.set_span(span);
+                tree = TokenTree::Group(respanned);
+            } else {
+                tree.set_span(span);
+            }
+            tree
+        })
+        .collect()
+}
+
 struct RouteRegistration {
     self_ty: syn::Type,
     root_route: LitStr,
@@ -63,6 +91,18 @@ impl RouteRegistration {
         route_attr: &Attribute,
     ) {
         let main_crate_path = asp_dot_rust_crate_path();
+        let span = route_attr.span();
+        let mut self_ty = self.self_ty.to_token_stream();
+        let mut root_route = self.root_route.to_token_stream();
+        let mut attributes = attributes.to_vec();
+        if !other_attrs.is_empty() {
+            // This block is under `#[cfg]`. An IDE reports it as inactive code over the range
+            // of all its tokens, so none of them may come from outside the disabled action:
+            // the controller type and the impl level `#[attr]`s sit in the impl header.
+            self_ty = respan(self_ty, span);
+            root_route = respan(root_route, span);
+            attributes = attributes.into_iter().map(|attribute| respan(attribute, span)).collect();
+        }
         let action_route = quote! {
             #main_crate_path::controller::ActionRoute::new(
                 #method_name_lit,
@@ -70,9 +110,7 @@ impl RouteRegistration {
                 #path_lit,
             ) #(#attributes)*
         };
-        let self_ty = &self.self_ty;
-        let root_route = &self.root_route;
-        self.registrations.push(quote_spanned! {route_attr.span()=>
+        self.registrations.push(quote_spanned! {span=>
             #(#other_attrs)*
             {
                 let action_route = #action_route;
@@ -160,7 +198,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                 let values = ok_or_error!(
                     attr.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated),
                     attr,
-                    format!("Invalid #[route(...)] on `{}`", method_name)
+                    format!("Invalid #[route(...)] on `{}`{}", method_name, bare_name_hint(attr))
                 );
 
                 if let Some(error) = unexpected_route_argument(&values) {
@@ -186,7 +224,7 @@ pub(crate) fn controller_route(args: TokenStream, item: TokenStream) -> TokenStr
                 let path_lit = some_or_error!(lit_str_from_expr(path_expr), attr, format!("Route path in #[route] must be a string literal on `{}`", method_name));
                 route_registration.push_route_registration(&method_name_lit, method_lit, &path_lit, &attribute_calls, &cfg_attrs, attr);
             } else {
-                let path_lit: LitStr = ok_or_error!(attr.parse_args(), attr, format!("Invalid #[{}(...)] on `{}`", route_ident, method_name));
+                let path_lit: LitStr = ok_or_error!(attr.parse_args(), attr, format!("Invalid #[{}(...)] on `{}`{}", route_ident, method_name, bare_name_hint(attr)));
                 let http_method_string = route_ident.to_uppercase();
                 let http_method = LitStr::new(&http_method_string, attr.span());
                 route_registration.push_route_registration(&method_name_lit, vec![http_method], &path_lit, &attribute_calls, &cfg_attrs, attr);
