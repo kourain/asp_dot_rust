@@ -2,14 +2,24 @@
 
 ## 0.2.10
 
-- `#[controller_route]` binders: `FromBody<T>` and `FromForm<T>` bind one field named like the argument, `Body<T>` and `Form<T>` bind the whole body (the old `FromBody<T>` and `FromForm<T>`). An action can have several body binders, mixing form binders with body binders is a compile error. The generated code awaits the binders with `bind(..).await?`.
-- `FromOptionQuery<T>`, `FromOptionForm<T>` and `FromOptionBody<T>` are accepted as aliases of `FromQuery<Option<T>>`, `FromForm<Option<T>>` and `FromBody<Option<T>>`, and so are those spellings. `#[validate(...)]` is checked on the `T` inside the `Option` and skipped when the parameter is missing.
-- `FromRoute<Option<T>>` is a compile error.
-- The generated binder call carries the span of the parameter type, so a rejected binder type (`FromRoute<Option<T>>`, a `FromQuery<T>` without `FromStr`, a `Body<T>` without `Deserialize`) is reported on the parameter and not on `#[controller_route]`. On stable Rust the span is the first token of the type.
-- A route under `#[cfg(...)]` no longer makes rust-analyzer grey out the other actions of the controller. The registration of such a route carried tokens of the impl header (the controller type, the `#[controller_route("...")]` argument and the impl level `#[attr]`s), so the inactive range stretched from the header to the action. Those tokens now take the span of the route attribute.
-- A route attribute written as a bare name (`#[get(...)]`) that does not parse is reported with a hint: the name is taken as the macro of this crate, a macro of another crate with the same name has to be written with its full path.
-- `#[validate(...)]` on an action parameter is recognised with the full path of this crate too, like the route attributes.
-- Needs `asp_dot_rust` 0.2.12.
+Companion macro release for `asp_dot_rust` 0.2.12.
+
+### Controller routes and field binding
+
+- `#[controller_route]` generates dispatch through `Controller` and returns the action result to routing middleware. Actions can return borrowed results. Each route is registered separately so startup errors point to the offending attribute. Qualified impls such as `impl inner::PathController` work.
+- `#[query("/search")]` registers HTTP QUERY. `#[route(...)]` accepts exactly two arguments, the methods and the path. `#[cfg]` is carried into the generated registration and dispatch arm. Rust Analyzer keeps the inactive range within the disabled action.
+- Route, metadata and field attributes accept qualified paths from this crate, including renamed dependencies. A bare route name such as `#[get]` is treated as a framework attribute. Use `#[other_crate::get(...)]` for a different macro of the same name. Generated code retains source locations for hover and reports a rejected binder type or validation rule at the action parameter.
+- `FromBody<T>` and `FromForm<T>` bind a single field. `Body<T>` and `Form<T>` bind whole payloads. Multiple binders may read the same body format. Mixing form and body formats on one action produces a compile error. Query, form and body fields accept `Option<T>` and their `FromOption*` aliases. `FromRoute<Option<T>>` is rejected.
+- `#[bind]` accepts `name`, `default` and `validate_default`. The default expression is evaluated when the request field is absent. `validate_default` defaults to `true`. A value of `false` skips the rule only for the fallback. A raw identifier such as `r#type` binds `type`, and an explicit `name` is also used in field diagnostics.
+- `#[validate]` dispatches built-in and extension rules on `ControllerActionFieldValidate` after binding. Optional fields are checked when present. Whole DTOs use their `Validate` implementation. Duplicate field attributes, unsupported options and malformed rule bounds are reported during compilation.
+
+### Dependency injection
+
+- `#[derive(DependencyInjectableController)]` injects `HttpContextRef`, services and configuration into named fields. `#[di(default)]` initializes other fields with `Default`. `#[di(ignore_missing_http_context)]` suppresses the warning for controllers that intentionally omit the context field. `api_controller!` forwards both struct and field attributes, including the derive and per-field `#[di(default)]`.
+- `#[derive(DependencyInjectableMiddleware)]` injects `MiddlewareNext`, services and configuration into named fields. `#[middleware]` can use this derive, a manual `DependencyInjectableMiddleware` implementation, or a `fn new` constructor. Additional parameters on `invoke_async` are injected from the current request scope.
+- Service injection emits typed `ServiceDependencies` metadata for services and configuration, including whether a configuration value is required. Generated controller and request-time middleware code checks direct registrations before resolving arguments. Manual controller injectors now receive `HttpContextRef`, and manual middleware injectors implement `DependencyInjectableMiddleware` separately from `Middleware`.
+
+See the [framework changelog](../changelog.md) for runtime behavior and migration examples.
 
 ## 0.2.9
 
