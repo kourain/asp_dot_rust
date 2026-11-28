@@ -2,7 +2,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, quote_spanned};
 use syn::{FnArg, Pat, PatType, Type, spanned::Spanned};
 
-use super::{attribute::attr_named, query_validation::QueryValidation};
+use super::{attribute::attr_named, validation::ControllerActionValidation};
 use crate::utils::compiler_error::create_compiler_error;
 use crate::utils::extract_type::type_name;
 use crate::utils::find_crate::asp_dot_rust_crate_path;
@@ -26,7 +26,7 @@ pub struct ActionParam {
     name: syn::Ident,
     kind: BinderKind,
     wrapper: Type,
-    validation: Option<QueryValidation>,
+    validation: Option<ControllerActionValidation>,
 }
 
 fn binder_kind(ty: &Type) -> Option<BinderKind> {
@@ -89,7 +89,7 @@ pub fn parse_action_params(inputs: &mut syn::punctuated::Punctuated<FnArg, syn::
                     if validation.is_some() {
                         return Err(create_compiler_error(attr, "duplicate #[validate(...)] on this action parameter"));
                     }
-                    validation = Some(QueryValidation::parse(attr).map_err(|e| proc_macro::TokenStream::from(e.into_compile_error()))?);
+                    validation = Some(ControllerActionValidation::parse(attr).map_err(|e| proc_macro::TokenStream::from(e.into_compile_error()))?);
                 }
                 attrs.retain(|attr| !attr_named(attr, "validate"));
                 params.push(ActionParam { name, kind, wrapper: (**ty).clone(), validation });
