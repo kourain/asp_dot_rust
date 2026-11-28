@@ -159,6 +159,8 @@ impl ListenerController {
     fn query_rule_method(
         &self,
         #[validate(length(2))] code: FromQuery<String>,
+        #[bind(name = "abcd", default = "aaaa", validate_default = false)]
+        #[validate(length(2))] _code2: FromQuery<String>,
         #[validate(prefix("ok"))] tag: FromOptionQuery<String>,
     ) -> impl ActionResult {
         results::ok(format!("{} {:?}", *code, *tag))

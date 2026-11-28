@@ -40,6 +40,14 @@ pub fn controller_route(args: TokenStream, item: TokenStream) -> TokenStream {
     controller::routing::controller_route(args, item)
 }
 
+/// Configures a route, query, form or body field on a routed controller action.
+/// `name` selects the request key. `default` supplies a value when the field is absent.
+/// Field validation runs on the default unless `validate_default = false` is set.
+#[proc_macro_attribute]
+pub fn bind(_args: TokenStream, item: TokenStream) -> TokenStream {
+    crate::utils::compiler_error::create_compiler_error_from_token_stream(&item, "#[bind(...)] belongs on a field binder of a routed controller action")
+}
+
 /// Validates a route, query, form or body field before the controller action runs.
 ///
 /// `#[validate(length(2))]` requires exactly two Unicode scalar values.

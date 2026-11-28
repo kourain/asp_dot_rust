@@ -25,6 +25,11 @@ pub type FromOptionBody<T> = FromBody<Option<T>>;
 impl<T: DeserializeOwned> FromBody<T> {
     /// Bind body field `name`.
     pub async fn bind(name: &str, http_context: &mut HttpContext) -> Result<Self, BindError> {
+        Self::bind_with_default(name, http_context, None::<fn() -> T>).await.map(|(bound, _)| bound)
+    }
+
+    #[doc(hidden)]
+    pub async fn bind_with_default(name: &str, http_context: &mut HttpContext, default: Option<impl FnOnce() -> T>) -> Result<(Self, bool), BindError> {
         let media = content_type_media(&http_context.request).unwrap_or_else(|| "application/json".to_string());
         let bytes = read_body_for_binding(&mut http_context.request).await?;
         let mut value = None;
@@ -41,10 +46,11 @@ impl<T: DeserializeOwned> FromBody<T> {
             }
             _ => return Err(BindError::UnsupportedMediaType(media)),
         }
-        match value {
-            Some(value) => Ok(Self(value)),
-            None => T::deserialize(MissingField)
-                .map(Self)
+        match (value, default) {
+            (Some(value), _) => Ok((Self(value), false)),
+            (None, Some(default)) => Ok((Self(default()), true)),
+            (None, None) => T::deserialize(MissingField)
+                .map(|value| (Self(value), false))
                 .map_err(|_| BindError::MissingField(name.to_owned())),
         }
     }

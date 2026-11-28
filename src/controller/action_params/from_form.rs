@@ -29,6 +29,14 @@ impl<T> FromForm<T> {
     where
         T: FromParamField<Marker>,
     {
+        Self::bind_with_default(name, http_context, None::<fn() -> T>).await.map(|(bound, _)| bound)
+    }
+
+    #[doc(hidden)]
+    pub async fn bind_with_default<Marker>(name: &str, http_context: &mut HttpContext, default: Option<impl FnOnce() -> T>) -> Result<(Self, bool), BindError>
+    where
+        T: FromParamField<Marker>,
+    {
         let text = read_form_text(&mut http_context.request).await?;
         let value = match query_pairs(text).rfind(|(key, _)| key == name) {
             Some((_, raw)) => Some(decode_query_component(raw).ok_or_else(|| BindError::ParseField {
@@ -37,8 +45,11 @@ impl<T> FromForm<T> {
             })?),
             None => None,
         };
+        if let (None, Some(default)) = (&value, default) {
+            return Ok((Self(default()), true));
+        }
         match T::from_param_field(value.as_deref()) {
-            Ok(value) => Ok(Self(value)),
+            Ok(value) => Ok((Self(value), false)),
             Err(FieldError::Missing) => Err(BindError::MissingField(name.to_owned())),
             Err(FieldError::Invalid) => Err(BindError::ParseField { name: name.to_owned(), value: value.unwrap_or_default() }),
         }

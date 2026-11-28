@@ -4,7 +4,7 @@ pub mod macro_rules;
 pub(crate) mod routing;
 pub mod validation;
 
-pub use crate::macros::{attr, controller_inject, controller_route, delete, get, head, max_body_size, options, patch, post, put, query, route, validate};
+pub use crate::macros::{attr, bind, controller_inject, controller_route, delete, get, head, max_body_size, options, patch, post, put, query, route, validate};
 pub use action_params::{
     BindError, Body, FieldError, Form, FromBody, FromForm, FromOptionBody, FromOptionForm, FromOptionQuery, FromParamField, FromParamValue, FromQuery, FromRoute, OptionalField,
     RequiredField,

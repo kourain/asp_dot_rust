@@ -20,6 +20,29 @@ Action methods may take binder parameters. The `#[controller_route]` macro resol
 
 ### Optional values
 
+Use `#[bind]` on a route, query, form or body field to select its request key and supply a default.
+
+```rust
+#[get("/search")]
+fn search(
+    &self,
+    #[bind(name = "abcd", default = "aaaa", validate_default = false)]
+    #[validate(length(2))] _code2: FromQuery<String>,
+) -> impl ActionResult {
+    results::ok(_code2.into_inner())
+}
+```
+
+Omitting `abcd` returns `aaaa`. Supplying `?abcd=xy` returns `xy`. Supplying
+`?abcd=aaaa` returns HTTP 422 because the rule applies to every supplied value.
+`validate_default` defaults to `true`, so omitting that option also checks the fallback.
+
+Each option may be given independently. The default is a Rust expression evaluated when
+the field is absent, for example `default = 10` for `FromQuery<u32>`. String literal
+defaults can be used directly for `String` and `Option<String>`. An empty query or
+form value and an explicit JSON `null` count as supplied. Binding errors propagate normally.
+Route defaults apply after a route matches. Use a second route pattern to match a URL without the segment.
+
 `FromOptionQuery<T>`, `FromOptionForm<T>` and `FromOptionBody<T>` are type aliases of `FromQuery<Option<T>>`, `FromForm<Option<T>>` and `FromBody<Option<T>>`, so the two spellings are the same type and the macro treats them the same. Because they are aliases, they cannot be used as a constructor or a pattern (write `FromQuery(Some(1))`).
 
 A route parameter is always present. `FromRoute<T>::bind` requires `T: FromParamValue`. Rust rejects `FromRoute<std::option::Option<T>>` because the standard `Option<T>` does not implement that trait. The error is reported on the parameter in the action signature and explains that a route parameter cannot be optional. A type of your own named `Option` that implements `FromStr` is a different type and is accepted.
@@ -83,7 +106,7 @@ fn login(&mut self, user: FromForm<String>, remember: FromForm<bool>) -> impl Ac
 - `FromBody` accepts `application/json`, `text/json`, `application/xml` and `text/xml`, JSON is assumed when the header is missing. `FromForm` accepts `application/x-www-form-urlencoded` and also a missing or empty media type. Both ignore media type parameters and compare media types case-insensitively.
 - A missing required field is HTTP 422. Both `FromForm<Option<U>>` and `FromBody<Option<U>>` bind a missing field as `None`. A JSON `null` also binds as `None` for an optional body field. A field of the wrong type, a body that is not an object, and a Content-Type mismatch are HTTP 422.
 - Form values are decoded like query values: `+` is a space, `%2B` is a plus, a key without `=` is an empty value (`bool` reads it as `true`) and a value that is not valid UTF-8 is HTTP 422.
-- `#[validate(...)]` is for query parameters only. To validate body fields use `Body<Dto>` / `Form<Dto>` with `Validate`.
+- Use `#[validate(...)]` for an individual field and `Validate` for a whole `Body<Dto>` or `Form<Dto>`.
 
 > `FromForm` parses the last occurrence of a key. For a repeated scalar field, `FromBody` parses each occurrence and returns the last value. For example, `{"age":"x","age":2}` returns HTTP 422 for `FromBody<u32>`.
 

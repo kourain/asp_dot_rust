@@ -2,7 +2,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, quote_spanned};
 use syn::{FnArg, Pat, PatType, Type, ext::IdentExt, spanned::Spanned};
 
-use super::{attribute::attr_named, validation::ControllerActionValidation};
+use super::{attribute::attr_named, bind::BindOptions, validation::ControllerActionValidation};
 use crate::utils::compiler_error::create_compiler_error;
 use crate::utils::extract_type::type_name;
 use crate::utils::find_crate::asp_dot_rust_crate_path;
@@ -26,6 +26,7 @@ pub struct ActionParam {
     name: syn::Ident,
     kind: BinderKind,
     wrapper: Type,
+    bind: BindOptions,
     validation: Option<ControllerActionValidation>,
 }
 
@@ -91,8 +92,18 @@ pub fn parse_action_params(inputs: &mut syn::punctuated::Punctuated<FnArg, syn::
                     }
                     validation = Some(ControllerActionValidation::parse(attr).map_err(|e| proc_macro::TokenStream::from(e.into_compile_error()))?);
                 }
-                attrs.retain(|attr| !attr_named(attr, "validate"));
-                params.push(ActionParam { name, kind, wrapper: (**ty).clone(), validation });
+                let mut bind = None;
+                for attr in attrs.iter().filter(|attr| attr_named(attr, "bind")) {
+                    if matches!(kind, BinderKind::Body | BinderKind::Form) {
+                        return Err(create_compiler_error(attr, "#[bind(...)] requires a route, query, form or body field binder"));
+                    }
+                    if bind.is_some() {
+                        return Err(create_compiler_error(attr, "duplicate #[bind(...)] on this action parameter"));
+                    }
+                    bind = Some(BindOptions::parse(attr).map_err(|e| proc_macro::TokenStream::from(e.into_compile_error()))?);
+                }
+                attrs.retain(|attr| !attr_named(attr, "validate") && !attr_named(attr, "bind"));
+                params.push(ActionParam { name, kind, wrapper: (**ty).clone(), bind: bind.unwrap_or_default(), validation });
             }
         }
     }
@@ -109,16 +120,25 @@ pub fn generate_bind_code(params: &[ActionParam]) -> (TokenStream2, Vec<TokenStr
 
     for param in params {
         let name = &param.name;
-        let name_lit = name.unraw().to_string();
+        let name_lit = param.bind.name.as_ref().map_or_else(|| name.unraw().to_string(), syn::LitStr::value);
         let wrapper = &param.wrapper;
         // Put the generated binder call on the parameter type, so a rejected type is reported there and not on `#[controller_route]`.
         let span = wrapper.span();
+        let defaulted = syn::Ident::new("__asp_used_default", proc_macro2::Span::mixed_site());
+        let (binding, call, default_arg) = match param.bind.default_value() {
+            Some(default) => (
+                quote!((#name, #defaulted)),
+                quote_spanned!(span=> bind_with_default),
+                quote!(, ::core::option::Option::Some(|| #default)),
+            ),
+            None => (quote!(#name), quote_spanned!(span=> bind), TokenStream2::new()),
+        };
         let bind_expr = match param.kind {
             BinderKind::FromRoute | BinderKind::FromQuery => {
-                quote_spanned! { span=> <#wrapper>::bind(#name_lit, &self.http_context)? }
+                quote_spanned! { span=> <#wrapper>::#call(#name_lit, &self.http_context #default_arg)? }
             }
             BinderKind::FromBody | BinderKind::FromForm => {
-                quote_spanned! { span=> <#wrapper>::bind(#name_lit, &mut self.http_context).await? }
+                quote_spanned! { span=> <#wrapper>::#call(#name_lit, &mut self.http_context #default_arg).await? }
             }
             BinderKind::Body | BinderKind::Form => {
                 quote_spanned! { span=> {
@@ -133,9 +153,14 @@ pub fn generate_bind_code(params: &[ActionParam]) -> (TokenStream2, Vec<TokenStr
             }
         };
 
-        lets.push(quote! { let #name = #bind_expr; });
+        lets.push(quote! { let #binding = #bind_expr; });
         if let Some(rule) = &param.validation {
-            lets.push(rule.check(name, &name_lit));
+            let check = rule.check(name, &name_lit);
+            if param.bind.default.is_some() && param.bind.validate_default.as_ref().is_some_and(|flag| !flag.value) {
+                lets.push(quote! { if !#defaulted { #check } });
+            } else {
+                lets.push(check);
+            }
         }
         args.push(quote! { #name });
     }

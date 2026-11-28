@@ -39,11 +39,22 @@ impl<T> FromQuery<T> {
     where
         T: FromParamField<Marker>,
     {
+        Self::bind_with_default(name, http_context, None::<fn() -> T>).map(|(bound, _)| bound)
+    }
+
+    #[doc(hidden)]
+    pub fn bind_with_default<Marker>(name: &str, http_context: &HttpContext, default: Option<impl FnOnce() -> T>) -> Result<(Self, bool), BindError>
+    where
+        T: FromParamField<Marker>,
+    {
         let raw = http_context.request.routing_info.query_params.get(name)
             .map(Result::as_deref).transpose()
             .map_err(|raw| BindError::ParseQueryParam { name: name.to_owned(), value: raw.to_owned() })?;
+        if let (None, Some(default)) = (raw, default) {
+            return Ok((Self(default()), true));
+        }
         match T::from_param_field(raw) {
-            Ok(value) => Ok(Self(value)),
+            Ok(value) => Ok((Self(value), false)),
             Err(FieldError::Missing) => Err(BindError::MissingQueryParam(name.to_string())),
             Err(FieldError::Invalid) => Err(BindError::ParseQueryParam {
                 name: name.to_string(),

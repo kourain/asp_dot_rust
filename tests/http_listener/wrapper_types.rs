@@ -39,6 +39,61 @@ impl WrapperTypesController {
     fn raw_form(&self, form: Form<std::string::String>) -> impl ActionResult {
         results::ok(form.into_inner())
     }
+
+    #[get("/bind-options")]
+    #[get("/bind-options/{id}")]
+    fn bind_options(
+        &self,
+        #[bind(name = "id", default = 7)] _id: FromRoute<u32>,
+        #[asp_dot_rust::controller::bind(name = "limit", default = 0)]
+        #[validate(min(1))] count: FromQuery<u32>,
+        #[bind(name = "abcd", default = "aaaa", validate_default = false)]
+        #[validate(length(2))] code: FromQuery<Code>,
+    ) -> impl ActionResult {
+        results::ok(format!("{} {} {}", *_id, *count, code.as_deref().unwrap()))
+    }
+
+    #[post("/bind-body")]
+    fn bind_body(&self, #[bind(name = "value", default = "fallback")] field: FromBody<Code>) -> impl ActionResult {
+        results::ok(format!("{:?}", *field))
+    }
+
+    #[post("/bind-form")]
+    fn bind_form(&self, #[bind(name = "value", default = 7)] field: FromForm<u32>) -> impl ActionResult {
+        results::ok(field.to_string())
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn bind_uses_defaults_only_for_absent_fields() {
+    let port = 18725;
+    start(port, |_| {}, |_| {}).await;
+    for (path, status, expected) in [
+        ("/bind-options", 422, "limit"),
+        ("/bind-options?limit=1", 200, "7 1 aaaa"),
+        ("/bind-options/9?limit=2&abcd=ok", 200, "9 2 ok"),
+        ("/bind-options?limit=1&abcd=aaaa", 422, "abcd"),
+        ("/bind-options?limit=1&abcd=", 422, "abcd"),
+        ("/bind-options?limit=bad", 422, "limit"),
+        ("/bind-options/bad?limit=1", 404, "id"),
+    ] {
+        let response = raw_request(port, "GET", path, "").await;
+        assert_eq!(status_of(&response), status, "{response}");
+        assert!(body_of(&response).contains(expected), "{response}");
+    }
+    for (path, media, body, status, expected) in [
+        ("/bind-body", "application/json", "{}", 200, r#"Some("fallback")"#),
+        ("/bind-body", "application/json", r#"{"value":null}"#, 200, "None"),
+        ("/bind-body", "application/json", r#"{"value":17}"#, 422, "value"),
+        ("/bind-form", "application/x-www-form-urlencoded", "", 200, "7"),
+        ("/bind-form", "application/x-www-form-urlencoded", "value=12", 200, "12"),
+        ("/bind-form", "application/x-www-form-urlencoded", "value=", 422, "value"),
+    ] {
+        let headers = format!("Content-Type: {media}\r\nContent-Length: {}\r\n", body.len());
+        let response = raw_request_with_body(port, "POST", path, &headers, body).await;
+        assert_eq!(status_of(&response), status, "{response}");
+        assert!(body_of(&response).contains(expected), "{response}");
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
