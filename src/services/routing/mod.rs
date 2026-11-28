@@ -1,4 +1,5 @@
 mod application_routing;
+pub(crate) mod query_string;
 mod route;
 mod routing_result;
 mod routing_service;

@@ -1,7 +1,7 @@
 use crate::{
     Application,
     configuration::JwtAuthConfiguration,
-    dependency_injection::CfgRequire,
+    dependency_injection::{CfgRequire, DependencyInjectableMiddleware},
     http_context::{HttpContext, USER_CONTEXT_KEY, HttpHeaderExt},
     macros::middleware,
     middleware::{Middleware, MiddlewareNext},
@@ -28,17 +28,19 @@ pub struct AuthUser {
 const BASIC_SCHEME: &str = "Basic";
 const BEARER_SCHEME: &str = "Bearer";
 
-// ---- Basic (factory-based: scheme is not a DI service) ----
-
 pub(crate) struct BasicAuthorizeMiddleware {
     next: MiddlewareNext,
 }
 
 #[async_trait::async_trait]
-impl Middleware for BasicAuthorizeMiddleware {
+impl DependencyInjectableMiddleware for BasicAuthorizeMiddleware {
     async fn inject(_service_scope: &ServiceProviderScope, next: MiddlewareNext) -> Self {
         Self { next }
     }
+}
+
+#[async_trait::async_trait]
+impl Middleware for BasicAuthorizeMiddleware {
     async fn inject_invoke_async(&self, http_context: &mut HttpContext) {
         self.invoke_async(http_context).await;
     }
@@ -79,8 +81,6 @@ fn try_parse_basic(http_context: &HttpContext) -> Result<AuthUser, ()> {
     })
 }
 
-// ---- JWT / Bearer (config from DI) ----
-
 pub struct JwtAuthorizeMiddleware {
     next: MiddlewareNext,
     jwt_config: CfgRequire<JwtAuthConfiguration>,
@@ -116,7 +116,6 @@ fn try_parse_jwt(http_context: &HttpContext, config: &JwtAuthConfiguration) -> R
     let mut validation = Validation::new(Algorithm::HS256);
     validation.set_issuer(&[config.token_issuer.as_str()]);
     validation.set_audience(&[config.token_audience.as_str()]);
-    // expiration is enforced by default when `exp` is present
 
     let key = DecodingKey::from_secret(config.secret_key.as_bytes()).ok().ok_or(())?;
     let data = decode::<JsonValue>(token, &key, &validation).map_err(|_| ())?;

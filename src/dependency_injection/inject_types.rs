@@ -5,7 +5,6 @@ use crate::services::configuration::EntryValue;
 macro_rules! define_service_wrapper {
     () => {};
 
-    // Arc
     (
         $(#[$meta:meta])*
         $vis:vis struct $name:ident ( Arc );
@@ -63,10 +62,6 @@ macro_rules! define_service_wrapper {
 }
 define_service_wrapper!(
     /// Injected service: resolved via `ServiceProviderScope::get_service::<T>()`.
-    ///
-    /// The tuple field is `pub` only so the `#[inject]` macro can
-    /// construct `Serv(...)` from generated code in the caller's crate; prefer
-    /// `.unwrap()` (or the `Deref` to `Arc<T>`) over reaching into `.0` directly.
     pub struct Serv(Arc);
 );
 
@@ -87,8 +82,8 @@ impl<T> Clone for CfgReload<T> {
     }
 }
 
-/// Value of a configuration at the moment it was captured, it has no value if the configuration is not registered,
-/// its section is missing or it is not loaded yet. It does not change when the configuration is reloaded.
+/// Snapshot of a registered configuration. The snapshot can be empty when the
+/// section is missing or has yet to load. It keeps the captured value across reloads.
 ///
 /// `Cfg<T>` will be removed, use `CfgOption<T>`.
 #[deprecated(note = "Cfg<T> will be removed, use CfgOption<T> instead")]
